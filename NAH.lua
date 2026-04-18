@@ -520,10 +520,12 @@ local autoSafeZoneState = {
 	active = false,
 	task = nil,
 	routeTask = nil,
+	routePoints = nil,
 	savedCFrame = nil,
 	token = 0,
 	introSavedCFrame = nil,
 	introRouteTask = nil,
+	introRoutePoints = nil,
 	introActive = false,
 	introRouteIndex = 1,
 	routeIndex = 1,
@@ -2992,8 +2994,8 @@ local function buildAutoSafeZonePoints(baseCFrame)
 	local signZ = basePosition.Z >= 0 and 1 or -1
 	local safePoints = {}
 
-	for step = 1, 70 do
-		local safeOffset = tonumber(string.format("%de%d", step, step))
+	for step = 1, 8 do
+		local safeOffset = 10 ^ step
 		local upOnlyY = math.max(basePosition.Y + safeOffset, safeOffset)
 		safePoints[#safePoints + 1] = Vector3.new(basePosition.X, upOnlyY, basePosition.Z)
 		safePoints[#safePoints + 1] = Vector3.new(basePosition.X - (signX * safeOffset), upOnlyY, basePosition.Z)
@@ -3005,10 +3007,9 @@ local function buildAutoSafeZonePoints(baseCFrame)
 	return safePoints
 end
 
-local function getAutoSafeZoneDestination(baseCFrame, routeIndex)
-	local safePoints = buildAutoSafeZonePoints(baseCFrame)
+local function getAutoSafeZoneDestination(safePoints, routeIndex)
 	local point = safePoints[routeIndex or 1] or safePoints[1]
-	return CFrame.new(point) * getRotationOnlyCFrame(baseCFrame).Rotation
+	return CFrame.new(point)
 end
 
 local function returnFromAutoSafeZone()
@@ -3021,6 +3022,7 @@ local function returnFromAutoSafeZone()
 		task.cancel(autoSafeZoneState.routeTask)
 		autoSafeZoneState.routeTask = nil
 	end
+	autoSafeZoneState.routePoints = nil
 	autoSafeZoneState.routeIndex = 1
 	_G.NOTHINGX_AutoSafeZoneActive = false
 
@@ -3056,6 +3058,7 @@ local function triggerAutoSafeZone()
 	end
 
 	autoSafeZoneState.savedCFrame = hrp.CFrame
+	autoSafeZoneState.routePoints = buildAutoSafeZonePoints(hrp.CFrame)
 	autoSafeZoneState.active = true
 	autoSafeZoneState.routeIndex = 1
 	_G.NOTHINGX_AutoSafeZoneActive = true
@@ -3070,12 +3073,12 @@ local function triggerAutoSafeZone()
 				continue
 			end
 
-			local target = getAutoSafeZoneDestination(autoSafeZoneState.savedCFrame or currentRoot.CFrame, autoSafeZoneState.routeIndex)
+			local target = getAutoSafeZoneDestination(autoSafeZoneState.routePoints or buildAutoSafeZonePoints(currentRoot.CFrame), autoSafeZoneState.routeIndex)
 			currentRoot.AssemblyLinearVelocity = Vector3.zero
 			currentRoot.AssemblyAngularVelocity = Vector3.zero
 			currentChar:PivotTo(target)
 			autoSafeZoneState.routeIndex += 1
-			if autoSafeZoneState.routeIndex > 150 then
+			if autoSafeZoneState.routeIndex > 40 then
 				autoSafeZoneState.routeIndex = 1
 			end
 			task.wait()
@@ -3096,6 +3099,7 @@ local function sendPlayerToIntroSafeZone()
 	end
 
 	autoSafeZoneState.introSavedCFrame = hrp.CFrame
+	autoSafeZoneState.introRoutePoints = buildAutoSafeZonePoints(hrp.CFrame)
 	autoSafeZoneState.introActive = true
 	autoSafeZoneState.introRouteIndex = 1
 	autoSafeZoneState.introRouteTask = task.spawn(function()
@@ -3107,12 +3111,12 @@ local function sendPlayerToIntroSafeZone()
 				continue
 			end
 
-			local target = getAutoSafeZoneDestination(autoSafeZoneState.introSavedCFrame or currentRoot.CFrame, autoSafeZoneState.introRouteIndex)
+			local target = getAutoSafeZoneDestination(autoSafeZoneState.introRoutePoints or buildAutoSafeZonePoints(currentRoot.CFrame), autoSafeZoneState.introRouteIndex)
 			currentRoot.AssemblyLinearVelocity = Vector3.zero
 			currentRoot.AssemblyAngularVelocity = Vector3.zero
 			currentChar:PivotTo(target)
 			autoSafeZoneState.introRouteIndex += 1
-			if autoSafeZoneState.introRouteIndex > 150 then
+			if autoSafeZoneState.introRouteIndex > 40 then
 				autoSafeZoneState.introRouteIndex = 1
 			end
 			task.wait()
@@ -3129,6 +3133,7 @@ local function returnPlayerFromIntroSafeZone()
 		task.cancel(autoSafeZoneState.introRouteTask)
 		autoSafeZoneState.introRouteTask = nil
 	end
+	autoSafeZoneState.introRoutePoints = nil
 	autoSafeZoneState.introRouteIndex = 1
 	if not char or not hrp or not target then
 		autoSafeZoneState.introSavedCFrame = nil
