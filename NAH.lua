@@ -85,7 +85,7 @@ end
 
 local existingGui = CoreGui:FindFirstChild("NOTHING_X-000")
 if existingGui then
-	showExistingGuiInfo(existingGui, "NOTHING X", "NOTHING_X Already Running...", 3)
+	showExistingGuiInfo(existingGui, "NOTHING X", "NOTHING_X Already Running...", 1.5)
 	return
 end
 
@@ -225,7 +225,7 @@ local infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
 infoContainer.Position = UDim2.fromScale(0.5, 0.12)
-infoContainer.Size = UDim2.fromScale(0.24, 0.12)
+infoContainer.Size = UDim2.fromScale(0.2, 0.1)
 infoContainer.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
 infoContainer.BackgroundTransparency = 1
 infoContainer.BorderSizePixel = 0
@@ -5385,15 +5385,21 @@ updateTargetDisplay()
 
 hum.Died:Connect(handleCharacterDeath)
 
+local savedAutoSafeZoneValue = getSavedControlValue("AutoSafeZone")
+if type(savedAutoSafeZoneValue) == "boolean" then
+	autoSafeZoneState.enabled = savedAutoSafeZoneValue
+end
+
 AutoSafeZoneToggle = tog({
 	name = "Auto Safe Zone",
 	default = autoSafeZoneState.enabled,
 	fun = function(enabled)
+		setSavedControlValue("AutoSafeZone", enabled == true)
 		setAutoSafeZoneEnabled(enabled)
 	end,
 })
 if AutoSafeZoneToggle and AutoSafeZoneToggle.Frame then
-	AutoSafeZoneToggle.Frame.LayoutOrder = -100
+	AutoSafeZoneToggle.Frame.LayoutOrder = 99999
 end
 
 Slider({
@@ -6005,11 +6011,11 @@ function startIntroUi()
 	titlePulse:Play()
 	subtitlePulse:Play()
 
-	task.delay(3, function()
+	task.delay(2, function()
 		titlePulse:Cancel()
 		subtitlePulse:Cancel()
 
-		local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local fadeInfo = TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 		TweenService:Create(background, fadeInfo, {
 			BackgroundTransparency = 1,
