@@ -423,6 +423,12 @@ local flyKeybind = Enum.KeyCode.R
 local camLockKeybind = Enum.KeyCode.Z
 local attackTpKeybind = Enum.KeyCode.T
 local targetSelectKeybind = Enum.KeyCode.C
+setBackKeybind = Enum.KeyCode.N
+setBackSavedCFrame = nil
+setBackTravelConn = nil
+setBackPressToken = 0
+setBackLastPressAt = 0
+setBackCollisionState = nil
 local active = false
 local speedLoopRunning = false
 local holdingW = false
@@ -559,7 +565,7 @@ end
 
 local function updateKeybindText()
 	local lines = {}
-	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "Custom" }
+	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "SetBack", "Custom" }
 
 	local function appendEntry(entry)
 		if not entry then
@@ -601,6 +607,15 @@ local function updateKeybindText()
 	end
 
 	keybindText.Text = table.concat(lines, "\n")
+end
+
+function syncSetBackKeybindDisplay()
+	keybindEntries.SetBack = {
+		name = "Set back",
+		keybind = encodeKeybindValue(setBackKeybind),
+		stateText = setBackSavedCFrame and "S" or "-",
+	}
+	updateKeybindText()
 end
 
 local function syncSpeedKeybindDisplay()
@@ -723,6 +738,252 @@ local function stopFly()
 	syncFlyKeybindDisplay()
 end
 
+function stopSetBackTravel()
+	if setBackTravelConn then
+		setBackTravelConn:Disconnect()
+		setBackTravelConn = nil
+	end
+
+	if setBackCollisionState then
+		for part, canCollide in pairs(setBackCollisionState) do
+			if part and part.Parent then
+				part.CanCollide = canCollide
+			end
+		end
+		setBackCollisionState = nil
+	end
+end
+
+function setSetBackNoclipEnabled(enabled)
+	local currentCharacter = player.Character
+	if not currentCharacter then
+		return
+	end
+
+	if enabled then
+		setBackCollisionState = {}
+		for _, obj in ipairs(currentCharacter:GetDescendants()) do
+			if obj:IsA("BasePart") then
+				setBackCollisionState[obj] = obj.CanCollide
+				obj.CanCollide = false
+			end
+		end
+		return
+	end
+
+	if setBackCollisionState then
+		for part, canCollide in pairs(setBackCollisionState) do
+			if part and part.Parent then
+				part.CanCollide = canCollide
+			end
+		end
+		setBackCollisionState = nil
+	end
+end
+
+function getUprightSetBackCFrame(position, sourceCFrame)
+	local look = sourceCFrame and sourceCFrame.LookVector or Vector3.new(0, 0, -1)
+	local flatLook = Vector3.new(look.X, 0, look.Z)
+	if flatLook.Magnitude <= 0.001 then
+		flatLook = Vector3.new(0, 0, -1)
+	else
+		flatLook = flatLook.Unit
+	end
+
+	return CFrame.lookAt(position, position + flatLook, Vector3.new(0, 1, 0))
+end
+
+function saveSetBackPosition()
+	local currentCharacter = player.Character
+	local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not currentHumanoid or not currentRoot then
+		return false
+	end
+
+	if currentHumanoid.FloorMaterial == Enum.Material.Air then
+		return false
+	end
+
+	setBackSavedCFrame = getUprightSetBackCFrame(currentRoot.Position, currentRoot.CFrame)
+	syncSetBackKeybindDisplay()
+	return true
+end
+
+function clearSetBackPosition()
+	stopSetBackTravel()
+	setBackSavedCFrame = nil
+	syncSetBackKeybindDisplay()
+	return true
+end
+
+function getSetBackTravelPosition(currentRoot, destination, step)
+	local direction = destination.Position - currentRoot.Position
+	local distance = direction.Magnitude
+	if distance <= 0.001 then
+		return destination.Position
+	end
+
+	local travelDirection = direction.Unit
+	local desiredPosition = currentRoot.Position + (travelDirection * math.min(step, distance))
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { player.Character }
+	rayParams.IgnoreWater = true
+
+	local hit = Workspace:Raycast(currentRoot.Position, desiredPosition - currentRoot.Position, rayParams)
+	if not hit or not hit.Instance or not hit.Instance.CanCollide then
+		return desiredPosition
+	end
+
+	local hitPart = hit.Instance
+	local clearance = 6
+	if hitPart:IsA("BasePart") then
+		clearance = math.max(hitPart.Size.X, hitPart.Size.Y, hitPart.Size.Z) + 3
+	end
+
+	local side = Vector3.new(-travelDirection.Z, 0, travelDirection.X)
+	if side.Magnitude > 0.001 then
+		side = side.Unit
+	end
+
+	local blockedAbove = Workspace:Raycast(currentRoot.Position, Vector3.new(0, 6, 0), rayParams) ~= nil
+	local horizontalDelta = Vector3.new(direction.X, 0, direction.Z)
+	local horizontalDistance = horizontalDelta.Magnitude
+	local verticalDistance = math.abs(direction.Y)
+	local forwardStep = travelDirection * math.min(step * 0.6, distance)
+	local sideStep = side * clearance
+	local candidates
+	if blockedAbove and horizontalDistance <= 4 and verticalDistance > 3 then
+		candidates = {
+			currentRoot.Position + sideStep,
+			currentRoot.Position - sideStep,
+			currentRoot.Position + (sideStep * 1.6),
+			currentRoot.Position - (sideStep * 1.6),
+			currentRoot.Position + sideStep + Vector3.new(0, -(clearance * 0.7), 0),
+			currentRoot.Position - sideStep + Vector3.new(0, -(clearance * 0.7), 0),
+			currentRoot.Position + sideStep + forwardStep,
+			currentRoot.Position - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -clearance, 0),
+		}
+	elseif blockedAbove then
+		candidates = {
+			currentRoot.Position + sideStep + forwardStep,
+			currentRoot.Position - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -(clearance * 0.7), 0) + forwardStep,
+			currentRoot.Position + Vector3.new(0, -(clearance * 0.7), 0) + sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -(clearance * 0.7), 0) - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -clearance, 0),
+			currentRoot.Position + Vector3.new(0, clearance, 0) + sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, clearance, 0) - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, clearance + 2, 0),
+		}
+	else
+		candidates = {
+			currentRoot.Position + Vector3.new(0, clearance, 0) + forwardStep,
+			currentRoot.Position + sideStep + forwardStep,
+			currentRoot.Position - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -(clearance * 0.7), 0) + forwardStep,
+			currentRoot.Position + Vector3.new(0, clearance, 0) + sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, clearance, 0) - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -(clearance * 0.7), 0) + sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, -(clearance * 0.7), 0) - sideStep + forwardStep,
+			currentRoot.Position + Vector3.new(0, clearance + 2, 0),
+			currentRoot.Position + Vector3.new(0, -clearance, 0),
+		}
+	end
+
+	for _, candidate in ipairs(candidates) do
+		local candidateHit = Workspace:Raycast(currentRoot.Position, candidate - currentRoot.Position, rayParams)
+		if not candidateHit or not candidateHit.Instance or not candidateHit.Instance.CanCollide then
+			return candidate
+		end
+	end
+
+	return currentRoot.Position + Vector3.new(0, 8, 0)
+end
+
+function startSetBackTravel()
+	local currentCharacter = player.Character
+	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not currentRoot or not setBackSavedCFrame then
+		return false
+	end
+
+	stopSetBackTravel()
+	setSetBackNoclipEnabled(true)
+	setBackTravelConn = RunService.Heartbeat:Connect(function(dt)
+		local liveCharacter = player.Character
+		local liveRoot = liveCharacter and liveCharacter:FindFirstChild("HumanoidRootPart")
+		if not liveRoot or not setBackSavedCFrame then
+			stopSetBackTravel()
+			return
+		end
+
+		local destination = setBackSavedCFrame
+		local delta = destination.Position - liveRoot.Position
+		local distance = delta.Magnitude
+		local liveHumanoid = liveCharacter and liveCharacter:FindFirstChildOfClass("Humanoid")
+		if distance <= 2 then
+			liveRoot.CFrame = getUprightSetBackCFrame(destination.Position, destination)
+			liveRoot.AssemblyLinearVelocity = Vector3.zero
+			liveRoot.AssemblyAngularVelocity = Vector3.zero
+			if liveHumanoid then
+				liveHumanoid.PlatformStand = false
+				liveHumanoid.Sit = false
+				liveHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+			stopSetBackTravel()
+			return
+		end
+
+		local step = math.min(1000 * dt, distance)
+		local nextPosition = getSetBackTravelPosition(liveRoot, destination, step)
+		liveRoot.CFrame = getUprightSetBackCFrame(nextPosition, destination)
+		liveRoot.AssemblyLinearVelocity = Vector3.zero
+		liveRoot.AssemblyAngularVelocity = Vector3.zero
+		if liveHumanoid then
+			liveHumanoid.PlatformStand = false
+			liveHumanoid.Sit = false
+		end
+	end)
+
+	return true
+end
+
+function handleSetBackKeybind()
+	if setBackTravelConn then
+		stopSetBackTravel()
+		return
+	end
+
+	local now = tick()
+	setBackPressToken = setBackPressToken + 1
+	local currentToken = setBackPressToken
+
+	if now - setBackLastPressAt <= 0.35 then
+		setBackLastPressAt = 0
+		if setBackSavedCFrame then
+			clearSetBackPosition()
+		else
+			saveSetBackPosition()
+		end
+		return
+	end
+
+	setBackLastPressAt = now
+	task.delay(0.35, function()
+		if currentToken ~= setBackPressToken or setBackLastPressAt ~= now then
+			return
+		end
+
+		setBackLastPressAt = 0
+		if setBackSavedCFrame then
+			startSetBackTravel()
+		end
+	end)
+end
+
 local function toggleFly(nextState)
 	if nextState == nil then
 		flying = not flying
@@ -777,6 +1038,7 @@ local function handleCharacterDeath()
 	else
 		syncFlyKeybindDisplay()
 	end
+	stopSetBackTravel()
 
 	camLockEnabled = false
 	camLockTarget = nil
@@ -796,6 +1058,7 @@ local function handleCharacterDeath()
 	attackTpHolding = false
 	syncAttackTpKeybindDisplay()
 	syncTargetPickKeybindDisplay()
+	syncSetBackKeybindDisplay()
 	targetValueText.Text = ""
 	syncTargetActionControls()
 end
@@ -3698,6 +3961,7 @@ syncFlyKeybindDisplay()
 syncCamLockKeybindDisplay()
 syncAttackTpKeybindDisplay()
 syncTargetPickKeybindDisplay()
+syncSetBackKeybindDisplay()
 updateTargetDisplay()
 
 hum.Died:Connect(handleCharacterDeath)
@@ -3905,6 +4169,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if key == targetSelectKeybind then
 		toggleMouseTargetSelection()
+		return
+	end
+
+	if key == setBackKeybind then
+		handleSetBackKeybind()
 		return
 	end
 
