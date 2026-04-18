@@ -472,6 +472,30 @@ local attackTpAirVerticalOffset = 0.45
 local worldUpVector = Vector3.new(0, 1, 0)
 local autoTpEnabled = false
 local flingEnabled = false
+walkFlingEnabled = false
+auraFlingEnabled = false
+clickFlingEnabled = false
+flingAllEnabled = false
+walkFlingKeybind = Enum.KeyCode.X
+walkFlingPower = 1000
+flingPower = 1000
+auraRange = 20
+walkFlingUseNormal = false
+walkFlingDirections = {
+	Forward = true,
+}
+walkFlingHeartbeat = nil
+auraFlingTaskToken = 0
+clickFlingConnection = nil
+clickFlingBusy = false
+flingAllHeartbeat = nil
+flingOrbitTime = 0
+flingOrbitStepXZ = 0
+flingOrbitStepY = 0
+flingTargetIndex = 1
+flingOrbitSpeed = 2e9
+flingOrbitIncrement = 0.1
+flingOrbitMax = 1.3
 local viewing = false
 local currentViewTarget = nil
 local currentViewPlayer = nil
@@ -479,6 +503,9 @@ local viewDied = nil
 local viewChanged = nil
 pendingTeleportToSelectedPlayer = false
 local targetActionControls = nil
+local flingModeControls = nil
+local zeroLocalPlayerRoot
+local syncFlingModeControls
 
 local function encodeKeybindValue(keyCode)
 	return keyCode and keyCode.Name or ""
@@ -550,6 +577,25 @@ if tonumber(controlSaveData.Speed) then
 	Speed = tonumber(controlSaveData.Speed)
 end
 
+if tonumber(controlSaveData.WalkFlingPower) then
+	walkFlingPower = tonumber(controlSaveData.WalkFlingPower)
+end
+
+if tonumber(controlSaveData.FlingPower) then
+	flingPower = tonumber(controlSaveData.FlingPower)
+end
+
+if tonumber(controlSaveData.AuraRange) then
+	auraRange = tonumber(controlSaveData.AuraRange)
+end
+
+do
+	local savedWalkFlingKeybind = decodeKeybindValue(controlSaveData.WalkFlingKeybind)
+	if savedWalkFlingKeybind then
+		walkFlingKeybind = savedWalkFlingKeybind
+	end
+end
+
 local function parseEnabledValue(value)
 	if type(value) == "boolean" then
 		return value
@@ -565,7 +611,7 @@ end
 
 local function updateKeybindText()
 	local lines = {}
-	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "SetBack", "Custom" }
+	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "Custom" }
 
 	local function appendEntry(entry)
 		if not entry then
@@ -662,6 +708,455 @@ local function syncTargetPickKeybindDisplay()
 		hideState = true,
 	}
 	updateKeybindText()
+end
+
+function syncWalkFlingKeybindDisplay()
+	keybindEntries.WalkFling = {
+		name = "WalkFling",
+		keybind = encodeKeybindValue(walkFlingKeybind),
+		enabled = walkFlingEnabled,
+	}
+	updateKeybindText()
+end
+
+function getRootUniversal(character)
+	if not character then
+		return nil
+	end
+
+	return character:FindFirstChild("HumanoidRootPart")
+		or character:FindFirstChild("Torso")
+		or character:FindFirstChild("UpperTorso")
+end
+
+function getOtherPlayers()
+	local result = {}
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		if otherPlayer ~= player then
+			result[#result + 1] = otherPlayer
+		end
+	end
+	return result
+end
+
+function parseWalkFlingDirectionSelection(value)
+	local parsed = {}
+
+	if type(value) == "table" then
+		for _, directionName in ipairs(value) do
+			parsed[tostring(directionName)] = true
+		end
+	elseif value ~= nil then
+		parsed[tostring(value)] = true
+	end
+
+	if next(parsed) == nil then
+		parsed.Forward = true
+	end
+
+	walkFlingDirections = parsed
+end
+
+function getWalkFlingDirectionVector(rootPart)
+	if not rootPart then
+		return nil
+	end
+
+	local direction = Vector3.zero
+
+	if walkFlingDirections.Forward then
+		direction += rootPart.CFrame.LookVector
+	end
+	if walkFlingDirections.Backward then
+		direction -= rootPart.CFrame.LookVector
+	end
+	if walkFlingDirections.Right then
+		direction += rootPart.CFrame.RightVector
+	end
+	if walkFlingDirections.Left then
+		direction -= rootPart.CFrame.RightVector
+	end
+	if walkFlingDirections.Upward then
+		direction += Vector3.yAxis
+	end
+	if walkFlingDirections.Downward then
+		direction -= Vector3.yAxis
+	end
+
+	if direction.Magnitude <= 0.001 then
+		return nil
+	end
+
+	return direction.Unit
+end
+
+function resetGlobalFlingMotion()
+	flingOrbitTime = 0
+	flingOrbitStepXZ = 0
+	flingOrbitStepY = 0
+	flingTargetIndex = 1
+	clickFlingBusy = false
+	zeroLocalPlayerRoot()
+end
+
+function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
+	if not myRoot or not targetRoot then
+		return
+	end
+
+	flingOrbitTime += dt * flingOrbitSpeed
+	flingOrbitStepXZ += flingOrbitIncrement
+	flingOrbitStepY += flingOrbitIncrement
+
+	if flingOrbitStepXZ > flingOrbitMax then
+		flingOrbitStepXZ = 0
+	end
+	if flingOrbitStepY > flingOrbitMax then
+		flingOrbitStepY = 0
+	end
+
+	local offset = Vector3.new(
+		math.cos(flingOrbitTime) * flingOrbitStepXZ,
+		flingOrbitStepY,
+		math.sin(flingOrbitTime) * flingOrbitStepXZ
+	)
+
+	myRoot.CFrame = targetRoot.CFrame + offset
+	myRoot.AssemblyAngularVelocity = Vector3.new(power, power, power)
+	myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * power + Vector3.new(0, power * 0.5, 0)
+end
+
+function setWalkFlingEnabled(enabled)
+	local nextState = enabled == nil and not walkFlingEnabled or enabled == true
+	if walkFlingEnabled == nextState then
+		syncWalkFlingKeybindDisplay()
+		return walkFlingEnabled and "ON" or "OFF"
+	end
+
+	walkFlingEnabled = nextState
+	if walkFlingHeartbeat then
+		walkFlingHeartbeat:Disconnect()
+		walkFlingHeartbeat = nil
+	end
+
+	if walkFlingEnabled then
+		local moveOffset = 0.1
+		walkFlingHeartbeat = RunService.Heartbeat:Connect(function()
+			local currentCharacter = player.Character
+			local rootPart = getRootUniversal(currentCharacter)
+			if not rootPart then
+				return
+			end
+
+			local originalVelocity = rootPart.Velocity
+			if walkFlingUseNormal then
+				rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
+				RunService.RenderStepped:Wait()
+				if rootPart.Parent then
+					rootPart.Velocity = originalVelocity
+				end
+				RunService.Stepped:Wait()
+				if rootPart.Parent then
+					rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
+					moveOffset *= -1
+				end
+				return
+			end
+
+			local direction = getWalkFlingDirectionVector(rootPart)
+			if not direction then
+				return
+			end
+
+			rootPart.Velocity = direction * walkFlingPower
+			RunService.RenderStepped:Wait()
+			if rootPart.Parent then
+				rootPart.Velocity = originalVelocity
+			end
+		end)
+	else
+		zeroLocalPlayerRoot()
+	end
+
+	syncWalkFlingKeybindDisplay()
+	syncFlingModeControls()
+	return walkFlingEnabled and "ON" or "OFF"
+end
+
+function setAuraFlingEnabled(enabled)
+	local nextState = enabled == nil and not auraFlingEnabled or enabled == true
+	auraFlingEnabled = nextState
+	auraFlingTaskToken += 1
+
+	if not auraFlingEnabled then
+		resetGlobalFlingMotion()
+		syncFlingModeControls()
+		return "OFF"
+	end
+
+	local taskToken = auraFlingTaskToken
+	task.spawn(function()
+		while auraFlingEnabled and auraFlingTaskToken == taskToken do
+			local myCharacter = player.Character
+			local myRoot = getRootUniversal(myCharacter)
+			if myRoot then
+				local savedCFrame = myRoot.CFrame
+				local myPosition = myRoot.Position
+				local touchedAny = false
+
+				for _, otherPlayer in ipairs(getOtherPlayers()) do
+					local targetRoot = getRootUniversal(otherPlayer.Character)
+					if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
+						touchedAny = true
+						myRoot.AssemblyLinearVelocity = Vector3.zero
+						myRoot.AssemblyAngularVelocity = Vector3.zero
+						myCharacter:PivotTo(targetRoot.CFrame)
+						task.wait()
+						if not auraFlingEnabled or auraFlingTaskToken ~= taskToken or not myRoot.Parent then
+							break
+						end
+						myRoot.AssemblyAngularVelocity = Vector3.new(flingPower, flingPower, flingPower)
+						myRoot.AssemblyLinearVelocity = myRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+					end
+				end
+
+				if touchedAny and myRoot.Parent then
+					task.wait()
+					myRoot.AssemblyAngularVelocity = Vector3.zero
+					myRoot.AssemblyLinearVelocity = Vector3.zero
+					myCharacter:PivotTo(savedCFrame)
+				end
+			end
+
+			task.wait()
+		end
+
+		if not auraFlingEnabled then
+			resetGlobalFlingMotion()
+		end
+	end)
+
+	syncFlingModeControls()
+	return "ON"
+end
+
+function clickFlingTargetPlayer(targetPlayer)
+	if clickFlingBusy then
+		return
+	end
+
+	clickFlingBusy = true
+	task.spawn(function()
+		local myCharacter = player.Character
+		local myRoot = getRootUniversal(myCharacter)
+		local targetRoot = getRootUniversal(targetPlayer and targetPlayer.Character)
+
+		if myRoot and targetRoot then
+			local savedCFrame = myRoot.CFrame
+			local startedAt = tick()
+			resetGlobalFlingMotion()
+
+			while clickFlingEnabled and tick() - startedAt < 8 do
+				targetRoot = getRootUniversal(targetPlayer and targetPlayer.Character)
+				if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
+					break
+				end
+
+				local dt = RunService.Heartbeat:Wait()
+				applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+			end
+
+			if myRoot.Parent then
+				myRoot.AssemblyAngularVelocity = Vector3.zero
+				myRoot.AssemblyLinearVelocity = Vector3.zero
+				myRoot.CFrame = savedCFrame
+			end
+		end
+
+		clickFlingBusy = false
+	end)
+end
+
+function getPlayerFromClickedPart(part)
+	local current = part
+	while current do
+		if current:IsA("Model") then
+			local targetPlayer = Players:GetPlayerFromCharacter(current)
+			if targetPlayer and targetPlayer ~= player then
+				return targetPlayer
+			end
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
+function setClickFlingEnabled(enabled)
+	local nextState = enabled == nil and not clickFlingEnabled or enabled == true
+	clickFlingEnabled = nextState
+
+	if clickFlingConnection then
+		clickFlingConnection:Disconnect()
+		clickFlingConnection = nil
+	end
+
+	if clickFlingEnabled then
+		local mouse = player:GetMouse()
+		clickFlingConnection = mouse.Button1Down:Connect(function()
+			if not clickFlingEnabled then
+				return
+			end
+
+			local targetPlayer = getPlayerFromClickedPart(mouse.Target)
+			if targetPlayer then
+				clickFlingTargetPlayer(targetPlayer)
+			end
+		end)
+	else
+		resetGlobalFlingMotion()
+	end
+
+	syncFlingModeControls()
+	return clickFlingEnabled and "ON" or "OFF"
+end
+
+function setFlingAllEnabled(enabled)
+	local nextState = enabled == nil and not flingAllEnabled or enabled == true
+	flingAllEnabled = nextState
+
+	if flingAllHeartbeat then
+		flingAllHeartbeat:Disconnect()
+		flingAllHeartbeat = nil
+	end
+
+	if flingAllEnabled then
+		resetGlobalFlingMotion()
+		flingAllHeartbeat = RunService.Heartbeat:Connect(function(dt)
+			local myRoot = getRootUniversal(player.Character)
+			if not myRoot then
+				return
+			end
+
+			local targetRoots = {}
+			for _, otherPlayer in ipairs(getOtherPlayers()) do
+				local targetRoot = getRootUniversal(otherPlayer.Character)
+				if targetRoot then
+					targetRoots[#targetRoots + 1] = targetRoot
+				end
+			end
+
+			if #targetRoots == 0 then
+				return
+			end
+
+			if flingTargetIndex > #targetRoots then
+				flingTargetIndex = 1
+			end
+
+			local targetRoot = targetRoots[flingTargetIndex]
+			applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+			flingTargetIndex += 1
+		end)
+	else
+		resetGlobalFlingMotion()
+	end
+
+	syncFlingModeControls()
+	return flingAllEnabled and "ON" or "OFF"
+end
+
+function WalkFling_bind(value)
+	local decoded = decodeKeybindValue(value)
+	if decoded == nil then
+		return encodeKeybindValue(walkFlingKeybind)
+	end
+
+	walkFlingKeybind = decoded
+	setSavedControlValue("WalkFlingKeybind", encodeKeybindValue(walkFlingKeybind))
+	syncWalkFlingKeybindDisplay()
+	return encodeKeybindValue(walkFlingKeybind)
+end
+
+function WalkFling_key(value)
+	return WalkFling_bind(value)
+end
+
+function WalkFling_tog(value)
+	return setWalkFlingEnabled(value == nil and nil or parseEnabledValue(value))
+end
+
+function WalkFling_on()
+	return setWalkFlingEnabled(true)
+end
+
+function WalkFling_off()
+	return setWalkFlingEnabled(false)
+end
+
+function WalkFling_toggle()
+	return setWalkFlingEnabled()
+end
+
+function AuraFling_tog(value)
+	return setAuraFlingEnabled(value == nil and nil or parseEnabledValue(value))
+end
+
+function NormalWalkFling_tog(value)
+	if value == nil then
+		return walkFlingUseNormal and "ON" or "OFF"
+	end
+
+	walkFlingUseNormal = parseEnabledValue(value)
+	syncFlingModeControls()
+	return walkFlingUseNormal and "ON" or "OFF"
+end
+
+function ClickFling_tog(value)
+	return setClickFlingEnabled(value == nil and nil or parseEnabledValue(value))
+end
+
+function FlingAll_tog(value)
+	return setFlingAllEnabled(value == nil and nil or parseEnabledValue(value))
+end
+
+function WalkFlingPower_set(value)
+	if value == nil then
+		return walkFlingPower
+	end
+
+	walkFlingPower = tonumber(value) or walkFlingPower
+	setSavedControlValue("WalkFlingPower", walkFlingPower)
+	return walkFlingPower
+end
+
+function FlingsPower_set(value)
+	if value == nil then
+		return flingPower
+	end
+
+	flingPower = tonumber(value) or flingPower
+	setSavedControlValue("FlingPower", flingPower)
+	return flingPower
+end
+
+function AuraRange_set(value)
+	if value == nil then
+		return auraRange
+	end
+
+	auraRange = math.clamp(tonumber(value) or auraRange, 10, 5e9)
+	setSavedControlValue("AuraRange", auraRange)
+	return auraRange
+end
+
+function WalkFlingDirection_set(value)
+	if value == nil then
+		return walkFlingDirections
+	end
+
+	parseWalkFlingDirectionSelection(value)
+	setSavedControlValue("WalkFlingDirection", type(value) == "table" and value or { tostring(value) })
+	return walkFlingDirections
 end
 
 local function updateMovement()
@@ -1142,6 +1637,17 @@ local function syncTargetActionControls()
 	targetActionControls.Third.SetValue(flingEnabled, true)
 end
 
+syncFlingModeControls = function()
+	if not flingModeControls then
+		return
+	end
+
+	flingModeControls.First.SetValue(walkFlingUseNormal, true)
+	flingModeControls.Second.SetValue(auraFlingEnabled, true)
+	flingModeControls.Third.SetValue(clickFlingEnabled, true)
+	flingModeControls.Fourth.SetValue(flingAllEnabled, true)
+end
+
 local function getDisplayedTargetModel()
 	if isValidCamLockTarget(camLockTarget) then
 		return camLockTarget
@@ -1295,7 +1801,7 @@ local function getRotationOnlyCFrame(sourceCFrame)
 	return CFrame.lookAt(Vector3.new(), sourceCFrame.LookVector, sourceCFrame.UpVector)
 end
 
-local function zeroLocalPlayerRoot()
+zeroLocalPlayerRoot = function()
 	local character = player.Character
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if not hrp then
@@ -1706,6 +2212,7 @@ function INFO(title, text, time)
 
 	showInfo(title, text, time)
 end
+do
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local strongSkills = {
@@ -1854,6 +2361,9 @@ for _, plr in ipairs(Players:GetPlayers()) do
     setupPlayer(plr)
 end
 Players.PlayerAdded:Connect(setupPlayer)
+end
+
+do
 local Players = game:GetService("Players")
 local speaker = Players.LocalPlayer
 local speed = 25.66
@@ -1947,6 +2457,7 @@ task.spawn(function()
         end
     end)
 end)
+end
 local StayToggle = nil
 local DashToggle = nil
 task.spawn(function()
@@ -2166,7 +2677,7 @@ task.spawn(function()
     local flingState = {
         localPlayer = Players.LocalPlayer,
         flingConn = nil,
-        flingPower = 1e9,
+        flingPower = 1e12,
         orbitSpeed = 1e9,
         orbitStepXZ = 0,
         orbitStepY = 8,
@@ -2483,6 +2994,198 @@ function Textbox(data)
 	end)
 
 	return holder
+end
+
+_G["2textbox_on_one_frame"] = function(data)
+	data = data or {}
+
+	local holder = makeControlFrame(92)
+	holder.Parent = uiX
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.fromScale(0.05, 0.08)
+	titleLabel.Size = UDim2.fromScale(0.9, 0.16)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = tostring(data.title or "Inputs")
+	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
+
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 12
+	titleConstraint.MaxTextSize = 18
+	titleConstraint.Parent = titleLabel
+
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.fromScale(0.05, 0.38)
+	rowFrame.Size = UDim2.fromScale(0.9, 0.38)
+	rowFrame.Parent = holder
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 10)
+	rowLayout.Parent = rowFrame
+
+	local function createInputBox(labelText, defaultValue, saveKey, callback)
+		local container = Instance.new("Frame")
+		container.BackgroundTransparency = 1
+		container.Size = UDim2.new(0.5, -5, 1, 0)
+		container.Parent = rowFrame
+
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(0, 0)
+		label.Size = UDim2.fromScale(1, 0.3)
+		label.Font = Enum.Font.GothamMedium
+		label.Text = tostring(labelText or "")
+		label.TextColor3 = Color3.fromRGB(255, 160, 160)
+		label.TextStrokeTransparency = 0.2
+		label.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		label.TextScaled = true
+		label.TextWrapped = true
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Parent = container
+
+		local labelConstraint = Instance.new("UITextSizeConstraint")
+		labelConstraint.MinTextSize = 10
+		labelConstraint.MaxTextSize = 14
+		labelConstraint.Parent = label
+
+		local inputBox = Instance.new("TextBox")
+		inputBox.BackgroundColor3 = Color3.fromRGB(22, 0, 0)
+		inputBox.BackgroundTransparency = 0.1
+		inputBox.BorderSizePixel = 0
+		inputBox.Position = UDim2.fromScale(0, 0.38)
+		inputBox.Size = UDim2.fromScale(1, 0.52)
+		inputBox.ClearTextOnFocus = false
+		inputBox.Font = Enum.Font.GothamMedium
+		inputBox.PlaceholderText = "set"
+		inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
+		inputBox.Text = tostring(defaultValue or "")
+		inputBox.TextColor3 = Color3.fromRGB(255, 180, 180)
+		inputBox.TextScaled = true
+		inputBox.Parent = container
+
+		local inputCorner = Instance.new("UICorner")
+		inputCorner.CornerRadius = UDim.new(0, 12)
+		inputCorner.Parent = inputBox
+
+		local inputConstraint = Instance.new("UITextSizeConstraint")
+		inputConstraint.MinTextSize = 10
+		inputConstraint.MaxTextSize = 14
+		inputConstraint.Parent = inputBox
+
+		local lastAllowedText = tostring(defaultValue or "")
+		local syncingText = false
+
+		local function isAllowedTextboxValue(text)
+			if text == "" then
+				return true
+			end
+
+			local lowered = string.lower(text)
+			if lowered == "i" or lowered == "in" or lowered == "inf" or lowered == "inf+" or lowered == "inf++" or lowered == "inf+++" then
+				return true
+			end
+
+			if string.find(lowered, "[^0-9eE%+%-%.]") then
+				return false
+			end
+
+			return true
+		end
+
+		inputBox:GetPropertyChangedSignal("Text"):Connect(function()
+			if syncingText then
+				return
+			end
+
+			local currentText = tostring(inputBox.Text or "")
+			if isAllowedTextboxValue(currentText) then
+				lastAllowedText = currentText
+				return
+			end
+
+			syncingText = true
+			inputBox.Text = lastAllowedText
+			syncingText = false
+		end)
+
+		inputBox.Focused:Connect(function()
+			inputBox.Text = ""
+		end)
+
+		inputBox.FocusLost:Connect(function()
+			local rawText = tostring(inputBox.Text or ""):match("^%s*(.-)%s*$")
+			local loweredText = string.lower(rawText)
+			if loweredText == "inf" then
+				rawText = "20e20"
+			elseif loweredText == "inf+" then
+				rawText = "50e50"
+			elseif loweredText == "inf++" then
+				rawText = "99e99"
+			elseif loweredText == "inf+++" then
+				rawText = "999e999"
+			end
+
+			local parsed = tonumber(rawText)
+			if parsed == nil then
+				syncingText = true
+				inputBox.Text = tostring(defaultValue or "")
+				syncingText = false
+				lastAllowedText = inputBox.Text
+				return
+			end
+
+			defaultValue = parsed
+			syncingText = true
+			inputBox.Text = tostring(parsed)
+			syncingText = false
+			lastAllowedText = inputBox.Text
+			if saveKey and saveKey ~= "" then
+				setSavedControlValue(saveKey, parsed)
+			end
+			if callback then
+				callback(parsed)
+			end
+		end)
+
+		return inputBox
+	end
+
+	local firstDefault = getSavedControlValue(data.saveKey1)
+	if firstDefault == nil then
+		firstDefault = data.default1
+	end
+
+	local secondDefault = getSavedControlValue(data.saveKey2)
+	if secondDefault == nil then
+		secondDefault = data.default2
+	end
+
+	local firstInput = createInputBox(data.name1, firstDefault, data.saveKey1, data.fun1)
+	local secondInput = createInputBox(data.name2, secondDefault, data.saveKey2, data.fun2)
+
+	if data.fun1 and tonumber(firstDefault) ~= nil then
+		data.fun1(tonumber(firstDefault))
+	end
+	if data.fun2 and tonumber(secondDefault) ~= nil then
+		data.fun2(tonumber(secondDefault))
+	end
+
+	return {
+		Frame = holder,
+		First = firstInput,
+		Second = secondInput,
+	}
 end
 
 function Dropdown(data)
@@ -3547,6 +4250,132 @@ end
 
 three_tog_on_one_one_button = _G["3tog_on_one_one_button"]
 
+_G["4tog_on_one_frame"] = function(data)
+	data = data or {}
+
+	local titleText = tostring(data.title or "Fling")
+	local names = {
+		tostring(data.name1 or "One"),
+		tostring(data.name2 or "Two"),
+		tostring(data.name3 or "Three"),
+		tostring(data.name4 or "Four"),
+	}
+	local callbacks = {
+		data.fun1,
+		data.fun2,
+		data.fun3,
+		data.fun4,
+	}
+	local defaults = {
+		data.default1 == true,
+		data.default2 == true,
+		data.default3 == true,
+		data.default4 == true,
+	}
+
+	local holder = makeControlFrame(76)
+	holder.Parent = uiX
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 16, 0, 8)
+	titleLabel.Size = UDim2.new(1, -32, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = titleText
+	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
+
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 12
+	titleConstraint.MaxTextSize = 18
+	titleConstraint.Parent = titleLabel
+
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.new(0, 10, 0, 32)
+	rowFrame.Size = UDim2.new(1, -20, 0, 32)
+	rowFrame.Parent = holder
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 6)
+	rowLayout.Parent = rowFrame
+
+	local function createToggle(text, initialState, callback)
+		local button = Instance.new("TextButton")
+		button.BackgroundTransparency = 0.06
+		button.BorderSizePixel = 0
+		button.Size = UDim2.new(0.25, -5, 1, 0)
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = tostring(text)
+		button.TextStrokeTransparency = 0.15
+		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		button.TextScaled = true
+		button.TextWrapped = true
+		button.Parent = rowFrame
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 10)
+		corner.Parent = button
+
+		local constraint = Instance.new("UITextSizeConstraint")
+		constraint.MinTextSize = 10
+		constraint.MaxTextSize = 13
+		constraint.Parent = button
+
+		local enabled = initialState == true
+
+		local function render()
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+		end
+
+		local control = {}
+
+		function control.SetValue(nextState, suppressCallback)
+			enabled = nextState == true
+			render()
+			if not suppressCallback and callback then
+				callback(enabled)
+			end
+		end
+
+		function control.GetValue()
+			return enabled
+		end
+
+		button.MouseButton1Click:Connect(function()
+			control.SetValue(not enabled)
+		end)
+
+		render()
+		return control
+	end
+
+	local controls = {}
+	for index = 1, 4 do
+		controls[index] = createToggle(names[index], defaults[index], callbacks[index])
+	end
+
+	return {
+		Frame = holder,
+		First = controls[1],
+		Second = controls[2],
+		Third = controls[3],
+		Fourth = controls[4],
+	}
+end
+
+four_tog_on_one_frame = _G["4tog_on_one_frame"]
+
 _G["2tog_on_one_button"] = function(data)
 	data = data or {}
 
@@ -3988,6 +4817,7 @@ syncFlyKeybindDisplay()
 syncCamLockKeybindDisplay()
 syncAttackTpKeybindDisplay()
 syncTargetPickKeybindDisplay()
+syncWalkFlingKeybindDisplay()
 syncSetBackKeybindDisplay()
 updateTargetDisplay()
 
@@ -4079,6 +4909,73 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 		teleportToSelectedTarget()
 	end,
 })
+
+Dropdown({
+	namedropdown = "Direction",
+	saveKey = "WalkFlingDirection",
+	inside = { "Forward", "Backward", "Upward", "Downward", "Right", "Left" },
+	multi = true,
+	deffultin = { "Forward" },
+	fun = function(value)
+		parseWalkFlingDirectionSelection(value)
+	end,
+})
+
+_G["2textbox_on_one_frame"]({
+	title = "Powers",
+	name1 = "Power Walkfling",
+	name2 = "Power Flings",
+	default1 = walkFlingPower,
+	default2 = flingPower,
+	saveKey1 = "WalkFlingPower",
+	saveKey2 = "FlingPower",
+	fun1 = function(value)
+		walkFlingPower = value
+	end,
+	fun2 = function(value)
+		flingPower = value
+	end,
+})
+
+Slider({
+	nameSilder = "Aura Range",
+	nameshow = "",
+	max = 500,
+	min = 10,
+	default = auraRange,
+	saveKey = "AuraRange",
+	fun = function(value)
+		auraRange = value
+	end,
+})
+
+flingModeControls = _G["4tog_on_one_frame"]({
+	title = "Fling",
+	name1 = "Noraml Walkfling",
+	name2 = "Aura Fling",
+	name3 = "Click Fling",
+	name4 = "Fling All",
+	default1 = walkFlingUseNormal,
+	default2 = auraFlingEnabled,
+	default3 = clickFlingEnabled,
+	default4 = flingAllEnabled,
+	fun1 = function(enabled)
+		walkFlingUseNormal = enabled
+		syncFlingModeControls()
+	end,
+	fun2 = function(enabled)
+		setAuraFlingEnabled(enabled)
+	end,
+	fun3 = function(enabled)
+		setClickFlingEnabled(enabled)
+	end,
+	fun4 = function(enabled)
+		setFlingAllEnabled(enabled)
+	end,
+})
+
+parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
+syncFlingModeControls()
 
 refreshModelDropdown(getSavedControlValue("model"))
 
@@ -4196,6 +5093,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	if key == targetSelectKeybind then
 		toggleMouseTargetSelection()
+		return
+	end
+
+	if key == walkFlingKeybind then
+		setWalkFlingEnabled()
 		return
 	end
 
