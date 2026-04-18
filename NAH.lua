@@ -2486,22 +2486,64 @@ task.spawn(function()
 	end
 end)
 task.spawn(function()
-    local RunService = game:GetService("RunService")
-    local Players = game:GetService("Players")
-    local connection = RunService.Heartbeat:Connect(function()
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= Players.LocalPlayer and player.Character then
-                for _, part in ipairs(player.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                        part.Velocity = Vector3.zero
-                        part.AssemblyLinearVelocity = Vector3.zero
-                        part.AssemblyAngularVelocity = Vector3.zero
-                    end
-                end
-            end
-        end
-    end)
+	local antiflingConnection = nil
+	local trackedPlayers = {}
+
+	local function getTrackedPlayers()
+		return trackedPlayers
+	end
+
+	local function startAntiFling()
+		if antiflingConnection then
+			antiflingConnection:Disconnect()
+		end
+
+		antiflingConnection = RunService.Stepped:Connect(function()
+			for _, trackedPlayer in ipairs(getTrackedPlayers()) do
+				if trackedPlayer ~= player and trackedPlayer.Character then
+					for _, part in ipairs(trackedPlayer.Character:GetChildren()) do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end
+			end
+		end)
+	end
+
+	local function addTrackedPlayer(trackedPlayer)
+		if trackedPlayer == player then
+			return
+		end
+
+		if not table.find(trackedPlayers, trackedPlayer) then
+			table.insert(trackedPlayers, trackedPlayer)
+		end
+	end
+
+	local function removeTrackedPlayer(trackedPlayer)
+		local index = table.find(trackedPlayers, trackedPlayer)
+		if index then
+			table.remove(trackedPlayers, index)
+		end
+	end
+
+	local function bindTrackedPlayer(trackedPlayer)
+		addTrackedPlayer(trackedPlayer)
+		trackedPlayer.CharacterAdded:Connect(function()
+			task.wait(0.15)
+			addTrackedPlayer(trackedPlayer)
+		end)
+	end
+
+	for _, existingPlayer in ipairs(Players:GetPlayers()) do
+		bindTrackedPlayer(existingPlayer)
+	end
+
+	Players.PlayerAdded:Connect(bindTrackedPlayer)
+	Players.PlayerRemoving:Connect(removeTrackedPlayer)
+
+	startAntiFling()
 end)
 end
 local StayToggle = nil
