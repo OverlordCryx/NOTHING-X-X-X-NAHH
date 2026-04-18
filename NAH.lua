@@ -471,6 +471,7 @@ local currentViewTarget = nil
 local currentViewPlayer = nil
 local viewDied = nil
 local viewChanged = nil
+pendingTeleportToSelectedPlayer = false
 local targetActionControls = nil
 
 local function encodeKeybindValue(keyCode)
@@ -787,6 +788,7 @@ local function handleCharacterDeath()
 	attackTpTarget = nil
 	manualAttackTpTarget = nil
 	manualAttackTpPlayer = nil
+	pendingTeleportToSelectedPlayer = false
 	flingEnabled = false
 	if syncModelDropdownSelectionToManualTarget then
 		syncModelDropdownSelectionToManualTarget()
@@ -838,9 +840,17 @@ local function resolveManualAttackTpTargetModel()
 	return manualAttackTpTarget
 end
 
+function hasTrackedSelectedPlayer()
+	return manualAttackTpPlayer ~= nil and manualAttackTpPlayer ~= player and manualAttackTpPlayer.Parent == Players
+end
+
+function isWaitingForSelectedPlayerRespawn()
+	return hasTrackedSelectedPlayer() and not isValidAttackTpTarget(resolveManualAttackTpTargetModel())
+end
+
 local function hasManualAttackTpSelection()
 	if manualAttackTpPlayer then
-		return manualAttackTpPlayer.Parent == Players and manualAttackTpPlayer ~= player
+		return hasTrackedSelectedPlayer()
 	end
 
 	return isValidAttackTpTarget(manualAttackTpTarget)
@@ -853,6 +863,10 @@ local function hasActiveSelectedTarget()
 
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
 	return isValidAttackTpTarget(resolvedManualTarget)
+end
+
+function hasSelectedTargetOrPendingPlayer()
+	return hasActiveSelectedTarget() or isWaitingForSelectedPlayerRespawn()
 end
 
 local function syncTargetActionControls()
@@ -885,6 +899,7 @@ local function updateTargetDisplay()
 		if manualAttackTpPlayer == player or manualAttackTpPlayer.Parent ~= Players then
 			manualAttackTpPlayer = nil
 			manualAttackTpTarget = nil
+			pendingTeleportToSelectedPlayer = false
 			if syncModelDropdownSelectionToManualTarget then
 				syncModelDropdownSelectionToManualTarget()
 			end
@@ -894,6 +909,7 @@ local function updateTargetDisplay()
 		end
 	elseif manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
 		manualAttackTpTarget = nil
+		pendingTeleportToSelectedPlayer = false
 		if syncModelDropdownSelectionToManualTarget then
 			syncModelDropdownSelectionToManualTarget()
 		end
@@ -913,7 +929,7 @@ local function updateTargetDisplay()
 	local displayName = displayedTarget and displayedTarget.Name or (manualAttackTpPlayer and manualAttackTpPlayer.Name or "")
 	targetValueText.Text = displayName
 
-	if not hasActiveSelectedTarget() then
+	if not hasSelectedTargetOrPendingPlayer() then
 		if autoTpEnabled then
 			autoTpEnabled = false
 		end
@@ -1014,6 +1030,17 @@ local function getRotationOnlyCFrame(sourceCFrame)
 	end
 
 	return CFrame.lookAt(Vector3.new(), sourceCFrame.LookVector, sourceCFrame.UpVector)
+end
+
+local function zeroLocalPlayerRoot()
+	local character = player.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		return
+	end
+
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
 end
 
 local function getAppliedFlySpeed()
@@ -1154,6 +1181,8 @@ local function setManualAttackTpTarget(model, targetPlayer)
 		manualAttackTpTarget = nil
 	end
 
+	pendingTeleportToSelectedPlayer = false
+
 	if not isValidAttackTpTarget(camLockTarget) then
 		attackTpTarget = resolveManualAttackTpTargetModel()
 	end
@@ -1209,18 +1238,23 @@ end
 
 local function toggleAttackTp(nextState)
 	local shouldEnable = nextState
+	local nextTarget = nil
 	if shouldEnable == nil then
 		shouldEnable = not attackTpEnabled
 	end
 
-	if shouldEnable and not hasActiveSelectedTarget() then
+	if shouldEnable then
+		nextTarget = getPreferredAttackTpTarget()
+	end
+
+	if shouldEnable and not isValidAttackTpTarget(nextTarget) then
 		shouldEnable = false
 	end
 
 	attackTpEnabled = shouldEnable == true
 
 	if attackTpEnabled then
-		attackTpTarget = getPreferredAttackTpTarget()
+		attackTpTarget = nextTarget
 	else
 		attackTpTarget = nil
 	end
@@ -1650,49 +1684,106 @@ task.spawn(function()
         end
     end)
 end)
+local StayToggle = nil
+local DashToggle = nil
 task.spawn(function()
-    task.wait(0.6)
+    task.wait(0.2)
     local stayPos = nil
     local stayConn = nil
     local stayGyro = nil
     local isActive = false
-local function cleanup()
-    if conn then
-        conn:Disconnect()
-        conn = nil
-    end
-    if gyro then
-        gyro:Destroy()
-        gyro = nil
-    end
-    stayPos = nil
-end
-    player.CharacterAdded:Connect(function()
-        if isActive then
-            cleanup()
-            isActive = false
-            if StayToggle and StayToggle.SetValue then
-                StayToggle:SetValue(false, true)
-            end
+    local directions = {
+        Enum.KeyCode.A,
+        Enum.KeyCode.D,
+        Enum.KeyCode.S,
+    }
+    local DashBlockRunning = false
+    local DashThread = nil
+    local communicate = nil
+
+    local function fixCamera()
+        local character = player.Character
+        if not character then
+            return
         end
-    end)
-    StayToggle = tog({
-        name = "Stay",
-        default = false,
-        fun = function(state)
-            isActive = state
-            local char = player.Character
-            if not char then return end
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if not root then return end
-            if state then
+
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then
+            return
+        end
+
+        humanoid.CameraOffset = Vector3.new(0, 0, 0)
+
+        local camera = Workspace.CurrentCamera
+        if camera then
+            camera.CameraType = Enum.CameraType.Custom
+            camera.CameraSubject = humanoid
+        end
+
+        task.delay(0.15, function()
+            if humanoid and humanoid.Parent then
+                humanoid.CameraOffset = Vector3.new(0, 0, 0)
+            end
+        end)
+    end
+
+    local function layCharacter()
+        local character = player.Character
+        if not character then
+            return
+        end
+
+        local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+        if not humanoid then
+            return
+        end
+
+        humanoid.Sit = true
+        task.wait(0.1)
+
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = root.CFrame * CFrame.Angles(math.pi * 0.5, 0, 0)
+        end
+
+        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            track:Stop()
+        end
+    end
+
+    local function cleanupStay()
+        if stayConn then
+            stayConn:Disconnect()
+            stayConn = nil
+        end
+        if stayGyro then
+            stayGyro:Destroy()
+            stayGyro = nil
+        end
+        stayPos = nil
+    end
+
+    local function setStayState(state)
+        isActive = state == true
+
+        local char = player.Character
+        if not char then
+            return
+        end
+
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then
+            return
+        end
+
+        if isActive then
             stayPos = root.Position
-            gyro = Instance.new("BodyGyro")
-            gyro.MaxTorque = Vector3.new(9e9,9e9,9e9)
-            gyro.P = 9e9
-            gyro.CFrame = root.CFrame
-            gyro.Parent = root
-                stayConn = RunService.Heartbeat:Connect(function()
+            stayGyro = Instance.new("BodyGyro")
+            stayGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+            stayGyro.P = 9e9
+            stayGyro.CFrame = root.CFrame
+            stayGyro.Parent = root
+            stayConn = RunService.Heartbeat:Connect(function()
                 if root and stayPos then
                     root.AssemblyLinearVelocity = Vector3.zero
                     root.AssemblyAngularVelocity = Vector3.zero
@@ -1701,17 +1792,178 @@ end
                         math.rad(root.Orientation.Y),
                         0
                     )
-                        if stayGyro then
-                            stayGyro.CFrame = root.CFrame
-                        end
+                    if stayGyro then
+                        stayGyro.CFrame = root.CFrame
                     end
-                end)
-            else
-                cleanup()
+                end
+            end)
+        else
+            cleanupStay()
+        end
+    end
+
+    local function setDashBlockRuntime(state)
+        DashBlockRunning = state == true
+        if DashThread then
+            DashThread:Disconnect()
+            DashThread = nil
+        end
+        if not DashBlockRunning then
+            return
+        end
+        if not communicate then
+            DashBlockRunning = false
+            return
+        end
+        DashThread = RunService.Heartbeat:Connect(function()
+            if not DashBlockRunning or not communicate then
+                return
+            end
+            for _, dashKey in ipairs(directions) do
+                communicate:FireServer({
+                    Dash = dashKey,
+                    Key = Enum.KeyCode.Q,
+                    Goal = "KeyPress"
+                })
+            end
+        end)
+    end
+
+    local function setupCharacter(char)
+        local comm = char:FindFirstChild("Communicate")
+        if comm then
+            communicate = comm
+        end
+        if DashToggle and DashToggle.SetValue then
+            DashToggle:SetValue(DashBlockRunning, true)
+        end
+        char.ChildAdded:Connect(function(child)
+            if child.Name == "Communicate" then
+                communicate = child
+            end
+        end)
+    end
+
+    local panel = _G["2tog_on_one_button"]({
+        title = "Movement",
+        name1 = "Stay",
+        name2 = "Dash Block FE",
+        buttonName = "Fix Camera",
+        buttonName2 = "Lay",
+        default1 = false,
+        default2 = false,
+        fun1 = setStayState,
+        fun2 = setDashBlockRuntime,
+        buttonfun = fixCamera,
+        buttonfun2 = layCharacter,
+    })
+    StayToggle = panel.First
+    DashToggle = panel.Second
+
+    player.CharacterAdded:Connect(function()
+        if isActive then
+            cleanupStay()
+            isActive = false
+            if StayToggle and StayToggle.SetValue then
+                StayToggle:SetValue(false, true)
             end
         end
-    })
+        communicate = nil
+    end)
+
+    if player.Character then
+        setupCharacter(player.Character)
+    end
+    player.CharacterAdded:Connect(setupCharacter)
 end)
+task.spawn(function()
+    task.wait(0.3)
+    local flingState = {
+        localPlayer = Players.LocalPlayer,
+        flingConn = nil,
+        flingPower = 1e9,
+        orbitSpeed = 1e9,
+        orbitStepXZ = 0,
+        orbitStepY = 8,
+        orbitIncrement = 0.9,
+        orbitMax = 3,
+    }
+
+    local function getRoot(char)
+        if not char then
+            return nil
+        end
+
+        return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    end
+
+    local function stopFlingRuntime()
+        if flingState.flingConn then
+            flingState.flingConn:Disconnect()
+            flingState.flingConn = nil
+        end
+        flingState.orbitStepXZ = 0
+        flingState.orbitStepY = 3
+    end
+
+    local function startFlingRuntime()
+        stopFlingRuntime()
+        flingState.flingConn = RunService.Heartbeat:Connect(function()
+            if not flingEnabled then
+                stopFlingRuntime()
+                return
+            end
+
+            local myChar = flingState.localPlayer.Character
+            local myRoot = getRoot(myChar)
+            if not myRoot then
+                return
+            end
+
+            local targetModel = getDisplayedTargetModel()
+            if not targetModel then
+                return
+            end
+
+            local targetRoot = getRoot(targetModel)
+            if not targetRoot then
+                return
+            end
+
+            flingState.orbitStepXZ = flingState.orbitStepXZ + flingState.orbitIncrement
+            flingState.orbitStepY = flingState.orbitStepY + flingState.orbitIncrement
+            if flingState.orbitStepXZ > flingState.orbitMax then
+                flingState.orbitStepXZ = 0
+            end
+            if flingState.orbitStepY > flingState.orbitMax then
+                flingState.orbitStepY = 0
+            end
+
+            local t = tick() * flingState.orbitSpeed
+            local offset = Vector3.new(
+                math.cos(t) * flingState.orbitStepXZ,
+                flingState.orbitStepY,
+                math.sin(t) * flingState.orbitStepXZ
+            )
+
+            myRoot.CFrame = targetRoot.CFrame + offset
+            myRoot.AssemblyAngularVelocity = Vector3.new(flingState.flingPower, flingState.flingPower, flingState.flingPower)
+            myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * flingState.flingPower + Vector3.new(0, flingState.flingPower * 0.6, 0)
+        end)
+    end
+
+    while true do
+        task.wait()
+        if flingEnabled then
+            if not flingState.flingConn then
+                startFlingRuntime()
+            end
+        else
+            stopFlingRuntime()
+        end
+    end
+end)
+
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
@@ -2639,30 +2891,25 @@ startView = function()
 	end
 
 	local targetModel = resolveAttackTpTarget()
-	if not isValidCamLockTarget(targetModel) then
-		return false
-	end
-
-	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
-	if not targetHumanoid then
-		return false
-	end
+	local targetPlayer = hasTrackedSelectedPlayer() and manualAttackTpPlayer or Players:GetPlayerFromCharacter(targetModel)
+	cam.CameraType = Enum.CameraType.Custom
 
 	currentViewTarget = targetModel
-	currentViewPlayer = Players:GetPlayerFromCharacter(targetModel)
+	currentViewPlayer = targetPlayer
 	viewing = true
-	cam.CameraType = Enum.CameraType.Custom
-	cam.CameraSubject = targetHumanoid
 
 	if currentViewPlayer then
+		local viewedPlayer = currentViewPlayer
 		viewDied = currentViewPlayer.CharacterAdded:Connect(function(newCharacter)
 			repeat
 				task.wait()
-			until not viewing or currentViewPlayer ~= Players:GetPlayerFromCharacter(currentViewTarget) or newCharacter:FindFirstChildOfClass("Humanoid")
+			until not viewing or currentViewPlayer ~= viewedPlayer or newCharacter:FindFirstChildOfClass("Humanoid")
 
-			if viewing and currentViewPlayer and currentViewPlayer.Character == newCharacter then
+			if viewing and currentViewPlayer == viewedPlayer and viewedPlayer.Character == newCharacter then
 				local newHumanoid = newCharacter:FindFirstChildOfClass("Humanoid")
 				if newHumanoid and cam then
+					currentViewTarget = newCharacter
+					cam.CameraType = Enum.CameraType.Custom
 					cam.CameraSubject = newHumanoid
 				end
 			end
@@ -2676,7 +2923,18 @@ startView = function()
 
 		local activeTarget = currentViewTarget
 		if not isValidCamLockTarget(activeTarget) then
-			stopView()
+			if currentViewPlayer and currentViewPlayer.Parent == Players then
+				local newTarget = getTrackedPlayerTargetModel(currentViewPlayer)
+				if isValidCamLockTarget(newTarget) then
+					currentViewTarget = newTarget
+					local newHumanoid = newTarget:FindFirstChildOfClass("Humanoid")
+					if newHumanoid and cam.CameraSubject ~= newHumanoid then
+						cam.CameraSubject = newHumanoid
+					end
+				end
+			else
+				stopView()
+			end
 			return
 		end
 
@@ -2685,6 +2943,18 @@ startView = function()
 			cam.CameraSubject = activeHumanoid
 		end
 	end)
+
+	if not isValidCamLockTarget(targetModel) then
+		return false
+	end
+
+	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
+	if not targetHumanoid then
+		return false
+	end
+
+	cam.CameraType = Enum.CameraType.Custom
+	cam.CameraSubject = targetHumanoid
 
 	return true
 end
@@ -2696,8 +2966,10 @@ toggleView = function(nextState)
 	end
 
 	if shouldEnable then
-		if not hasActiveSelectedTarget() or not startView() then
+		if not hasSelectedTargetOrPendingPlayer() or (not startView() and not isWaitingForSelectedPlayerRespawn()) then
 			stopView()
+		else
+			viewing = true
 		end
 	else
 		stopView()
@@ -2708,16 +2980,25 @@ toggleView = function(nextState)
 end
 
 local function teleportToSelectedTarget()
-	if not hasActiveSelectedTarget() then
+	if not hasSelectedTargetOrPendingPlayer() then
 		return
 	end
 	local character = player.Character
 	local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 	local targetModel = resolveAttackTpTarget()
 	local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
-	if not characterRoot or not targetRoot then
+	if not characterRoot then
 		return
 	end
+
+	if not targetRoot then
+		if isWaitingForSelectedPlayerRespawn() then
+			pendingTeleportToSelectedPlayer = true
+		end
+		return
+	end
+
+	pendingTeleportToSelectedPlayer = false
 	local targetCFrame = targetRoot.CFrame
 	local forwardDirection = targetCFrame.LookVector   
 	local distanceInFront = 4.5   
@@ -2804,16 +3085,43 @@ function tog(data)
 		switchKnob.Position = enabled and UDim2.fromScale(0.52, 0.12) or UDim2.fromScale(0.06, 0.12)
 	end
 
-	switchButton.MouseButton1Click:Connect(function()
-		enabled = not enabled
+	local toggleControl = {
+		Frame = holder,
+	}
+
+	function toggleControl:SetValue(nextState, suppressCallback)
+		if nextState == nil then
+			enabled = not enabled
+		else
+			enabled = nextState == true
+		end
+
 		renderToggle()
-		if callback then
+		if not suppressCallback and callback then
 			callback(enabled)
 		end
+
+		return enabled
+	end
+
+	function toggleControl:GetValue()
+		return enabled
+	end
+
+	function toggleControl:tog_change(nextState, suppressCallback)
+		return self:SetValue(nextState, suppressCallback)
+	end
+
+	function toggleControl:Toggle(suppressCallback)
+		return self:SetValue(nil, suppressCallback)
+	end
+
+	switchButton.MouseButton1Click:Connect(function()
+		toggleControl:SetValue(nil)
 	end)
 
 	renderToggle()
-	return holder
+	return toggleControl
 end
 
 _G["3tog_on_one_one_button"] = function(data)
@@ -2953,6 +3261,156 @@ _G["3tog_on_one_one_button"] = function(data)
 end
 
 three_tog_on_one_one_button = _G["3tog_on_one_one_button"]
+
+_G["2tog_on_one_button"] = function(data)
+	data = data or {}
+
+	local titleText = tostring(data.title or "Actions")
+	local firstName = tostring(data.name1 or "First")
+	local secondName = tostring(data.name2 or "Second")
+	local buttonName = tostring(data.buttonName or data.name3 or "Run")
+	local buttonName2 = data.buttonName2 or data.name4
+	local firstCallback = data.fun1
+	local secondCallback = data.fun2
+	local buttonCallback = data.buttonfun or data.fun3
+	local buttonCallback2 = data.buttonfun2 or data.fun4
+	local firstEnabled = data.default1 == true
+	local secondEnabled = data.default2 == true
+	local hasSecondButton = buttonName2 ~= nil or buttonCallback2 ~= nil
+
+	local holder = makeControlFrame(76)
+	holder.Parent = uiX
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 16, 0, 8)
+	titleLabel.Size = UDim2.new(1, -32, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = titleText
+	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
+
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 12
+	titleConstraint.MaxTextSize = 18
+	titleConstraint.Parent = titleLabel
+
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.new(0, 10, 0, 32)
+	rowFrame.Size = UDim2.new(1, -20, 0, 32)
+	rowFrame.Parent = holder
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 6)
+	rowLayout.Parent = rowFrame
+
+	local function createSegment(text, isToggle, initialState, callback)
+		local segmentButton = Instance.new("TextButton")
+		segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
+		segmentButton.BackgroundTransparency = 0.06
+		segmentButton.BorderSizePixel = 0
+		segmentButton.Size = hasSecondButton and UDim2.new(0.25, -5, 1, 0) or UDim2.new(1 / 3, -4, 1, 0)
+		segmentButton.AutoButtonColor = false
+		segmentButton.Font = Enum.Font.GothamBold
+		segmentButton.Text = tostring(text)
+		segmentButton.TextStrokeTransparency = 0.15
+		segmentButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		segmentButton.TextScaled = true
+		segmentButton.TextWrapped = true
+		segmentButton.Parent = rowFrame
+
+		local segmentCorner = Instance.new("UICorner")
+		segmentCorner.CornerRadius = UDim.new(0, 10)
+		segmentCorner.Parent = segmentButton
+
+		local segmentConstraint = Instance.new("UITextSizeConstraint")
+		segmentConstraint.MinTextSize = 10
+		segmentConstraint.MaxTextSize = 14
+		segmentConstraint.Parent = segmentButton
+
+		local enabled = initialState == true
+
+		local function render()
+			if isToggle and enabled then
+				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 220, 220)
+			else
+				segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 175, 175)
+			end
+		end
+
+		segmentButton.MouseButton1Click:Connect(function()
+			if isToggle then
+				enabled = not enabled
+				render()
+				if callback then
+					callback(enabled)
+				end
+			elseif callback then
+				callback()
+			end
+		end)
+
+		render()
+
+		return {
+			Button = segmentButton,
+			SetValue = function(nextState, suppressCallback)
+				if not isToggle then
+					return
+				end
+
+				enabled = nextState == true
+				render()
+				if not suppressCallback and callback then
+					callback(enabled)
+				end
+			end,
+			GetValue = function()
+				return enabled
+			end,
+			tog_change = function(_, nextState, suppressCallback)
+				if nextState == nil then
+					enabled = not enabled
+				else
+					enabled = nextState == true
+				end
+
+				render()
+				if not suppressCallback and callback then
+					callback(enabled)
+				end
+
+				return enabled
+			end,
+		}
+	end
+
+	local firstControl = createSegment(firstName, true, firstEnabled, firstCallback)
+	local secondControl = createSegment(secondName, true, secondEnabled, secondCallback)
+	local buttonControl = createSegment(buttonName, false, false, buttonCallback)
+	local buttonControl2 = hasSecondButton and createSegment(tostring(buttonName2 or "Run 2"), false, false, buttonCallback2) or nil
+
+	return {
+		Frame = holder,
+		First = firstControl,
+		Second = secondControl,
+		Button = buttonControl,
+		Button2 = buttonControl2,
+	}
+end
+
+two_tog_on_one_button = _G["2tog_on_one_button"]
 
 function button(data)
 	data = data or {}
@@ -3167,6 +3625,62 @@ function AttackTP_toggle()
 	return toggleAttackTp()
 end
 
+function Stay_tog(value)
+	if not StayToggle or not StayToggle.GetValue then
+		return "OFF"
+	end
+
+	if value == nil then
+		return StayToggle:GetValue() and "ON" or "OFF"
+	end
+
+	return StayToggle:SetValue(parseEnabledValue(value)) and "ON" or "OFF"
+end
+
+function Stay_on()
+	return Stay_tog(true)
+end
+
+function Stay_off()
+	return Stay_tog(false)
+end
+
+function Stay_toggle()
+	if not StayToggle or not StayToggle.tog_change then
+		return "OFF"
+	end
+
+	return StayToggle:tog_change() and "ON" or "OFF"
+end
+
+function DashBlockFE_tog(value)
+	if not DashToggle or not DashToggle.GetValue then
+		return "OFF"
+	end
+
+	if value == nil then
+		return DashToggle:GetValue() and "ON" or "OFF"
+	end
+
+	return DashToggle:SetValue(parseEnabledValue(value)) and "ON" or "OFF"
+end
+
+function DashBlockFE_on()
+	return DashBlockFE_tog(true)
+end
+
+function DashBlockFE_off()
+	return DashBlockFE_tog(false)
+end
+
+function DashBlockFE_toggle()
+	if not DashToggle or not DashToggle.tog_change then
+		return "OFF"
+	end
+
+	return DashToggle:tog_change() and "ON" or "OFF"
+end
+
 function Target_bind(value)
 	local decoded = decodeKeybindValue(value)
 	if decoded == nil then
@@ -3233,7 +3747,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 	default2 = autoTpEnabled,
 	default3 = flingEnabled,
 	fun1 = function(enabled)
-		if enabled and not hasActiveSelectedTarget() then
+		if enabled and not hasSelectedTargetOrPendingPlayer() then
 			targetActionControls.First.SetValue(false, true)
 			return
 		end
@@ -3241,25 +3755,33 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 		toggleView(enabled)
 	end,
 	fun2 = function(enabled)
-		if enabled and not hasActiveSelectedTarget() then
+		if enabled and not hasSelectedTargetOrPendingPlayer() then
 			targetActionControls.Second.SetValue(false, true)
 			return
 		end
 
+		local wasEnabled = autoTpEnabled
 		autoTpEnabled = enabled
+		if wasEnabled and not enabled then
+			zeroLocalPlayerRoot()
+		end
 		syncTargetActionControls()
 	end,
 	fun3 = function(enabled)
-		if enabled and not hasActiveSelectedTarget() then
+		if enabled and not hasSelectedTargetOrPendingPlayer() then
 			targetActionControls.Third.SetValue(false, true)
 			return
 		end
 
+		local wasEnabled = flingEnabled
 		flingEnabled = enabled
+		if wasEnabled and not enabled then
+			zeroLocalPlayerRoot()
+		end
 		syncTargetActionControls()
 	end,
 	buttonfun = function()
-		if not hasActiveSelectedTarget() then
+		if not hasSelectedTargetOrPendingPlayer() then
 			return
 		end
 
@@ -3495,7 +4017,7 @@ task.spawn(function()
 end)
 
 RunService.Heartbeat:Connect(function()
-	if (viewing or autoTpEnabled or flingEnabled) and not hasActiveSelectedTarget() then
+	if (viewing or autoTpEnabled or flingEnabled) and not hasSelectedTargetOrPendingPlayer() then
 		if viewing then
 			stopView()
 		end
@@ -3505,10 +4027,31 @@ RunService.Heartbeat:Connect(function()
 	end
 
 	if viewing and not isValidCamLockTarget(currentViewTarget) then
-		stopView()
+		if currentViewPlayer and currentViewPlayer.Parent == Players then
+			local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
+			if isValidCamLockTarget(newViewTarget) then
+				currentViewTarget = newViewTarget
+				local newViewHumanoid = newViewTarget:FindFirstChildOfClass("Humanoid")
+				if newViewHumanoid and cam then
+					cam.CameraSubject = newViewHumanoid
+				end
+			end
+		else
+			stopView()
+		end
 	end
 
 	if not autoTpEnabled then
+		if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+			teleportToSelectedTarget()
+		end
+		return
+	end
+
+	if flingEnabled then
+		if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+			teleportToSelectedTarget()
+		end
 		return
 	end
 
@@ -3525,11 +4068,17 @@ RunService.Heartbeat:Connect(function()
 
 	local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
 	if not targetCFrame then
+		if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(targetModel) then
+			teleportToSelectedTarget()
+		end
 		return
 	end
 
 	characterRoot.CFrame = targetCFrame
 	characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
+	if pendingTeleportToSelectedPlayer then
+		teleportToSelectedTarget()
+	end
 
 	if flying and bv and bg then
 		bv.Position = characterRoot.Position
@@ -3604,119 +4153,118 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
+function startIntroUi()
+	local topLabel = Instance.new("TextLabel")
+	topLabel.Name = "MainTitle"
+	topLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	topLabel.Position = UDim2.fromScale(0.5, 0.47)
+	topLabel.Size = UDim2.fromScale(0.82, 0.16)
+	topLabel.BackgroundTransparency = 1
+	topLabel.Text = "NOTHING X"
+	topLabel.TextColor3 = Color3.fromRGB(255, 30, 30)
+	topLabel.TextStrokeTransparency = 0
+	topLabel.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
+	topLabel.Font = Enum.Font.GothamBlack
+	topLabel.TextScaled = true
+	topLabel.Parent = background
 
+	local topConstraint = Instance.new("UITextSizeConstraint")
+	topConstraint.MinTextSize = 28
+	topConstraint.MaxTextSize = 96
+	topConstraint.Parent = topLabel
 
-local topLabel = Instance.new("TextLabel")
-topLabel.Name = "MainTitle"
-topLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-topLabel.Position = UDim2.fromScale(0.5, 0.47)
-topLabel.Size = UDim2.fromScale(0.82, 0.16)
-topLabel.BackgroundTransparency = 1
-topLabel.Text = "NOTHING X"
-topLabel.TextColor3 = Color3.fromRGB(255, 30, 30)
-topLabel.TextStrokeTransparency = 0
-topLabel.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
-topLabel.Font = Enum.Font.GothamBlack
-topLabel.TextScaled = true
-topLabel.Parent = background
+	local subtitleLabel = Instance.new("TextLabel")
+	subtitleLabel.Name = "SubTitle"
+	subtitleLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	subtitleLabel.Position = UDim2.fromScale(0.5, 0.58)
+	subtitleLabel.Size = UDim2.fromScale(0.3, 0.06)
+	subtitleLabel.BackgroundTransparency = 1
+	subtitleLabel.Text = "_X"
+	subtitleLabel.TextColor3 = Color3.fromRGB(255, 70, 70)
+	subtitleLabel.TextStrokeTransparency = 0.15
+	subtitleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	subtitleLabel.Font = Enum.Font.GothamSemibold
+	subtitleLabel.TextScaled = true
+	subtitleLabel.Parent = background
 
-local topConstraint = Instance.new("UITextSizeConstraint")
-topConstraint.MinTextSize = 28
-topConstraint.MaxTextSize = 96
-topConstraint.Parent = topLabel
+	local subtitleConstraint = Instance.new("UITextSizeConstraint")
+	subtitleConstraint.MinTextSize = 16
+	subtitleConstraint.MaxTextSize = 40
+	subtitleConstraint.Parent = subtitleLabel
 
-local subtitleLabel = Instance.new("TextLabel")
-subtitleLabel.Name = "SubTitle"
-subtitleLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-subtitleLabel.Position = UDim2.fromScale(0.5, 0.58)
-subtitleLabel.Size = UDim2.fromScale(0.3, 0.06)
-subtitleLabel.BackgroundTransparency = 1
-subtitleLabel.Text = "_X"
-subtitleLabel.TextColor3 = Color3.fromRGB(255, 70, 70)
-subtitleLabel.TextStrokeTransparency = 0.15
-subtitleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-subtitleLabel.Font = Enum.Font.GothamSemibold
-subtitleLabel.TextScaled = true
-subtitleLabel.Parent = background
+	local titlePulse = TweenService:Create(
+		topLabel,
+		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{
+			TextColor3 = Color3.fromRGB(255, 90, 90),
+		}
+	)
 
-local subtitleConstraint = Instance.new("UITextSizeConstraint")
-subtitleConstraint.MinTextSize = 16
-subtitleConstraint.MaxTextSize = 40
-subtitleConstraint.Parent = subtitleLabel
+	local subtitlePulse = TweenService:Create(
+		subtitleLabel,
+		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{
+			TextColor3 = Color3.fromRGB(255, 90, 90),
+		}
+	)
 
-local titlePulse = TweenService:Create(
-	topLabel,
-	TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-	{
-		TextColor3 = Color3.fromRGB(255, 90, 90),
-	}
-)
+	titlePulse:Play()
+	subtitlePulse:Play()
 
-local subtitlePulse = TweenService:Create(
-	subtitleLabel,
-	TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-	{
-		TextColor3 = Color3.fromRGB(255, 90, 90),
-	}
-)
+	task.delay(3, function()
+		titlePulse:Cancel()
+		subtitlePulse:Cancel()
 
-titlePulse:Play()
-subtitlePulse:Play()
+		local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-task.delay(3, function()
-	titlePulse:Cancel()
-	subtitlePulse:Cancel()
-
-	local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-	TweenService:Create(background, fadeInfo, {
-		BackgroundTransparency = 1,
-	}):Play()
-
-	TweenService:Create(subtitleLabel, fadeInfo, {
-		TextTransparency = 1,
-		TextStrokeTransparency = 1,
-	}):Play()
-
-	local fadeTitle = TweenService:Create(topLabel, fadeInfo, {
-		TextTransparency = 1,
-		TextStrokeTransparency = 1,
-	})
-	fadeTitle:Play()
-	fadeTitle.Completed:Connect(function()
-		topLabel:Destroy()
-		subtitleLabel:Destroy()
-		background:Destroy()
-		introFinished = true
-
-		keybindFrame.Visible = true
-		targetFrame.Visible = true
-		updateTargetDisplay()
-
-		TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 0.5,
+		TweenService:Create(background, fadeInfo, {
+			BackgroundTransparency = 1,
 		}):Play()
 
-		TweenService:Create(leftStroke, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 0.1,
+		TweenService:Create(subtitleLabel, fadeInfo, {
+			TextTransparency = 1,
+			TextStrokeTransparency = 1,
 		}):Play()
 
+		local fadeTitle = TweenService:Create(topLabel, fadeInfo, {
+			TextTransparency = 1,
+			TextStrokeTransparency = 1,
+		})
+		fadeTitle:Play()
+		fadeTitle.Completed:Connect(function()
+			topLabel:Destroy()
+			subtitleLabel:Destroy()
+			background:Destroy()
+			introFinished = true
 
+			keybindFrame.Visible = true
+			targetFrame.Visible = true
+			updateTargetDisplay()
 
-		TweenService:Create(
-			leftStroke,
-			TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-			{
-				Thickness = 5,
-				Transparency = 0.35,
-			}
-		):Play()
+			TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				BackgroundTransparency = 0.5,
+			}):Play()
 
-		if pendingInfoCall then
-			local queuedInfo = pendingInfoCall
-			pendingInfoCall = nil
-			showInfo(queuedInfo.title, queuedInfo.text, queuedInfo.time)
-		end
+			TweenService:Create(leftStroke, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Transparency = 0.1,
+			}):Play()
 
+			TweenService:Create(
+				leftStroke,
+				TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+				{
+					Thickness = 5,
+					Transparency = 0.35,
+				}
+			):Play()
+
+			if pendingInfoCall then
+				local queuedInfo = pendingInfoCall
+				pendingInfoCall = nil
+				showInfo(queuedInfo.title, queuedInfo.text, queuedInfo.time)
+			end
+		end)
 	end)
-end)
+end
+
+startIntroUi()
