@@ -2014,6 +2014,26 @@ task.spawn(function()
         end
     end
 
+local function teleportToWeakestDummy()
+	local live = workspace:FindFirstChild("Live")
+	if not live then return end
+	local dummy = live:FindFirstChild("Weakest Dummy")
+	if not dummy then 
+		return 
+	end
+	local humanoid = dummy:FindFirstChildOfClass("Humanoid")
+	local dummyRoot = dummy:FindFirstChild("HumanoidRootPart")
+	local character = player.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or humanoid.Health <= 0 or not dummyRoot or not hrp then
+		return
+	end
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	local forward = dummyRoot.CFrame.LookVector
+	local teleportPos = dummyRoot.Position + (forward * 4.5) + Vector3.new(0, 3, 0)
+	hrp.CFrame = CFrame.lookAt(teleportPos, dummyRoot.Position)
+end
     local function cleanupStay()
         if stayConn then
             stayConn:Disconnect()
@@ -2113,12 +2133,14 @@ task.spawn(function()
         name2 = "Dash Block FE",
         buttonName = "Fix Camera",
         buttonName2 = "Lay",
+        buttonName3 = "Dummy",
         default1 = false,
         default2 = false,
         fun1 = setStayState,
         fun2 = setDashBlockRuntime,
         buttonfun = fixCamera,
         buttonfun2 = layCharacter,
+        buttonfun3 = teleportToWeakestDummy,
     })
     StayToggle = panel.First
     DashToggle = panel.Second
@@ -3533,13 +3555,16 @@ _G["2tog_on_one_button"] = function(data)
 	local secondName = tostring(data.name2 or "Second")
 	local buttonName = tostring(data.buttonName or data.name3 or "Run")
 	local buttonName2 = data.buttonName2 or data.name4
+	local buttonName3 = data.buttonName3 or data.name5
 	local firstCallback = data.fun1
 	local secondCallback = data.fun2
 	local buttonCallback = data.buttonfun or data.fun3
 	local buttonCallback2 = data.buttonfun2 or data.fun4
+	local buttonCallback3 = data.buttonfun3 or data.fun5
 	local firstEnabled = data.default1 == true
 	local secondEnabled = data.default2 == true
 	local hasSecondButton = buttonName2 ~= nil or buttonCallback2 ~= nil
+	local hasThirdButton = buttonName3 ~= nil or buttonCallback3 ~= nil
 
 	local holder = makeControlFrame(76)
 	holder.Parent = uiX
@@ -3581,7 +3606,7 @@ _G["2tog_on_one_button"] = function(data)
 		segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
 		segmentButton.BackgroundTransparency = 0.06
 		segmentButton.BorderSizePixel = 0
-		segmentButton.Size = hasSecondButton and UDim2.new(0.25, -5, 1, 0) or UDim2.new(1 / 3, -4, 1, 0)
+		segmentButton.Size = hasThirdButton and UDim2.new(0.2, -5, 1, 0) or (hasSecondButton and UDim2.new(0.25, -5, 1, 0) or UDim2.new(1 / 3, -4, 1, 0))
 		segmentButton.AutoButtonColor = false
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
@@ -3663,6 +3688,7 @@ _G["2tog_on_one_button"] = function(data)
 	local secondControl = createSegment(secondName, true, secondEnabled, secondCallback)
 	local buttonControl = createSegment(buttonName, false, false, buttonCallback)
 	local buttonControl2 = hasSecondButton and createSegment(tostring(buttonName2 or "Run 2"), false, false, buttonCallback2) or nil
+	local buttonControl3 = hasThirdButton and createSegment(tostring(buttonName3 or "Run 3"), false, false, buttonCallback3) or nil
 
 	return {
 		Frame = holder,
@@ -3670,6 +3696,7 @@ _G["2tog_on_one_button"] = function(data)
 		Second = secondControl,
 		Button = buttonControl,
 		Button2 = buttonControl2,
+		Button3 = buttonControl3,
 	}
 end
 
