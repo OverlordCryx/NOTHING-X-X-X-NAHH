@@ -85,7 +85,7 @@ end
 
 local existingGui = CoreGui:FindFirstChild("NOTHING_X-000")
 if existingGui then
-	showExistingGuiInfo(existingGui, "NOTHING X", "NOTHING_X Already Running...", 1.5)
+	showExistingGuiInfo(existingGui, "NOTHING X", "NOTHING_X Already Running...", 3)
 	return
 end
 
@@ -103,19 +103,6 @@ background.Size = UDim2.fromScale(1, 1)
 background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 background.BorderSizePixel = 0
 background.Parent = screenGui
-
-local introInputBlocker = Instance.new("TextButton")
-introInputBlocker.Name = "IntroInputBlocker"
-introInputBlocker.Size = UDim2.fromScale(1, 1)
-introInputBlocker.BackgroundTransparency = 1
-introInputBlocker.BorderSizePixel = 0
-introInputBlocker.Text = ""
-introInputBlocker.AutoButtonColor = false
-introInputBlocker.Modal = true
-introInputBlocker.Active = true
-introInputBlocker.Visible = true
-introInputBlocker.ZIndex = 1000
-introInputBlocker.Parent = screenGui
 
 local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
@@ -225,7 +212,7 @@ local infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
 infoContainer.Position = UDim2.fromScale(0.5, 0.12)
-infoContainer.Size = UDim2.fromScale(0.2, 0.1)
+infoContainer.Size = UDim2.fromScale(0.24, 0.12)
 infoContainer.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
 infoContainer.BackgroundTransparency = 1
 infoContainer.BorderSizePixel = 0
@@ -515,21 +502,6 @@ local currentViewPlayer = nil
 local viewDied = nil
 local viewChanged = nil
 pendingTeleportToSelectedPlayer = false
-local autoSafeZoneState = {
-	enabled = false,
-	active = false,
-	task = nil,
-	routeTask = nil,
-	routePoints = nil,
-	savedCFrame = nil,
-	token = 0,
-	introSavedCFrame = nil,
-	introRouteTask = nil,
-	introRoutePoints = nil,
-	introActive = false,
-	introRouteIndex = 1,
-	routeIndex = 1,
-}
 local targetActionControls = nil
 local flingModeControls = nil
 local zeroLocalPlayerRoot
@@ -827,12 +799,6 @@ function resetGlobalFlingMotion()
 	zeroLocalPlayerRoot()
 end
 
-local stayReleaseUntil = 0
-
-local function pulseStayRelease(duration)
-	stayReleaseUntil = math.max(stayReleaseUntil, tick() + (duration or 0.12))
-end
-
 function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 	if not myRoot or not targetRoot then
 		return
@@ -855,7 +821,6 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 		math.sin(flingOrbitTime) * flingOrbitStepXZ
 	)
 
-	pulseStayRelease(0.14)
 	myRoot.CFrame = targetRoot.CFrame + offset
 	myRoot.AssemblyAngularVelocity = Vector3.new(power, power, power)
 	myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * power + Vector3.new(0, power * 0.5, 0)
@@ -870,24 +835,21 @@ function setWalkFlingEnabled(enabled)
 
 	walkFlingEnabled = nextState
 	if walkFlingHeartbeat then
-		task.cancel(walkFlingHeartbeat)
+		walkFlingHeartbeat:Disconnect()
 		walkFlingHeartbeat = nil
 	end
 
 	if walkFlingEnabled then
 		local moveOffset = 0.1
-		walkFlingHeartbeat = task.spawn(function()
-			while walkFlingEnabled do
+		walkFlingHeartbeat = RunService.Heartbeat:Connect(function()
 			local currentCharacter = player.Character
 			local rootPart = getRootUniversal(currentCharacter)
 			if not rootPart then
-				task.wait()
-				continue
+				return
 			end
 
 			local originalVelocity = rootPart.Velocity
 			if walkFlingUseNormal then
-				pulseStayRelease(0.14)
 				rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
 				RunService.RenderStepped:Wait()
 				if rootPart.Parent then
@@ -898,23 +860,18 @@ function setWalkFlingEnabled(enabled)
 					rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
 					moveOffset *= -1
 				end
-				task.wait()
-				continue
+				return
 			end
 
 			local direction = getWalkFlingDirectionVector(rootPart)
 			if not direction then
-				task.wait()
-				continue
+				return
 			end
 
-			pulseStayRelease(0.14)
 			rootPart.Velocity = direction * walkFlingPower
 			RunService.RenderStepped:Wait()
 			if rootPart.Parent then
 				rootPart.Velocity = originalVelocity
-			end
-			task.wait()
 			end
 		end)
 	else
@@ -951,7 +908,6 @@ function setAuraFlingEnabled(enabled)
 					local targetRoot = getRootUniversal(otherPlayer.Character)
 					if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
 						touchedAny = true
-						pulseStayRelease(0.18)
 						myRoot.AssemblyLinearVelocity = Vector3.zero
 						myRoot.AssemblyAngularVelocity = Vector3.zero
 						myCharacter:PivotTo(targetRoot.CFrame)
@@ -1069,18 +1025,16 @@ function setFlingAllEnabled(enabled)
 	flingAllEnabled = nextState
 
 	if flingAllHeartbeat then
-		task.cancel(flingAllHeartbeat)
+		flingAllHeartbeat:Disconnect()
 		flingAllHeartbeat = nil
 	end
 
 	if flingAllEnabled then
 		resetGlobalFlingMotion()
-		flingAllHeartbeat = task.spawn(function()
-			while flingAllEnabled do
+		flingAllHeartbeat = RunService.Heartbeat:Connect(function(dt)
 			local myRoot = getRootUniversal(player.Character)
 			if not myRoot then
-				task.wait()
-				continue
+				return
 			end
 
 			local targetRoots = {}
@@ -1092,8 +1046,7 @@ function setFlingAllEnabled(enabled)
 			end
 
 			if #targetRoots == 0 then
-				task.wait()
-				continue
+				return
 			end
 
 			if flingTargetIndex > #targetRoots then
@@ -1101,9 +1054,8 @@ function setFlingAllEnabled(enabled)
 			end
 
 			local targetRoot = targetRoots[flingTargetIndex]
-			applyOrbitFlingStep(myRoot, targetRoot, task.wait(), flingPower)
+			applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
 			flingTargetIndex += 1
-			end
 		end)
 	else
 		resetGlobalFlingMotion()
@@ -2277,6 +2229,7 @@ local weakSkills = {
 }
 local playerState = {}     
 local activeTimers = {}
+local playerConnections = {}
 local function callInfo(title, text, duration)
     if type(INFO) == "function" then
         pcall(function()
@@ -2374,35 +2327,62 @@ local function startGlobalChecker()
 end
 local function setupPlayer(plr)
     if plr == Players.LocalPlayer then return end
-    local function onCharacterAdded()
+    local function disconnectTrackedConnections()
+        local tracked = playerConnections[plr]
+        if not tracked then return end
+        for _, conn in ipairs(tracked) do
+            if conn and conn.Disconnect then
+                conn:Disconnect()
+            end
+        end
+        playerConnections[plr] = nil
+    end
+    local function onCharacterAdded(char)
         task.wait(0.4)
         playerState[plr] = nil
-        local char = plr.Character
-        if char then
-            removeHighlight(char)
+        char = char or plr.Character
+        if not char or char ~= plr.Character then
+            return
         end
+        disconnectTrackedConnections()
+        removeHighlight(char)
         local backpack = plr:WaitForChild("Backpack", 6)
-        backpack.ChildAdded:Connect(function()
-            task.wait(0.1)
-            updatePlayer(plr)
-        end)
-        backpack.ChildRemoved:Connect(function()
-            task.wait(0.1)
-            updatePlayer(plr)
-        end)
-        local hum = char:WaitForChild("Humanoid", 3)
-        if hum then
-            hum.Died:Connect(function()
+        if not backpack then
+            return
+        end
+        playerConnections[plr] = {
+            backpack.ChildAdded:Connect(function()
+                task.wait(0.1)
+                if plr.Parent then
+                    updatePlayer(plr)
+                end
+            end),
+            backpack.ChildRemoved:Connect(function()
+                task.wait(0.1)
+                if plr.Parent then
+                    updatePlayer(plr)
+                end
+            end)
+        }
+        local hum = char:FindFirstChild("Humanoid") or char:WaitForChild("Humanoid", 3)
+        if hum and char == plr.Character then
+            table.insert(playerConnections[plr], hum.Died:Connect(function()
                 playerState[plr] = nil
                 removeHighlight(char)
-            end)
+            end))
+            updatePlayer(plr)
         end
-        updatePlayer(plr)
     end
     if plr.Character then 
-        onCharacterAdded() 
+        onCharacterAdded(plr.Character) 
     end
     plr.CharacterAdded:Connect(onCharacterAdded)
+    plr.AncestryChanged:Connect(function(_, parent)
+        if parent == nil then
+            disconnectTrackedConnections()
+            playerState[plr] = nil
+        end
+    end)
 end
 startGlobalChecker()
 for _, plr in ipairs(Players:GetPlayers()) do
@@ -2488,70 +2468,28 @@ task.spawn(function()
 	end
 end)
 task.spawn(function()
-	local antiflingConnection = nil
-	local trackedPlayers = {}
-
-	local function getTrackedPlayers()
-		return trackedPlayers
-	end
-
-	local function startAntiFling()
-		if antiflingConnection then
-			antiflingConnection:Disconnect()
-		end
-
-		antiflingConnection = RunService.Stepped:Connect(function()
-			for _, trackedPlayer in ipairs(getTrackedPlayers()) do
-				if trackedPlayer ~= player and trackedPlayer.Character then
-					for _, part in ipairs(trackedPlayer.Character:GetChildren()) do
-						if part:IsA("BasePart") and part.CanCollide then
-							part.CanCollide = false
-						end
-					end
-				end
-			end
-		end)
-	end
-
-	local function addTrackedPlayer(trackedPlayer)
-		if trackedPlayer == player then
-			return
-		end
-
-		if not table.find(trackedPlayers, trackedPlayer) then
-			table.insert(trackedPlayers, trackedPlayer)
-		end
-	end
-
-	local function removeTrackedPlayer(trackedPlayer)
-		local index = table.find(trackedPlayers, trackedPlayer)
-		if index then
-			table.remove(trackedPlayers, index)
-		end
-	end
-
-	local function bindTrackedPlayer(trackedPlayer)
-		addTrackedPlayer(trackedPlayer)
-		trackedPlayer.CharacterAdded:Connect(function()
-			task.wait(0.15)
-			addTrackedPlayer(trackedPlayer)
-		end)
-	end
-
-	for _, existingPlayer in ipairs(Players:GetPlayers()) do
-		bindTrackedPlayer(existingPlayer)
-	end
-
-	Players.PlayerAdded:Connect(bindTrackedPlayer)
-	Players.PlayerRemoving:Connect(removeTrackedPlayer)
-
-	startAntiFling()
+    local RunService = game:GetService("RunService")
+    local Players = game:GetService("Players")
+    local connection = RunService.Heartbeat:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= Players.LocalPlayer and player.Character then
+                for _, part in ipairs(player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        part.Velocity = Vector3.zero
+                        part.AssemblyLinearVelocity = Vector3.zero
+                        part.AssemblyAngularVelocity = Vector3.zero
+                    end
+                end
+            end
+        end
+    end)
 end)
 end
 local StayToggle = nil
 local DashToggle = nil
-local AutoSafeZoneToggle = nil
-task.defer(function()
+task.spawn(function()
+    task.wait(0.2)
     local stayPos = nil
     local stayConn = nil
     local stayGyro = nil
@@ -2669,16 +2607,6 @@ end
             stayGyro.Parent = root
             stayConn = RunService.Heartbeat:Connect(function()
                 if root and stayPos then
-                    if tick() < stayReleaseUntil then
-                        if stayGyro then
-                            stayGyro.MaxTorque = Vector3.zero
-                        end
-                        return
-                    end
-
-                    if stayGyro then
-                        stayGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-                    end
                     root.AssemblyLinearVelocity = Vector3.zero
                     root.AssemblyAngularVelocity = Vector3.zero
                     root.CFrame = CFrame.new(stayPos) * CFrame.Angles(
@@ -2738,43 +2666,23 @@ end
         end)
     end
 
-    local function hasMapMainPart(waitForLoad)
-        local map = Workspace:FindFirstChild("Map")
-        if not map and waitForLoad then
-            map = Workspace:WaitForChild("Map", 8)
-        end
-        if not map then
-            return false
-        end
-
-        local mainPart = map:FindFirstChild("MainPart")
-        if not mainPart and waitForLoad then
-            mainPart = map:WaitForChild("MainPart", 8)
-        end
-
-        return typeof(mainPart) == "Instance"
-    end
-
-    local function isDashBlockSupported()
-        return game.GameId == 10449761463
-    end
-
-    local canCreateDummyButton = hasMapMainPart(false)
+    local hasDummyMainPart = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MainPart")
+    local supportsDashBlock = game.GameId == 3808081382
 
     local panel = _G["2tog_on_one_button"]({
         title = "Movement",
         name1 = "Stay",
-        name2 = isDashBlockSupported() and "Dash Block FE" or nil,
+        name2 = supportsDashBlock and "Dash Block FE" or nil,
         buttonName = "Fix Camera",
         buttonName2 = "Lay",
-        buttonName3 = canCreateDummyButton and "Dummy" or nil,
+        buttonName3 = hasDummyMainPart and "Dummy" or nil,
         default1 = false,
-        default2 = false,
+        default2 = supportsDashBlock and false or nil,
         fun1 = setStayState,
-        fun2 = isDashBlockSupported() and setDashBlockRuntime or nil,
+        fun2 = supportsDashBlock and setDashBlockRuntime or nil,
         buttonfun = fixCamera,
         buttonfun2 = layCharacter,
-        buttonfun3 = canCreateDummyButton and teleportToWeakestDummy or nil,
+        buttonfun3 = hasDummyMainPart and teleportToWeakestDummy or nil,
     })
     StayToggle = panel.First
     DashToggle = panel.Second
@@ -2795,7 +2703,8 @@ end
     end
     player.CharacterAdded:Connect(setupCharacter)
 end)
-task.defer(function()
+task.spawn(function()
+    task.wait(0.3)
     local flingState = {
         localPlayer = Players.LocalPlayer,
         flingConn = nil,
@@ -2817,7 +2726,7 @@ task.defer(function()
 
     local function stopFlingRuntime()
         if flingState.flingConn then
-            task.cancel(flingState.flingConn)
+            flingState.flingConn:Disconnect()
             flingState.flingConn = nil
         end
         flingState.orbitStepXZ = 0
@@ -2826,49 +2735,47 @@ task.defer(function()
 
     local function startFlingRuntime()
         stopFlingRuntime()
-        flingState.flingConn = task.spawn(function()
-            while flingEnabled do
-                local myChar = flingState.localPlayer.Character
-                local myRoot = getRoot(myChar)
-                if not myRoot then
-                    task.wait()
-                    continue
-                end
-
-                local targetModel = getDisplayedTargetModel()
-                if not targetModel then
-                    task.wait()
-                    continue
-                end
-
-                local targetRoot = getRoot(targetModel)
-                if not targetRoot then
-                    task.wait()
-                    continue
-                end
-
-                flingState.orbitStepXZ = flingState.orbitStepXZ + flingState.orbitIncrement
-                flingState.orbitStepY = flingState.orbitStepY + flingState.orbitIncrement
-                if flingState.orbitStepXZ > flingState.orbitMax then
-                    flingState.orbitStepXZ = 0
-                end
-                if flingState.orbitStepY > flingState.orbitMax then
-                    flingState.orbitStepY = 0
-                end
-
-                local t = tick() * flingState.orbitSpeed
-                local offset = Vector3.new(
-                    math.cos(t) * flingState.orbitStepXZ,
-                    flingState.orbitStepY,
-                    math.sin(t) * flingState.orbitStepXZ
-                )
-
-                pulseStayRelease(0.14)
-                myRoot.CFrame = targetRoot.CFrame + offset
-                myRoot.AssemblyAngularVelocity = Vector3.new(flingState.flingPower, flingState.flingPower, flingState.flingPower)
-                myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * flingState.flingPower + Vector3.new(0, flingState.flingPower * 0.6, 0)
-                task.wait()
+        flingState.flingConn = RunService.Heartbeat:Connect(function()
+            if not flingEnabled then
+                stopFlingRuntime()
+                return
             end
+
+            local myChar = flingState.localPlayer.Character
+            local myRoot = getRoot(myChar)
+            if not myRoot then
+                return
+            end
+
+            local targetModel = getDisplayedTargetModel()
+            if not targetModel then
+                return
+            end
+
+            local targetRoot = getRoot(targetModel)
+            if not targetRoot then
+                return
+            end
+
+            flingState.orbitStepXZ = flingState.orbitStepXZ + flingState.orbitIncrement
+            flingState.orbitStepY = flingState.orbitStepY + flingState.orbitIncrement
+            if flingState.orbitStepXZ > flingState.orbitMax then
+                flingState.orbitStepXZ = 0
+            end
+            if flingState.orbitStepY > flingState.orbitMax then
+                flingState.orbitStepY = 0
+            end
+
+            local t = tick() * flingState.orbitSpeed
+            local offset = Vector3.new(
+                math.cos(t) * flingState.orbitStepXZ,
+                flingState.orbitStepY,
+                math.sin(t) * flingState.orbitStepXZ
+            )
+
+            myRoot.CFrame = targetRoot.CFrame + offset
+            myRoot.AssemblyAngularVelocity = Vector3.new(flingState.flingPower, flingState.flingPower, flingState.flingPower)
+            myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * flingState.flingPower + Vector3.new(0, flingState.flingPower * 0.6, 0)
         end)
     end
 
@@ -2883,340 +2790,7 @@ task.defer(function()
         end
     end
 end)
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local player = Players.LocalPlayer
-_G.NOTHINGX_Protection = _G.NOTHINGX_Protection or {}
-_G.NOTHINGX_Protection.boundarySize = Vector3.new(100000, 0, 100000)
-_G.NOTHINGX_Protection.defaultCFrame = CFrame.new(0, 150, 0)
-_G.NOTHINGX_Protection.safeHistoryLimit = 25
-local BASE_BUFFER  = 95
-local PANIC_BUFFER = 42
-local VOID_Y = nil
-_G.NOTHINGX_Protection.safePositionHistory = {}
-_G.NOTHINGX_Protection.lastSafePosition = nil
-local function getReferenceCFrame()
-	local map = Workspace:FindFirstChild("Map")
-	if map then
-		local main = map:FindFirstChild("MainPart")
-		if main then
-			return main.CFrame
-		end
-	end
-	for _, obj in ipairs(Workspace:GetDescendants()) do
-		if obj:IsA("BasePart") and obj.Size.Magnitude > 50 then
-			if obj.Name:lower():find("base") or obj.Name:lower():find("ground") or obj.Name:lower():find("floor") then
-				return obj.CFrame
-			end
-		end
-	end
-	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-		local hrp = player.Character.HumanoidRootPart
-		return CFrame.new(hrp.Position.X, 150, hrp.Position.Z)
-	end
-	return _G.NOTHINGX_Protection.defaultCFrame
-end
-function _G.NOTHINGX_Protection.isOutsideBoundary(pos)
-	local cf = getReferenceCFrame()
-	local localPos = cf:PointToObjectSpace(pos)
-	local half = _G.NOTHINGX_Protection.boundarySize / 2
-	return math.abs(localPos.X) > half.X or math.abs(localPos.Z) > half.Z
-end
-local function isSolidGround(hrp)
-	if not hrp or not hrp.Parent then return false end
-	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = {hrp.Parent}
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	return Workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), Vector3.new(0, -16, 0), params) ~= nil
-end
-local function isPureAirBelow(hrp)
-	if not hrp or not hrp.Parent then return true end
-	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = {hrp.Parent}
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.IgnoreWater = true
-	local origin = hrp.Position + Vector3.new(0, 6, 0)
-	local directions = {
-		Vector3.new(0, -70, 0),
-		Vector3.new(10, -60, 0),
-		Vector3.new(-10, -60, 0),
-		Vector3.new(0, -60, 10),
-		Vector3.new(0, -60, -10)
-	}
-	for _, dir in ipairs(directions) do
-		if Workspace:Raycast(origin, dir, params) then
-			return false
-		end
-	end
-	return true
-end
-function _G.NOTHINGX_Protection.updateLastSafePosition(hrp)
-	if not hrp or not hrp.Parent then return false end
-	if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then return false end
-	if isSolidGround(hrp) then
-		_G.NOTHINGX_Protection.lastSafePosition = hrp.CFrame
-		table.insert(_G.NOTHINGX_Protection.safePositionHistory, 1, hrp.CFrame)
-		if #_G.NOTHINGX_Protection.safePositionHistory > _G.NOTHINGX_Protection.safeHistoryLimit then
-			table.remove(_G.NOTHINGX_Protection.safePositionHistory)
-		end
-		return true
-	end
-	return false
-end
-function _G.NOTHINGX_Protection.getGodRescueCFrame()
-	if _G.NOTHINGX_Protection.lastSafePosition then
-		return _G.NOTHINGX_Protection.lastSafePosition + Vector3.new(0, 7, 0)
-	end
-	for _, cf in ipairs(_G.NOTHINGX_Protection.safePositionHistory) do
-		if cf then return cf + Vector3.new(0, 7, 0) end
-	end
-	return getReferenceCFrame() + Vector3.new(0, 120, 0)
-end
-local function godTierTeleport(char, hrp)
-	_G.SafeTeleportLock = true
-	local target = _G.NOTHINGX_Protection.getGodRescueCFrame()
-	for i = 1, 20 do
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		char:PivotTo(target)
-		task.wait()
-	end
-	hrp.AssemblyLinearVelocity = Vector3.zero
-	hrp.AssemblyAngularVelocity = Vector3.zero
-	task.wait()
-	_G.SafeTeleportLock = false
-end
 
-local function buildAutoSafeZonePoints(baseCFrame)
-	local basePosition = baseCFrame.Position
-	local signX = basePosition.X >= 0 and 1 or -1
-	local signZ = basePosition.Z >= 0 and 1 or -1
-	local safePoints = {}
-
-	for step = 1, 8 do
-		local safeOffset = 10 ^ step
-		local upOnlyY = math.max(basePosition.Y + safeOffset, safeOffset)
-		safePoints[#safePoints + 1] = Vector3.new(basePosition.X, upOnlyY, basePosition.Z)
-		safePoints[#safePoints + 1] = Vector3.new(basePosition.X - (signX * safeOffset), upOnlyY, basePosition.Z)
-		safePoints[#safePoints + 1] = Vector3.new(basePosition.X + (signX * safeOffset), upOnlyY, basePosition.Z)
-		safePoints[#safePoints + 1] = Vector3.new(basePosition.X, upOnlyY, basePosition.Z - (signZ * safeOffset))
-		safePoints[#safePoints + 1] = Vector3.new(basePosition.X, upOnlyY, basePosition.Z + (signZ * safeOffset))
-	end
-
-	return safePoints
-end
-
-local function getAutoSafeZoneDestination(safePoints, routeIndex)
-	local point = safePoints[routeIndex or 1] or safePoints[1]
-	return CFrame.new(point)
-end
-
-local function returnFromAutoSafeZone()
-	local char = player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	local target = autoSafeZoneState.savedCFrame
-
-	autoSafeZoneState.active = false
-	if autoSafeZoneState.routeTask then
-		task.cancel(autoSafeZoneState.routeTask)
-		autoSafeZoneState.routeTask = nil
-	end
-	autoSafeZoneState.routePoints = nil
-	autoSafeZoneState.routeIndex = 1
-	_G.NOTHINGX_AutoSafeZoneActive = false
-
-	if char and hrp and target then
-		_G.SafeTeleportLock = true
-		for _ = 1, 12 do
-			hrp.AssemblyLinearVelocity = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-			char:PivotTo(target)
-			task.wait()
-		end
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		task.wait()
-		_G.SafeTeleportLock = false
-	else
-		_G.SafeTeleportLock = false
-	end
-
-	autoSafeZoneState.savedCFrame = nil
-end
-
-local function triggerAutoSafeZone()
-	if autoSafeZoneState.active then
-		return
-	end
-
-	local char = player.Character
-	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not char or not humanoid or not hrp or humanoid.Health <= 0 then
-		return
-	end
-
-	autoSafeZoneState.savedCFrame = hrp.CFrame
-	autoSafeZoneState.routePoints = buildAutoSafeZonePoints(hrp.CFrame)
-	autoSafeZoneState.active = true
-	autoSafeZoneState.routeIndex = 1
-	_G.NOTHINGX_AutoSafeZoneActive = true
-
-	autoSafeZoneState.routeTask = task.spawn(function()
-		while autoSafeZoneState.active do
-			local currentChar = player.Character
-			local currentHumanoid = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
-			local currentRoot = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
-			if not currentChar or not currentHumanoid or not currentRoot or currentHumanoid.Health <= 0 then
-				task.wait()
-				continue
-			end
-
-			local target = getAutoSafeZoneDestination(autoSafeZoneState.routePoints or buildAutoSafeZonePoints(currentRoot.CFrame), autoSafeZoneState.routeIndex)
-			currentRoot.AssemblyLinearVelocity = Vector3.zero
-			currentRoot.AssemblyAngularVelocity = Vector3.zero
-			currentChar:PivotTo(target)
-			autoSafeZoneState.routeIndex += 1
-			if autoSafeZoneState.routeIndex > 40 then
-				autoSafeZoneState.routeIndex = 1
-			end
-			task.wait()
-		end
-	end)
-end
-
-local function sendPlayerToIntroSafeZone()
-	local char = player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not char or not hrp then
-		return
-	end
-
-	if autoSafeZoneState.introRouteTask then
-		task.cancel(autoSafeZoneState.introRouteTask)
-		autoSafeZoneState.introRouteTask = nil
-	end
-
-	autoSafeZoneState.introSavedCFrame = hrp.CFrame
-	autoSafeZoneState.introRoutePoints = buildAutoSafeZonePoints(hrp.CFrame)
-	autoSafeZoneState.introActive = true
-	autoSafeZoneState.introRouteIndex = 1
-	autoSafeZoneState.introRouteTask = task.spawn(function()
-		while autoSafeZoneState.introActive and not introFinished do
-			local currentChar = player.Character
-			local currentRoot = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
-			if not currentChar or not currentRoot then
-				task.wait()
-				continue
-			end
-
-			local target = getAutoSafeZoneDestination(autoSafeZoneState.introRoutePoints or buildAutoSafeZonePoints(currentRoot.CFrame), autoSafeZoneState.introRouteIndex)
-			currentRoot.AssemblyLinearVelocity = Vector3.zero
-			currentRoot.AssemblyAngularVelocity = Vector3.zero
-			currentChar:PivotTo(target)
-			autoSafeZoneState.introRouteIndex += 1
-			if autoSafeZoneState.introRouteIndex > 40 then
-				autoSafeZoneState.introRouteIndex = 1
-			end
-			task.wait()
-		end
-	end)
-end
-
-local function returnPlayerFromIntroSafeZone()
-	local char = player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	local target = autoSafeZoneState.introSavedCFrame
-	autoSafeZoneState.introActive = false
-	if autoSafeZoneState.introRouteTask then
-		task.cancel(autoSafeZoneState.introRouteTask)
-		autoSafeZoneState.introRouteTask = nil
-	end
-	autoSafeZoneState.introRoutePoints = nil
-	autoSafeZoneState.introRouteIndex = 1
-	if not char or not hrp or not target then
-		autoSafeZoneState.introSavedCFrame = nil
-		return
-	end
-
-	_G.SafeTeleportLock = true
-	for _ = 1, 12 do
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		char:PivotTo(target)
-		task.wait()
-	end
-	hrp.AssemblyLinearVelocity = Vector3.zero
-	hrp.AssemblyAngularVelocity = Vector3.zero
-	_G.SafeTeleportLock = false
-	autoSafeZoneState.introSavedCFrame = nil
-end
-local function detectVoidY()
-	local official = Workspace.FallenPartsDestroyHeight
-	if official and official > -500000 and official < 10000 then
-		VOID_Y = official
-		warn("VOID DETECTED (-) →", VOID_Y)
-		return
-	end
-	local lowest = 200
-	for i = 1, 8 do
-		local probe = Instance.new("Part")
-		probe.Size = Vector3.new(10,10,10)
-		probe.Position = Vector3.new(0, 700, 0)
-		probe.Anchored = false
-		probe.CanCollide = false
-		probe.Transparency = 1
-		probe.Parent = Workspace
-		task.wait(2)
-		if probe and probe.Parent then
-			lowest = math.min(lowest, probe.Position.Y)
-			probe:Destroy()
-		end
-		task.wait(0.25)
-	end
-	VOID_Y = lowest - 100
-end
-detectVoidY()
-local function initGodProtection()
-	local lastCheck = 0
-	RunService.Heartbeat:Connect(function()
-		if _G.SafeTeleportLock then return end
-		if _G.NOTHINGX_AutoSafeZoneActive == true then return end
-		if tick() - lastCheck < 0.03 then return end
-		lastCheck = tick()
-		local char = player.Character
-		if not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		if _G.NOTHINGX_FlyActive == true then
-			_G.NOTHINGX_Protection.updateLastSafePosition(hrp)
-			return
-		end
-		local y = hrp.Position.Y
-		local velY = hrp.AssemblyLinearVelocity.Y
-		_G.NOTHINGX_Protection.updateLastSafePosition(hrp)
-		if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then
-			godTierTeleport(char, hrp)
-			return
-		end
-		local pureAirBelow = isPureAirBelow(hrp)
-		local dynamicBuffer = (velY < -100) and PANIC_BUFFER or BASE_BUFFER
-		local minSafeY = VOID_Y and (VOID_Y + dynamicBuffer) or -99999
-		local shouldRescue = false
-		if pureAirBelow then
-			if y < minSafeY or velY < -190 then
-				shouldRescue = true
-			elseif y < (VOID_Y + 170) and velY < -110 then
-				shouldRescue = true
-			end
-		end
-		if shouldRescue then
-			godTierTeleport(char, hrp)
-		end
-	end)
-end
-initGodProtection()
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
@@ -4849,10 +4423,19 @@ _G["2tog_on_one_button"] = function(data)
 	local buttonCallback3 = data.buttonfun3 or data.fun5
 	local firstEnabled = data.default1 == true
 	local secondEnabled = data.default2 == true
-	local hasSecondToggle = secondName ~= nil or secondCallback ~= nil
+	local hasSecondToggle = secondName ~= nil or secondCallback ~= nil or data.default2 ~= nil
 	local hasSecondButton = buttonName2 ~= nil or buttonCallback2 ~= nil
 	local hasThirdButton = buttonName3 ~= nil or buttonCallback3 ~= nil
-	local thirdButtonVisible = data.buttonVisible3 ~= false
+	local segmentCount = 2
+	if hasSecondToggle then
+		segmentCount = segmentCount + 1
+	end
+	if hasSecondButton then
+		segmentCount = segmentCount + 1
+	end
+	if hasThirdButton then
+		segmentCount = segmentCount + 1
+	end
 
 	local holder = makeControlFrame(76)
 	holder.Parent = uiX
@@ -4889,33 +4472,12 @@ _G["2tog_on_one_button"] = function(data)
 	rowLayout.Padding = UDim.new(0, 6)
 	rowLayout.Parent = rowFrame
 
-	local allSegments = {}
-
-	local function updateSegmentWidths()
-		local visibleCount = 0
-		for _, segment in ipairs(allSegments) do
-			if segment.Visible ~= false then
-				visibleCount += 1
-			end
-		end
-
-		local widthScale = 1 / math.max(visibleCount, 1)
-		local widthOffset = -math.floor((math.max(visibleCount - 1, 0) * 6) / math.max(visibleCount, 1))
-		for _, segment in ipairs(allSegments) do
-			if segment.Visible ~= false then
-				segment.Button.Size = UDim2.new(widthScale, widthOffset, 1, 0)
-			else
-				segment.Button.Size = UDim2.new(0, 0, 0, 0)
-			end
-		end
-	end
-
 	local function createSegment(text, isToggle, initialState, callback)
 		local segmentButton = Instance.new("TextButton")
 		segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
 		segmentButton.BackgroundTransparency = 0.06
 		segmentButton.BorderSizePixel = 0
-		segmentButton.Size = UDim2.new(0.2, -5, 1, 0)
+		segmentButton.Size = UDim2.new(1 / segmentCount, -5, 1, 0)
 		segmentButton.AutoButtonColor = false
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
@@ -4960,10 +4522,8 @@ _G["2tog_on_one_button"] = function(data)
 
 		render()
 
-		local control
-		control = {
+		return {
 			Button = segmentButton,
-			Visible = true,
 			SetValue = function(nextState, suppressCallback)
 				if not isToggle then
 					return
@@ -4992,15 +4552,7 @@ _G["2tog_on_one_button"] = function(data)
 
 				return enabled
 			end,
-			SetVisible = function(nextVisible)
-				control.Visible = nextVisible ~= false
-				segmentButton.Visible = control.Visible
-				segmentButton.Active = control.Visible
-				updateSegmentWidths()
-			end,
 		}
-		allSegments[#allSegments + 1] = control
-		return control
 	end
 
 	local firstControl = createSegment(firstName, true, firstEnabled, firstCallback)
@@ -5008,14 +4560,6 @@ _G["2tog_on_one_button"] = function(data)
 	local buttonControl = createSegment(buttonName, false, false, buttonCallback)
 	local buttonControl2 = hasSecondButton and createSegment(tostring(buttonName2 or "Run 2"), false, false, buttonCallback2) or nil
 	local buttonControl3 = hasThirdButton and createSegment(tostring(buttonName3 or "Run 3"), false, false, buttonCallback3) or nil
-	if not secondControl then
-		updateSegmentWidths()
-	end
-	if buttonControl3 then
-		buttonControl3:SetVisible(thirdButtonVisible)
-	else
-		updateSegmentWidths()
-	end
 
 	return {
 		Frame = holder,
@@ -5298,75 +4842,6 @@ function DashBlockFE_toggle()
 	return DashToggle:tog_change() and "ON" or "OFF"
 end
 
-local function setAutoSafeZoneEnabled(nextState)
-	autoSafeZoneState.enabled = nextState == true
-	autoSafeZoneState.token += 1
-
-	if not autoSafeZoneState.enabled then
-		if autoSafeZoneState.active then
-			returnFromAutoSafeZone()
-		end
-		return "OFF"
-	end
-
-	local currentToken = autoSafeZoneState.token
-	autoSafeZoneState.task = task.spawn(function()
-		while autoSafeZoneState.enabled and autoSafeZoneState.token == currentToken do
-			local char = player.Character
-			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-			if humanoid and humanoid.Health > 0 then
-				if not autoSafeZoneState.active and humanoid.Health <= 30 then
-					triggerAutoSafeZone()
-				elseif autoSafeZoneState.active and humanoid.Health >= 50 then
-					returnFromAutoSafeZone()
-				end
-			end
-			task.wait()
-		end
-
-		if autoSafeZoneState.active then
-			returnFromAutoSafeZone()
-		end
-		if autoSafeZoneState.token == currentToken then
-			autoSafeZoneState.task = nil
-		end
-	end)
-
-	return "ON"
-end
-
-function AutoSafeZone_tog(value)
-	if not AutoSafeZoneToggle or not AutoSafeZoneToggle.GetValue then
-		if value == nil then
-			return autoSafeZoneState.enabled and "ON" or "OFF"
-		end
-
-		return setAutoSafeZoneEnabled(parseEnabledValue(value))
-	end
-
-	if value == nil then
-		return AutoSafeZoneToggle:GetValue() and "ON" or "OFF"
-	end
-
-	return AutoSafeZoneToggle:SetValue(parseEnabledValue(value)) and "ON" or "OFF"
-end
-
-function AutoSafeZone_on()
-	return AutoSafeZone_tog(true)
-end
-
-function AutoSafeZone_off()
-	return AutoSafeZone_tog(false)
-end
-
-function AutoSafeZone_toggle()
-	if not AutoSafeZoneToggle or not AutoSafeZoneToggle.tog_change then
-		return setAutoSafeZoneEnabled(not autoSafeZoneState.enabled)
-	end
-
-	return AutoSafeZoneToggle:tog_change() and "ON" or "OFF"
-end
-
 function Target_bind(value)
 	local decoded = decodeKeybindValue(value)
 	if decoded == nil then
@@ -5389,23 +4864,6 @@ syncSetBackKeybindDisplay()
 updateTargetDisplay()
 
 hum.Died:Connect(handleCharacterDeath)
-
-local savedAutoSafeZoneValue = getSavedControlValue("AutoSafeZone")
-if type(savedAutoSafeZoneValue) == "boolean" then
-	autoSafeZoneState.enabled = savedAutoSafeZoneValue
-end
-
-AutoSafeZoneToggle = tog({
-	name = "Auto Safe Zone",
-	default = autoSafeZoneState.enabled,
-	fun = function(enabled)
-		setSavedControlValue("AutoSafeZone", enabled == true)
-		setAutoSafeZoneEnabled(enabled)
-	end,
-})
-if AutoSafeZoneToggle and AutoSafeZoneToggle.Frame then
-	AutoSafeZoneToggle.Frame.LayoutOrder = 99999
-end
 
 Slider({
 	nameSilder = "Speed",
@@ -5571,10 +5029,6 @@ task.spawn(function()
 end)
 
 headerDragArea.InputBegan:Connect(function(input)
-	if not introFinished then
-		return
-	end
-
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 		return
 	end
@@ -5585,11 +5039,6 @@ headerDragArea.InputBegan:Connect(function(input)
 end)
 
 headerDragArea.InputEnded:Connect(function(input)
-	if not introFinished then
-		draggingWindow = false
-		return
-	end
-
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		draggingWindow = false
 	end
@@ -5926,15 +5375,6 @@ RunService.Heartbeat:Connect(function()
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if not introFinished then
-		attackTpHolding = false
-		holdingW = false
-		holdingS = false
-		holdingA = false
-		holdingD = false
-		return
-	end
-
 	local key = input.KeyCode
 
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -5954,11 +5394,6 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 function startIntroUi()
-	introInputBlocker.Visible = true
-	task.spawn(function()
-		sendPlayerToIntroSafeZone()
-	end)
-
 	local topLabel = Instance.new("TextLabel")
 	topLabel.Name = "MainTitle"
 	topLabel.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -6016,11 +5451,11 @@ function startIntroUi()
 	titlePulse:Play()
 	subtitlePulse:Play()
 
-	task.delay(2, function()
+	task.delay(3, function()
 		titlePulse:Cancel()
 		subtitlePulse:Cancel()
 
-		local fadeInfo = TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 		TweenService:Create(background, fadeInfo, {
 			BackgroundTransparency = 1,
@@ -6041,10 +5476,6 @@ function startIntroUi()
 			subtitleLabel:Destroy()
 			background:Destroy()
 			introFinished = true
-			introInputBlocker.Visible = false
-			task.spawn(function()
-				returnPlayerFromIntroSafeZone()
-			end)
 
 			keybindFrame.Visible = true
 			targetFrame.Visible = true
