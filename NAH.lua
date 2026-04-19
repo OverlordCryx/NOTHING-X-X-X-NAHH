@@ -3065,6 +3065,7 @@ task.spawn(function()
 end)
 print("=== ACTIVE ===")
 print("(-) " .. VOID_Y .. " (-)")
+
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
@@ -4691,6 +4692,244 @@ end
 
 four_tog_on_one_frame = _G["4tog_on_one_frame"]
 
+_G["3tog_on_one_frame"] = function(data)
+	data = data or {}
+
+	local titleText = tostring(data.title or "Toggles")
+	local names = {
+		tostring(data.name1 or "One"),
+		tostring(data.name2 or "Two"),
+		tostring(data.name3 or "Three"),
+	}
+	local callbacks = {
+		data.fun1,
+		data.fun2,
+		data.fun3,
+	}
+	local defaults = {
+		data.default1 == true,
+		data.default2 == true,
+		data.default3 == true,
+	}
+
+	local holder = makeControlFrame(76)
+	holder.Parent = uiX
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 16, 0, 8)
+	titleLabel.Size = UDim2.new(1, -32, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = titleText
+	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
+
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 12
+	titleConstraint.MaxTextSize = 18
+	titleConstraint.Parent = titleLabel
+
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.new(0, 10, 0, 32)
+	rowFrame.Size = UDim2.new(1, -20, 0, 32)
+	rowFrame.Parent = holder
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 6)
+	rowLayout.Parent = rowFrame
+
+	local function createToggle(text, initialState, callback)
+		local button = Instance.new("TextButton")
+		button.BackgroundTransparency = 0.06
+		button.BorderSizePixel = 0
+		button.Size = UDim2.new(1 / 3, -5, 1, 0)
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = tostring(text)
+		button.TextStrokeTransparency = 0.15
+		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		button.TextScaled = true
+		button.TextWrapped = true
+		button.Parent = rowFrame
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 10)
+		corner.Parent = button
+
+		local constraint = Instance.new("UITextSizeConstraint")
+		constraint.MinTextSize = 10
+		constraint.MaxTextSize = 13
+		constraint.Parent = button
+
+		local enabled = initialState == true
+
+		local function render()
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+		end
+
+		local control = {}
+
+		function control.SetValue(nextState, suppressCallback)
+			enabled = nextState == true
+			render()
+			if not suppressCallback and callback then
+				callback(enabled)
+			end
+		end
+
+		function control.GetValue()
+			return enabled
+		end
+
+		button.MouseButton1Click:Connect(function()
+			control.SetValue(not enabled)
+		end)
+
+		render()
+		return control
+	end
+
+	local controls = {}
+	for index = 1, 3 do
+		controls[index] = createToggle(names[index], defaults[index], callbacks[index])
+	end
+
+	return {
+		Frame = holder,
+		First = controls[1],
+		Second = controls[2],
+		Third = controls[3],
+	}
+end
+
+three_tog_on_one_frame = _G["3tog_on_one_frame"]
+
+_G["2tog_on_one_frame"] = function(data)
+	data = data or {}
+
+	local titleText = tostring(data.title or "Toggles")
+	local names = {
+		tostring(data.name1 or "One"),
+		tostring(data.name2 or "Two"),
+	}
+	local callbacks = {
+		data.fun1,
+		data.fun2,
+	}
+	local defaults = {
+		data.default1 == true,
+		data.default2 == true,
+	}
+
+	local holder = makeControlFrame(76)
+	holder.Parent = uiX
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 16, 0, 8)
+	titleLabel.Size = UDim2.new(1, -32, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = titleText
+	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
+
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 12
+	titleConstraint.MaxTextSize = 18
+	titleConstraint.Parent = titleLabel
+
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.new(0, 10, 0, 32)
+	rowFrame.Size = UDim2.new(1, -20, 0, 32)
+	rowFrame.Parent = holder
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 6)
+	rowLayout.Parent = rowFrame
+
+	local function createToggle(text, initialState, callback)
+		local button = Instance.new("TextButton")
+		button.BackgroundTransparency = 0.06
+		button.BorderSizePixel = 0
+		button.Size = UDim2.new(0.5, -5, 1, 0)
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = tostring(text)
+		button.TextStrokeTransparency = 0.15
+		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		button.TextScaled = true
+		button.TextWrapped = true
+		button.Parent = rowFrame
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 10)
+		corner.Parent = button
+
+		local constraint = Instance.new("UITextSizeConstraint")
+		constraint.MinTextSize = 10
+		constraint.MaxTextSize = 13
+		constraint.Parent = button
+
+		local enabled = initialState == true
+
+		local function render()
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+		end
+
+		local control = {}
+
+		function control.SetValue(nextState, suppressCallback)
+			enabled = nextState == true
+			render()
+			if not suppressCallback and callback then
+				callback(enabled)
+			end
+		end
+
+		function control.GetValue()
+			return enabled
+		end
+
+		button.MouseButton1Click:Connect(function()
+			control.SetValue(not enabled)
+		end)
+
+		render()
+		return control
+	end
+
+	local firstControl = createToggle(names[1], defaults[1], callbacks[1])
+	local secondControl = createToggle(names[2], defaults[2], callbacks[2])
+
+	return {
+		Frame = holder,
+		First = firstControl,
+		Second = secondControl,
+	}
+end
+
+two_tog_on_one_frame = _G["2tog_on_one_frame"]
+
 _G["2tog_on_one_button"] = function(data)
 	data = data or {}
 
@@ -5322,6 +5561,638 @@ safeZone.toggleControl = tog({
 })
 safeZone.toggleControl.Frame.LayoutOrder = 10000
 
+local NothingXEsp = {
+	GuiName = "NOTHING_X-0011",
+	BillboardSize = Vector2.new(200, 80),
+	ClassColors = {
+		["Bald"] = Color3.fromRGB(220, 220, 220),
+		["Hunter"] = Color3.fromRGB(60, 170, 255),
+		["Monster"] = Color3.fromRGB(230, 60, 90),
+		["Cyborg"] = Color3.fromRGB(110, 230, 140),
+		["Ninja"] = Color3.fromRGB(180, 110, 240),
+		["Batter"] = Color3.fromRGB(255, 170, 80),
+		["Blade"] = Color3.fromRGB(240, 220, 100),
+		["Esper"] = Color3.fromRGB(255, 130, 220),
+		["Purple"] = Color3.fromRGB(220, 100, 255),
+		["Tech"] = Color3.fromRGB(80, 240, 230),
+		["KJ"] = Color3.fromRGB(255, 90, 90),
+	},
+	State = {
+		gui = nil,
+		frames = {},
+		esp = {},
+		cons = {},
+		charCons = {},
+		attributeCons = {},
+		heartbeat = nil,
+		billboardTimer = 0,
+	},
+	Toggles = {
+		Ult = nil,
+		Class = nil,
+		DetectUlt = nil,
+		Name = nil,
+		HP = nil,
+	},
+}
+
+function NothingXEsp:FitText(text, maxLen)
+	local value = tostring(text or "")
+	local limit = maxLen or 18
+	if #value <= limit then
+		return value
+	end
+	if limit <= 3 then
+		return value:sub(1, limit)
+	end
+	return value:sub(1, limit - 3) .. "..."
+end
+
+function NothingXEsp:GetClassColor(name)
+	return self.ClassColors[name] or Color3.fromRGB(200, 200, 200)
+end
+
+function NothingXEsp:GetToggleValue(key)
+	local toggle = self.Toggles[key]
+	return toggle and toggle.GetValue and toggle:GetValue() or false
+end
+
+function NothingXEsp:EnsureGui()
+	local state = self.State
+	if state.gui and state.gui.Parent then
+		return state.gui
+	end
+
+	local oldGui = CoreGui:FindFirstChild(self.GuiName)
+	if oldGui then
+		oldGui:Destroy()
+	end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = self.GuiName
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.DisplayOrder = 9999998
+	gui.Parent = CoreGui
+	state.gui = gui
+	return gui
+end
+
+function NothingXEsp:RemoveBillboard(targetPlayer)
+	local frame = self.State.frames[targetPlayer]
+	if frame then
+		frame:Destroy()
+		self.State.frames[targetPlayer] = nil
+	end
+end
+
+function NothingXEsp:CreateLabel(parent, name, font)
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Size = UDim2.new(1, 0, 0, 18)
+	label.Position = UDim2.new(0.5, 0, 0.5, 0)
+	label.BackgroundTransparency = 1
+	label.Font = font
+	label.TextSize = 20
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.TextStrokeTransparency = 0.6
+	label.TextStrokeColor3 = Color3.new(0, 0, 0)
+	label.ZIndex = 51
+	label.Visible = false
+	label.Parent = parent
+	return label
+end
+
+function NothingXEsp:EnsureBillboard(targetPlayer)
+	local character = targetPlayer.Character
+	local head = character and character:FindFirstChild("Head")
+	if not head then
+		return nil
+	end
+
+	local billboard = self.State.frames[targetPlayer]
+	if billboard and billboard.Parent and billboard.Adornee == head then
+		return billboard
+	end
+
+	if billboard then
+		billboard:Destroy()
+	end
+
+	billboard = Instance.new("BillboardGui")
+	billboard.Name = "CombinedInfoBB_" .. tostring(targetPlayer.UserId)
+	billboard.Adornee = head
+	billboard.AlwaysOnTop = true
+	billboard.LightInfluence = 0
+	billboard.MaxDistance = 10000
+	billboard.ResetOnSpawn = false
+	billboard.Size = UDim2.fromOffset(self.BillboardSize.X, self.BillboardSize.Y)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 2.3 + (head.Size.Y * 0.5), 0)
+	billboard.Enabled = false
+	billboard.Parent = head
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 0, 0)
+	stroke.Thickness = 1.6
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 7)
+	padding.PaddingRight = UDim.new(0, 7)
+	padding.PaddingTop = UDim.new(0, 7)
+	padding.PaddingBottom = UDim.new(0, 7)
+
+	local content = Instance.new("Frame")
+	content.Name = "Content"
+	content.AnchorPoint = Vector2.new(0.5, 0.5)
+	content.Position = UDim2.new(0.5, 0, 0.5, 0)
+	content.Size = UDim2.new(1, 0, 1, 0)
+	content.BackgroundColor3 = Color3.new(0, 0, 0)
+	content.BackgroundTransparency = 0.8
+	content.BorderSizePixel = 0
+	content.Parent = billboard
+
+	corner.Parent = content
+	stroke.Parent = content
+	padding.Parent = content
+
+	self:CreateLabel(content, "NameLabel", Enum.Font.GothamBold)
+	self:CreateLabel(content, "HpLabel", Enum.Font.GothamBold)
+	self:CreateLabel(content, "UltLabel", Enum.Font.GothamBold)
+	self:CreateLabel(content, "ClassLabel", Enum.Font.GothamSemibold)
+
+	self.State.frames[targetPlayer] = billboard
+	return billboard
+end
+
+function NothingXEsp:ClearUltEsp(targetPlayer)
+	local hl = self.State.esp[targetPlayer]
+	if hl then
+		hl.Enabled = false
+	end
+end
+
+function NothingXEsp:CreateUltHighlight(character)
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "NOTHING-X-ULT"
+	highlight.Adornee = character
+	highlight.FillColor = Color3.fromRGB(0, 0, 0)
+	highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+	highlight.FillTransparency = 0.6
+	highlight.OutlineTransparency = 0
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Enabled = false
+	highlight.Parent = character
+	return highlight
+end
+
+function NothingXEsp:EnsureUltHighlight(targetPlayer)
+	local character = targetPlayer.Character
+	if not character then
+		return nil
+	end
+
+	local highlight = self.State.esp[targetPlayer]
+	if highlight and highlight.Parent ~= character then
+		highlight:Destroy()
+		highlight = nil
+	end
+
+	if not highlight then
+		local existing = character:FindFirstChild("NOTHING-X-ULT")
+		if existing and existing:IsA("Highlight") then
+			highlight = existing
+			highlight.Adornee = character
+		else
+			highlight = self:CreateUltHighlight(character)
+		end
+		self.State.esp[targetPlayer] = highlight
+	end
+
+	return highlight
+end
+
+function NothingXEsp:SyncUltEsp(targetPlayer)
+	if targetPlayer == player then
+		return
+	end
+
+	local highlight = self:EnsureUltHighlight(targetPlayer)
+	if not highlight then
+		return
+	end
+
+	if not self:GetToggleValue("DetectUlt") then
+		highlight.Enabled = false
+		return
+	end
+
+	local character = targetPlayer.Character
+	if not character or character:GetAttribute("Ulted") ~= true then
+		highlight.Enabled = false
+		return
+	end
+
+	if highlight.Parent == character then
+		highlight:Destroy()
+	end
+
+	highlight = self:CreateUltHighlight(character)
+	highlight.Enabled = true
+	self.State.esp[targetPlayer] = highlight
+end
+
+function NothingXEsp:GetActiveInfo(targetPlayer)
+	local toggles = self.Toggles
+	return {
+		showName = toggles.Name and toggles.Name:GetValue() or false,
+		showHp = toggles.HP and toggles.HP:GetValue() or false,
+		showUlt = toggles.Ult and toggles.Ult:GetValue() or false,
+		showClass = toggles.Class and toggles.Class:GetValue() or false,
+	}
+end
+
+function NothingXEsp:HideBillboard(targetPlayer)
+	local frame = self.State.frames[targetPlayer]
+	if frame then
+		frame.Enabled = false
+	end
+end
+
+function NothingXEsp:ApplyLineLayout(activeLabels, content)
+	local visibleLines = #activeLabels
+	if content then
+		content.Size = UDim2.new(1, -14, 0, math.max(18, visibleLines * 16 + 2))
+		content.Position = UDim2.new(0.5, 0, 0.5, 0)
+	end
+
+	if visibleLines == 1 then
+		activeLabels[1].Position = UDim2.new(0.5, 0, 0.5, 0)
+	elseif visibleLines == 2 then
+		activeLabels[1].Position = UDim2.new(0.5, 0, 0.28, 0)
+		activeLabels[2].Position = UDim2.new(0.5, 0, 0.72, 0)
+	elseif visibleLines == 3 then
+		activeLabels[1].Position = UDim2.new(0.5, 0, 0.18, 0)
+		activeLabels[2].Position = UDim2.new(0.5, 0, 0.5, 0)
+		activeLabels[3].Position = UDim2.new(0.5, 0, 0.82, 0)
+	elseif visibleLines >= 4 then
+		activeLabels[1].Position = UDim2.new(0.5, 0, 0.12, 0)
+		activeLabels[2].Position = UDim2.new(0.5, 0, 0.38, 0)
+		activeLabels[3].Position = UDim2.new(0.5, 0, 0.63, 0)
+		activeLabels[4].Position = UDim2.new(0.5, 0, 0.88, 0)
+	end
+end
+
+function NothingXEsp:UpdateBillboard(targetPlayer)
+	if targetPlayer == player then
+		return
+	end
+
+	local info = self:GetActiveInfo(targetPlayer)
+	if not info.showName and not info.showHp and not info.showUlt and not info.showClass then
+		self:RemoveBillboard(targetPlayer)
+		return
+	end
+
+	local character = targetPlayer.Character
+	local head = character and character:FindFirstChild("Head")
+	if not head then
+		self:RemoveBillboard(targetPlayer)
+		return
+	end
+
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		self:RemoveBillboard(targetPlayer)
+		return
+	end
+
+	local headOffset = (head.Size.Y * 0.5) + 2.3
+	local worldPos = head.Position + Vector3.new(0, headOffset, 0)
+	local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
+	local root = character and getRootUniversal(character)
+	local myRoot = player.Character and getRootUniversal(player.Character)
+	local cameraDistance = (camera.CFrame.Position - worldPos).Magnitude
+	local targetDistance = root and myRoot and (myRoot.Position - root.Position).Magnitude or math.huge
+	if screenPos.Z <= 0 or not root or not myRoot or (not onScreen and cameraDistance > 25) or (targetDistance > 140 and cameraDistance > 180) then
+		self:HideBillboard(targetPlayer)
+		return
+	end
+
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		self:HideBillboard(targetPlayer)
+		return
+	end
+
+	local frame = self:EnsureBillboard(targetPlayer)
+	if not frame then
+		return
+	end
+	frame.Adornee = head
+	frame.StudsOffsetWorldSpace = Vector3.new(0, 2.3 + (head.Size.Y * 0.5), 0)
+
+	local content = frame:FindFirstChild("Content")
+	local labels = {
+		Class = content and content:FindFirstChild("ClassLabel"),
+		Ult = content and content:FindFirstChild("UltLabel"),
+		Name = content and content:FindFirstChild("NameLabel"),
+		Hp = content and content:FindFirstChild("HpLabel"),
+	}
+	local activeLabels = {}
+
+	for _, label in pairs(labels) do
+		if label then
+			label.Visible = false
+		end
+	end
+
+	local function addLabel(label, text, color, maxLen)
+		if not label then
+			return
+		end
+		label.Text = self:FitText(text, maxLen)
+		label.TextColor3 = color
+		label.Visible = true
+		activeLabels[#activeLabels + 1] = label
+	end
+
+	if info.showClass then
+		local className = tostring(targetPlayer:GetAttribute("Character") or "???")
+		addLabel(labels.Class, className, self:GetClassColor(className), 20)
+	end
+
+	if info.showUlt and character:GetAttribute("Ulted") ~= true then
+		local ultValue = math.clamp(math.round(tonumber(targetPlayer:GetAttribute("Ultimate") or 0) or 0), 0, 100)
+		addLabel(labels.Ult, string.format("%d%%", ultValue), Color3.fromRGB(255, 210, 90), 18)
+	end
+
+	if info.showName then
+		local isFriend = false
+		pcall(function()
+			isFriend = player:IsFriendsWith(targetPlayer.UserId)
+		end)
+		addLabel(labels.Name, targetPlayer.Name, isFriend and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(255, 255, 255), 20)
+	end
+
+	if info.showHp then
+		local hpPercent = 0
+		if humanoid.MaxHealth > 0 then
+			hpPercent = math.clamp(math.floor((humanoid.Health / humanoid.MaxHealth) * 100 + 0.5), 0, 100)
+		end
+		addLabel(labels.Hp, string.format("%d%% HP", hpPercent), Color3.fromRGB(255, 0, 0), 18)
+	end
+
+	if #activeLabels == 0 then
+		frame.Enabled = false
+		return
+	end
+
+	self:ApplyLineLayout(activeLabels, content)
+	frame.Enabled = true
+end
+
+function NothingXEsp:DisconnectPlayer(targetPlayer)
+	local collections = {
+		self.State.cons[targetPlayer],
+		self.State.charCons[targetPlayer],
+	}
+	for _, entries in ipairs(collections) do
+		if entries then
+			for _, connection in ipairs(entries) do
+				if connection then
+					connection:Disconnect()
+				end
+			end
+		end
+	end
+	self.State.cons[targetPlayer] = nil
+	self.State.charCons[targetPlayer] = nil
+
+	local attrConnection = self.State.attributeCons[targetPlayer]
+	if attrConnection then
+		attrConnection:Disconnect()
+		self.State.attributeCons[targetPlayer] = nil
+	end
+end
+
+function NothingXEsp:DisconnectCharacter(targetPlayer)
+	local entries = self.State.charCons[targetPlayer]
+	if entries then
+		for _, connection in ipairs(entries) do
+			if connection then
+				connection:Disconnect()
+			end
+		end
+	end
+	self.State.charCons[targetPlayer] = nil
+
+	local attrConnection = self.State.attributeCons[targetPlayer]
+	if attrConnection then
+		attrConnection:Disconnect()
+		self.State.attributeCons[targetPlayer] = nil
+	end
+end
+
+function NothingXEsp:HookCharacter(targetPlayer, character)
+	if targetPlayer == player or not character then
+		return
+	end
+
+	self:DisconnectCharacter(targetPlayer)
+	self.State.charCons[targetPlayer] = {}
+
+	local oldAttr = self.State.attributeCons[targetPlayer]
+	if oldAttr then
+		oldAttr:Disconnect()
+	end
+	self.State.attributeCons[targetPlayer] = character:GetAttributeChangedSignal("Ulted"):Connect(function()
+		self:SyncUltEsp(targetPlayer)
+	end)
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		table.insert(self.State.charCons[targetPlayer], humanoid.HealthChanged:Connect(function()
+			self:UpdateBillboard(targetPlayer)
+		end))
+		table.insert(self.State.charCons[targetPlayer], humanoid.Died:Connect(function()
+			self:ClearUltEsp(targetPlayer)
+			self:UpdateBillboard(targetPlayer)
+		end))
+	end
+
+	task.defer(function()
+		self:UpdateBillboard(targetPlayer)
+		self:SyncUltEsp(targetPlayer)
+	end)
+end
+
+function NothingXEsp:SetupPlayer(targetPlayer)
+	if targetPlayer == player then
+		return
+	end
+
+	self:DisconnectPlayer(targetPlayer)
+	self.State.cons[targetPlayer] = {}
+	self.State.charCons[targetPlayer] = {}
+
+	table.insert(self.State.cons[targetPlayer], targetPlayer.CharacterAdded:Connect(function(character)
+		self:HookCharacter(targetPlayer, character)
+		self:QueueBillboardRefresh(targetPlayer)
+	end))
+	table.insert(self.State.cons[targetPlayer], targetPlayer:GetAttributeChangedSignal("Ultimate"):Connect(function()
+		self:UpdateBillboard(targetPlayer)
+	end))
+	table.insert(self.State.cons[targetPlayer], targetPlayer:GetAttributeChangedSignal("Character"):Connect(function()
+		self:UpdateBillboard(targetPlayer)
+	end))
+
+	if targetPlayer.Character then
+		self:HookCharacter(targetPlayer, targetPlayer.Character)
+	end
+	self:QueueBillboardRefresh(targetPlayer)
+end
+
+function NothingXEsp:CleanupPlayer(targetPlayer)
+	self:DisconnectPlayer(targetPlayer)
+	self:DisconnectCharacter(targetPlayer)
+	self:RemoveBillboard(targetPlayer)
+	local highlight = self.State.esp[targetPlayer]
+	if highlight then
+		highlight:Destroy()
+		self.State.esp[targetPlayer] = nil
+	end
+ end
+
+function NothingXEsp:UpdateAll()
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		if targetPlayer ~= player then
+			self:UpdateBillboard(targetPlayer)
+			self:SyncUltEsp(targetPlayer)
+		end
+	end
+end
+
+function NothingXEsp:SyncHeartbeat()
+	local info = self:GetActiveInfo(player)
+	local enabled = info.showName or info.showHp or info.showUlt or info.showClass
+	if not enabled then
+		if self.State.heartbeat then
+			self.State.heartbeat:Disconnect()
+			self.State.heartbeat = nil
+		end
+		for targetPlayer, frame in pairs(self.State.frames) do
+			if frame then
+				frame.Enabled = false
+			end
+			if targetPlayer and targetPlayer.Parent == nil then
+				self:RemoveBillboard(targetPlayer)
+			end
+		end
+		return
+	end
+
+	if self.State.heartbeat then
+		return
+	end
+
+	self.State.billboardTimer = 0
+	self.State.heartbeat = RunService.RenderStepped:Connect(function(dt)
+		if isSafeTeleportLocked() then
+			return
+		end
+
+		local liveInfo = self:GetActiveInfo(player)
+		if not liveInfo.showName and not liveInfo.showHp and not liveInfo.showUlt and not liveInfo.showClass then
+			return
+		end
+
+		self.State.billboardTimer = self.State.billboardTimer + dt
+		if self.State.billboardTimer < (1 / 30) then
+			return
+		end
+		self.State.billboardTimer = 0
+		self:UpdateAll()
+	end)
+end
+
+function NothingXEsp:RefreshAll()
+	self:UpdateAll()
+	self:SyncHeartbeat()
+end
+
+function NothingXEsp:QueueBillboardRefresh(targetPlayer)
+	task.spawn(function()
+		local deadline = tick() + 1.2
+		while targetPlayer and targetPlayer.Parent == Players do
+			local character = targetPlayer.Character
+			local head = character and character:FindFirstChild("Head")
+			if head then
+				self:UpdateBillboard(targetPlayer)
+				return
+			end
+			if tick() >= deadline then
+				self:UpdateBillboard(targetPlayer)
+				return
+			end
+			RunService.RenderStepped:Wait()
+		end
+	end)
+end
+
+function NothingXEsp:InitUi()
+	local mainToggles = _G["3tog_on_one_frame"]({
+		title = "ESP Main",
+		name1 = "Show Class",
+		name2 = "Show ULT%",
+		name3 = "ULT ESP",
+		default1 = false,
+		default2 = false,
+		default3 = false,
+		fun1 = function() self:RefreshAll() end,
+		fun2 = function() self:RefreshAll() end,
+		fun3 = function() self:RefreshAll() end,
+	})
+	self.Toggles.Class = mainToggles.First
+	self.Toggles.Ult = mainToggles.Second
+	self.Toggles.DetectUlt = mainToggles.Third
+
+	local infoToggles = _G["2tog_on_one_frame"]({
+		title = "ESP Info",
+		name1 = "Name",
+		name2 = "HP",
+		default1 = false,
+		default2 = false,
+		fun1 = function() self:RefreshAll() end,
+		fun2 = function() self:RefreshAll() end,
+	})
+	self.Toggles.Name = infoToggles.First
+	self.Toggles.HP = infoToggles.Second
+end
+
+function NothingXEsp:Init()
+	self:InitUi()
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		self:SetupPlayer(targetPlayer)
+	end
+	Players.PlayerAdded:Connect(function(targetPlayer)
+		self:SetupPlayer(targetPlayer)
+	end)
+	Players.PlayerRemoving:Connect(function(targetPlayer)
+		self:CleanupPlayer(targetPlayer)
+	end)
+	task.delay(1, function()
+		self:RefreshAll()
+	end)
+end
+
+NothingXEsp:Init()
+
 parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
 syncFlingModeControls()
 
@@ -5841,4 +6712,3 @@ function startIntroUi()
 end
 
 startIntroUi()
-
