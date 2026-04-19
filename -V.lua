@@ -18,7 +18,6 @@ local function detectVoidY()
 	local official = Workspace.FallenPartsDestroyHeight
 	if official and official > -500000 and official < 10000 then
 		VOID_Y = official
-		print("VOID_Y = " .. VOID_Y .. " (-)")
 	else
 		local lowest = 200
 		for i = 1, 6 do
@@ -98,10 +97,6 @@ end
 local function tpBack(char, hrp, reason)
 	_G.SafeTeleportLock = true
 	local target = getRescueCFrame()
-	print("=== TP BACK ===")
-	print("Powód: " .. reason)
-	print("Aktualna Y: " .. math.floor(hrp.Position.Y))
-	print("=================")
 	for i = 1, 222 do
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
@@ -128,17 +123,18 @@ task.spawn(function()
 		saveSafePosition(hrp)
 		local y = hrp.Position.Y
 		if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then
-			tpBack(char, hrp, "OUTSIDE BOUNDARY (X/Z or Y too high)")
+			tpBack(char, hrp, "")
 			continue
 		end
 		if y < _G.NOTHINGX_Protection.EXTREME_LOW_Y then
-			tpBack(char, hrp, "EXTREME LOW Y (below VOID_Y)")
+			tpBack(char, hrp, "")
 			continue
 		end
 		local minSafeY = VOID_Y and (VOID_Y + VOID_BUFFER) or -999999
 		if y < minSafeY then
-			tpBack(char, hrp, "FALL INTO VOID (Y too low)")
+			tpBack(char, hrp, "")
 		end
 	end
 end)
 print("=== ACTIVE ===")
+print("(-) " .. VOID_Y .. " (-)")
