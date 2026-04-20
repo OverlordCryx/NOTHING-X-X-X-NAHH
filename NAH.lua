@@ -450,7 +450,7 @@ local safeZone = {
 	enabled = false,
 	pointStart = 3e3,
 	pointAdd = 3e3,
-	pointMax = 33e33,
+	pointMax = 16e16,
 	pointCurrent = 3e3,
 	lowHp = 30,
 	returnHp = 47,
@@ -460,6 +460,10 @@ local safeZone = {
 	atDestination = false,
 	toggleControl = nil,
 }
+
+local function isSafeZoneBlocking()
+	return _G.SafeTeleportLock == true or (safeZone and (safeZone.travelMode ~= nil or safeZone.atDestination == true))
+end
 local normalizeSafeZoneSigned
 local normalizeSafeZonePositive
 local camLockEnabled = false
@@ -869,6 +873,9 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 end
 
 function setWalkFlingEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return walkFlingEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not walkFlingEnabled or enabled == true
 	if walkFlingEnabled == nextState then
 		syncWalkFlingKeybindDisplay()
@@ -926,6 +933,9 @@ function setWalkFlingEnabled(enabled)
 end
 
 function setAuraFlingEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return auraFlingEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not auraFlingEnabled or enabled == true
 	auraFlingEnabled = nextState
 	auraFlingTaskToken += 1
@@ -1034,6 +1044,9 @@ function getPlayerFromClickedPart(part)
 end
 
 function setClickFlingEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return clickFlingEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not clickFlingEnabled or enabled == true
 	clickFlingEnabled = nextState
 
@@ -1063,6 +1076,9 @@ function setClickFlingEnabled(enabled)
 end
 
 function setFlingAllEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return flingAllEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not flingAllEnabled or enabled == true
 	flingAllEnabled = nextState
 
@@ -1235,6 +1251,9 @@ local function updateMovement()
 end
 
 local function toggleSpeed(nextState)
+	if (nextState == nil or nextState == true) and isSafeZoneBlocking() then
+		return active and "ON" or "OFF"
+	end
 	if nextState == nil then
 		active = not active
 	else
@@ -1441,6 +1460,9 @@ function getSetBackTravelPosition(currentRoot, destination, step)
 end
 
 function startSetBackTravel()
+	if isSafeZoneBlocking() then
+		return false
+	end
 	local currentCharacter = player.Character
 	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 	if not currentRoot or not setBackSavedCFrame then
@@ -1585,6 +1607,9 @@ local function startSafeZoneTravel(destination, mode, onComplete)
 end
 
 function handleSetBackKeybind()
+	if isSafeZoneBlocking() then
+		return
+	end
 	if setBackTravelConn then
 		stopSetBackTravel()
 		return
@@ -1618,6 +1643,9 @@ function handleSetBackKeybind()
 end
 
 local function toggleFly(nextState)
+	if (nextState == nil or nextState == true) and isSafeZoneBlocking() then
+		return flying and "ON" or "OFF"
+	end
 	if nextState == nil then
 		flying = not flying
 	else
@@ -2039,21 +2067,22 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	local characterHumanoid = characterRoot.Parent and characterRoot.Parent:FindFirstChildOfClass("Humanoid")
 	local useAirTracking = isAirborneHumanoid(targetHumanoid) or isAirborneHumanoid(characterHumanoid)
 	local targetVelocity = targetRoot.AssemblyLinearVelocity
-	local horizontalVelocity = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
+	
 	local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
-	local horizontalLead = horizontalVelocity * leadTime
-	if horizontalLead.Magnitude > attackTpMaxHorizontalLead then
-		horizontalLead = horizontalLead.Unit * attackTpMaxHorizontalLead
+	local lead = targetVelocity * leadTime
+	if lead.Magnitude > attackTpMaxHorizontalLead then
+		lead = lead.Unit * attackTpMaxHorizontalLead
 	end
 
-	local followDirection = getHorizontalUnit(horizontalVelocity)
+	local predictedTargetPosition = targetRoot.Position + lead
+	local followDirection = getHorizontalUnit(targetVelocity)
 		or getHorizontalUnit(targetRoot.CFrame.LookVector)
 		or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
 		or Vector3.new(0, 0, -1)
-	local verticalLead = math.clamp(targetVelocity.Y * attackTpVerticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
+	
 	local behindDistance = useAirTracking and attackTpAirBehindDistance or attackTpBehindDistance
 	local verticalOffset = useAirTracking and attackTpAirVerticalOffset or attackTpGroundVerticalOffset
-	local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
+	
 	local behindPosition = predictedTargetPosition - (followDirection * behindDistance) + Vector3.new(0, verticalOffset, 0)
 	local lookPosition = predictedTargetPosition + Vector3.new(0, verticalOffset * 0.35, 0)
 
@@ -2781,6 +2810,9 @@ end
     end
 
     local function setStayState(state)
+        if (state == nil or state == true) and isSafeZoneBlocking() then
+            return
+        end
         isActive = state == true
 
         local char = player.Character
@@ -4333,6 +4365,9 @@ toggleView = function(nextState)
 end
 
 function teleportToSelectedTarget()
+	if isSafeZoneBlocking() then
+		return
+	end
 	if not hasSelectedTargetOrPendingPlayer() then
 		return
 	end
@@ -5628,102 +5663,106 @@ end)
 task.spawn(function()
 	while true do
 		task.wait()
-
-		if (viewing or autoTpEnabled or flingEnabled) and not hasSelectedTargetOrPendingPlayer() then
-			if viewing then
-				stopView()
+		task.spawn(function()
+			if isSafeZoneBlocking() then
+				return
 			end
-			autoTpEnabled = false
-			flingEnabled = false
-			syncTargetActionControls()
-		end
+			if (viewing or autoTpEnabled or flingEnabled) and not hasSelectedTargetOrPendingPlayer() then
+				if viewing then
+					stopView()
+				end
+				autoTpEnabled = false
+				flingEnabled = false
+				syncTargetActionControls()
+			end
 
-		if viewing and not isValidCamLockTarget(currentViewTarget) then
-			if currentViewPlayer and currentViewPlayer.Parent == Players then
-				local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
-				if isValidCamLockTarget(newViewTarget) then
-					currentViewTarget = newViewTarget
-					local newViewHumanoid = newViewTarget:FindFirstChildOfClass("Humanoid")
-					if newViewHumanoid and cam then
-						cam.CameraSubject = newViewHumanoid
+			if viewing and not isValidCamLockTarget(currentViewTarget) then
+				if currentViewPlayer and currentViewPlayer.Parent == Players then
+					local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
+					if isValidCamLockTarget(newViewTarget) then
+						currentViewTarget = newViewTarget
+						local newViewHumanoid = newViewTarget:FindFirstChildOfClass("Humanoid")
+						if newViewHumanoid and cam then
+							cam.CameraSubject = newViewHumanoid
+						end
+					else
+						stopView()
 					end
 				else
 					stopView()
 				end
-			else
-				stopView()
 			end
-		end
 
-		if not autoTpEnabled then
-			if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
-				teleportToSelectedTarget()
-			end
-		elseif not flingEnabled then
-			local character = player.Character
-			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-			if characterRoot then
-				local targetModel = resolveAttackTpTarget()
-				if isValidAttackTpTarget(targetModel) then
-					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
-					if targetCFrame then
-						characterRoot.CFrame = targetCFrame
-						characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
-						if pendingTeleportToSelectedPlayer then
+			if not autoTpEnabled then
+				if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+					teleportToSelectedTarget()
+				end
+			elseif not flingEnabled then
+				local character = player.Character
+				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+				if characterRoot then
+					local targetModel = resolveAttackTpTarget()
+					if isValidAttackTpTarget(targetModel) then
+						local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
+						if targetCFrame then
+							characterRoot.CFrame = targetCFrame
+							characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
+							if pendingTeleportToSelectedPlayer then
+								teleportToSelectedTarget()
+							end
+
+							if flying and bv and bg then
+								bv.Position = characterRoot.Position
+								bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+							end
+						elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(targetModel) then
 							teleportToSelectedTarget()
 						end
-
-						if flying and bv and bg then
-							bv.Position = characterRoot.Position
-							bg.CFrame = getRotationOnlyCFrame(targetCFrame)
-						end
-					elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(targetModel) then
-						teleportToSelectedTarget()
 					end
 				end
+			elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+				teleportToSelectedTarget()
 			end
-		elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
-			teleportToSelectedTarget()
-		end
 
-		if attackTpEnabled and attackTpHolding then
-			local character = player.Character
-			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-			if characterRoot and not isTpBlocked() then
-				if not manualAttackTpPlayer and manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
-					manualAttackTpTarget = nil
-					if syncModelDropdownSelectionToManualTarget then
-						syncModelDropdownSelectionToManualTarget()
-					end
-					syncTargetPickKeybindDisplay()
-					updateTargetDisplay()
-				end
-
-				if not isValidAttackTpTarget(attackTpTarget) then
-					attackTpTarget = nil
-				end
-
-				local preferredTarget = resolveAttackTpTarget()
-				if preferredTarget then
-					attackTpTarget = preferredTarget
-				end
-
-				if isValidAttackTpTarget(attackTpTarget) then
-					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
-					if targetCFrame and targetVelocity then
-						characterRoot.CFrame = targetCFrame
-						characterRoot.AssemblyLinearVelocity = targetVelocity
-
-						if flying and bv and bg then
-							bv.Position = characterRoot.Position
-							bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+			if attackTpEnabled and attackTpHolding then
+				local character = player.Character
+				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+				if characterRoot and not isTpBlocked() then
+					if not manualAttackTpPlayer and manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
+						manualAttackTpTarget = nil
+						if syncModelDropdownSelectionToManualTarget then
+							syncModelDropdownSelectionToManualTarget()
 						end
-					else
+						syncTargetPickKeybindDisplay()
+						updateTargetDisplay()
+					end
+
+					if not isValidAttackTpTarget(attackTpTarget) then
 						attackTpTarget = nil
 					end
+
+					local preferredTarget = resolveAttackTpTarget()
+					if preferredTarget then
+						attackTpTarget = preferredTarget
+					end
+
+					if isValidAttackTpTarget(attackTpTarget) then
+						local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
+						if targetCFrame and targetVelocity then
+							characterRoot.CFrame = targetCFrame
+							characterRoot.AssemblyLinearVelocity = targetVelocity
+
+							if flying and bv and bg then
+								bv.Position = characterRoot.Position
+								bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+							end
+						else
+							attackTpTarget = nil
+						end
+					end
 				end
 			end
-		end
+		end)
 	end
 end)
 
