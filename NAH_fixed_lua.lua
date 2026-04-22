@@ -423,12 +423,12 @@ local flyKeybind = Enum.KeyCode.R
 local camLockKeybind = Enum.KeyCode.Z
 local attackTpKeybind = Enum.KeyCode.T
 local targetSelectKeybind = Enum.KeyCode.C
-local setBackKeybind = Enum.KeyCode.N
-local setBackSavedCFrame = nil
-local setBackTravelConn = nil
-local setBackPressToken = 0
-local setBackLastPressAt = 0
-local setBackCollisionState = nil
+setBackKeybind = Enum.KeyCode.N
+setBackSavedCFrame = nil
+setBackTravelConn = nil
+setBackPressToken = 0
+setBackLastPressAt = 0
+setBackCollisionState = nil
 local active = false
 local speedLoopRunning = false
 local holdingW = false
@@ -460,6 +460,10 @@ local safeZone = {
 	atDestination = false,
 	toggleControl = nil,
 }
+
+local function isSafeZoneBlocking()
+	return _G.SafeTeleportLock == true or (safeZone and (safeZone.travelMode ~= nil or safeZone.atDestination == true))
+end
 local normalizeSafeZoneSigned
 local normalizeSafeZonePositive
 local camLockEnabled = false
@@ -476,48 +480,48 @@ local syncModelDropdownSelectionToManualTarget
 local stopView
 local startView
 local toggleView
-local attackTpBehindDistance = 0.0
-local attackTpAirBehindDistance = 0.0
-local attackTpLeadTime = 0.0
-local attackTpAirLeadTime = 0.0
-local attackTpMaxHorizontalLead = 0.0
-local attackTpVerticalLead = 0.0
-local attackTpMaxVerticalLead = 0.0
-local attackTpGroundVerticalOffset = 0.0
-local attackTpAirVerticalOffset = 0.0
+local attackTpBehindDistance = 1.85
+local attackTpAirBehindDistance = 1.15
+local attackTpLeadTime = 0.03
+local attackTpAirLeadTime = 0.06
+local attackTpMaxHorizontalLead = 4.5
+local attackTpVerticalLead = 0.04
+local attackTpMaxVerticalLead = 1.35
+local attackTpGroundVerticalOffset = 0
+local attackTpAirVerticalOffset = 0.45
 local worldUpVector = Vector3.new(0, 1, 0)
 local autoTpEnabled = false
 local flingEnabled = false
-local walkFlingEnabled = false
-local auraFlingEnabled = false
-local clickFlingEnabled = false
-local flingAllEnabled = false
-local walkFlingKeybind = Enum.KeyCode.X
-local walkFlingPower = 1000
-local flingPower = 1000
-local auraRange = 20
-local walkFlingUseNormal = false
-local walkFlingDirections = {
+walkFlingEnabled = false
+auraFlingEnabled = false
+clickFlingEnabled = false
+flingAllEnabled = false
+walkFlingKeybind = Enum.KeyCode.X
+walkFlingPower = 1000
+flingPower = 1000
+auraRange = 20
+walkFlingUseNormal = false
+walkFlingDirections = {
 	Forward = true,
 }
-local walkFlingTaskToken = 0
-local auraFlingTaskToken = 0
-local clickFlingConnection = nil
-local clickFlingBusy = false
-local flingAllTaskToken = 0
-local flingOrbitTime = 0
-local flingOrbitStepXZ = 0
-local flingOrbitStepY = 0
-local flingTargetIndex = 1
-local flingOrbitSpeed = 2e9
-local flingOrbitIncrement = 0.1
-local flingOrbitMax = 1.3
+walkFlingHeartbeat = nil
+auraFlingTaskToken = 0
+clickFlingConnection = nil
+clickFlingBusy = false
+flingAllHeartbeat = nil
+flingOrbitTime = 0
+flingOrbitStepXZ = 0
+flingOrbitStepY = 0
+flingTargetIndex = 1
+flingOrbitSpeed = 2e9
+flingOrbitIncrement = 0.1
+flingOrbitMax = 1.3
 local viewing = false
 local currentViewTarget = nil
 local currentViewPlayer = nil
 local viewDied = nil
 local viewChanged = nil
-local pendingTeleportToSelectedPlayer = false
+pendingTeleportToSelectedPlayer = false
 local targetActionControls = nil
 local flingModeControls = nil
 local zeroLocalPlayerRoot
@@ -644,7 +648,7 @@ local function parseEnabledValue(value)
 	end
 
 	if value == nil then
-		return false
+		return farmEnabled
 	end
 
 	local normalized = string.lower(tostring(value))
@@ -869,6 +873,9 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 end
 
 function setWalkFlingEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return walkFlingEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not walkFlingEnabled or enabled == true
 	if walkFlingEnabled == nextState then
 		syncWalkFlingKeybindDisplay()
@@ -876,44 +883,44 @@ function setWalkFlingEnabled(enabled)
 	end
 
 	walkFlingEnabled = nextState
-	walkFlingTaskToken += 1
+	if walkFlingHeartbeat then
+		walkFlingHeartbeat:Disconnect()
+		walkFlingHeartbeat = nil
+	end
 
 	if walkFlingEnabled then
 		local moveOffset = 0.1
-		local taskToken = walkFlingTaskToken
-		task.spawn(function()
-			while true do
-				task.wait()
-				if not walkFlingEnabled or walkFlingTaskToken ~= taskToken then break end
-				local currentCharacter = player.Character
-				local rootPart = getRootUniversal(currentCharacter)
-				if rootPart then
-					local originalVelocity = rootPart.Velocity
-					if walkFlingUseNormal then
-						rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
-						task.wait()
-						if not walkFlingEnabled or walkFlingTaskToken ~= taskToken then break end
-						if rootPart.Parent then
-							rootPart.Velocity = originalVelocity
-						end
-						task.wait()
-						if not walkFlingEnabled or walkFlingTaskToken ~= taskToken then break end
-						if rootPart.Parent then
-							rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
-							moveOffset *= -1
-						end
-					else
-						local direction = getWalkFlingDirectionVector(rootPart)
-						if direction then
-							rootPart.Velocity = direction * walkFlingPower
-							task.wait()
-							if not walkFlingEnabled or walkFlingTaskToken ~= taskToken then break end
-							if rootPart.Parent then
-								rootPart.Velocity = originalVelocity
-							end
-						end
-					end
+		walkFlingHeartbeat = RunService.Heartbeat:Connect(function()
+			local currentCharacter = player.Character
+			local rootPart = getRootUniversal(currentCharacter)
+			if not rootPart then
+				return
+			end
+
+			local originalVelocity = rootPart.Velocity
+			if walkFlingUseNormal then
+				rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
+				RunService.RenderStepped:Wait()
+				if rootPart.Parent then
+					rootPart.Velocity = originalVelocity
 				end
+				RunService.Stepped:Wait()
+				if rootPart.Parent then
+					rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
+					moveOffset *= -1
+				end
+				return
+			end
+
+			local direction = getWalkFlingDirectionVector(rootPart)
+			if not direction then
+				return
+			end
+
+			rootPart.Velocity = direction * walkFlingPower
+			RunService.RenderStepped:Wait()
+			if rootPart.Parent then
+				rootPart.Velocity = originalVelocity
 			end
 		end)
 	else
@@ -926,6 +933,9 @@ function setWalkFlingEnabled(enabled)
 end
 
 function setAuraFlingEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return auraFlingEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not auraFlingEnabled or enabled == true
 	auraFlingEnabled = nextState
 	auraFlingTaskToken += 1
@@ -938,9 +948,7 @@ function setAuraFlingEnabled(enabled)
 
 	local taskToken = auraFlingTaskToken
 	task.spawn(function()
-		while true do
-			task.wait()
-			if not auraFlingEnabled or auraFlingTaskToken ~= taskToken then break end
+		while auraFlingEnabled and auraFlingTaskToken == taskToken do
 			local myCharacter = player.Character
 			local myRoot = getRootUniversal(myCharacter)
 			if myRoot then
@@ -971,6 +979,8 @@ function setAuraFlingEnabled(enabled)
 					myCharacter:PivotTo(savedCFrame)
 				end
 			end
+
+			task.wait()
 		end
 
 		if not auraFlingEnabled then
@@ -998,15 +1008,13 @@ function clickFlingTargetPlayer(targetPlayer)
 			local startedAt = tick()
 			resetGlobalFlingMotion()
 
-			while true do
-				task.wait()
-				if not clickFlingEnabled then break end
-				if tick() - startedAt >= 8 then break end
+			while clickFlingEnabled and tick() - startedAt < 8 do
 				targetRoot = getRootUniversal(targetPlayer and targetPlayer.Character)
 				if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
 					break
 				end
-				local dt = task.wait()
+
+				local dt = RunService.Heartbeat:Wait()
 				applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
 			end
 
@@ -1036,6 +1044,9 @@ function getPlayerFromClickedPart(part)
 end
 
 function setClickFlingEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return clickFlingEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not clickFlingEnabled or enabled == true
 	clickFlingEnabled = nextState
 
@@ -1065,42 +1076,44 @@ function setClickFlingEnabled(enabled)
 end
 
 function setFlingAllEnabled(enabled)
+	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
+		return flingAllEnabled and "ON" or "OFF"
+	end
 	local nextState = enabled == nil and not flingAllEnabled or enabled == true
 	flingAllEnabled = nextState
-	flingAllTaskToken += 1
+
+	if flingAllHeartbeat then
+		flingAllHeartbeat:Disconnect()
+		flingAllHeartbeat = nil
+	end
 
 	if flingAllEnabled then
 		resetGlobalFlingMotion()
-		local taskToken = flingAllTaskToken
-		task.spawn(function()
-			while true do
-				local dt = task.wait()
-				if not flingAllEnabled or flingAllTaskToken ~= taskToken then break end
-				local myRoot = getRootUniversal(player.Character)
-				if not myRoot then
-					continue
-				end
-
-				local targetRoots = {}
-				for _, otherPlayer in ipairs(getOtherPlayers()) do
-					local targetRoot = getRootUniversal(otherPlayer.Character)
-					if targetRoot then
-						targetRoots[#targetRoots + 1] = targetRoot
-					end
-				end
-
-				if #targetRoots == 0 then
-					continue
-				end
-
-				if flingTargetIndex > #targetRoots then
-					flingTargetIndex = 1
-				end
-
-				local targetRoot = targetRoots[flingTargetIndex]
-				applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
-				flingTargetIndex += 1
+		flingAllHeartbeat = RunService.Heartbeat:Connect(function(dt)
+			local myRoot = getRootUniversal(player.Character)
+			if not myRoot then
+				return
 			end
+
+			local targetRoots = {}
+			for _, otherPlayer in ipairs(getOtherPlayers()) do
+				local targetRoot = getRootUniversal(otherPlayer.Character)
+				if targetRoot then
+					targetRoots[#targetRoots + 1] = targetRoot
+				end
+			end
+
+			if #targetRoots == 0 then
+				return
+			end
+
+			if flingTargetIndex > #targetRoots then
+				flingTargetIndex = 1
+			end
+
+			local targetRoot = targetRoots[flingTargetIndex]
+			applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+			flingTargetIndex += 1
 		end)
 	else
 		resetGlobalFlingMotion()
@@ -1238,6 +1251,9 @@ local function updateMovement()
 end
 
 local function toggleSpeed(nextState)
+	if (nextState == nil or nextState == true) and isSafeZoneBlocking() then
+		return active and "ON" or "OFF"
+	end
 	if nextState == nil then
 		active = not active
 	else
@@ -1247,9 +1263,8 @@ local function toggleSpeed(nextState)
 	if active and not speedLoopRunning then
 		speedLoopRunning = true
 		task.spawn(function()
-			while true do
+			while active do
 				task.wait()
-				if not active then break end
 				updateMovement()
 			end
 			speedLoopRunning = false
@@ -1445,6 +1460,9 @@ function getSetBackTravelPosition(currentRoot, destination, step)
 end
 
 function startSetBackTravel()
+	if isSafeZoneBlocking() then
+		return false
+	end
 	local currentCharacter = player.Character
 	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 	if not currentRoot or not setBackSavedCFrame then
@@ -1589,6 +1607,9 @@ local function startSafeZoneTravel(destination, mode, onComplete)
 end
 
 function handleSetBackKeybind()
+	if isSafeZoneBlocking() then
+		return
+	end
 	if setBackTravelConn then
 		stopSetBackTravel()
 		return
@@ -1622,6 +1643,9 @@ function handleSetBackKeybind()
 end
 
 local function toggleFly(nextState)
+	if (nextState == nil or nextState == true) and isSafeZoneBlocking() then
+		return flying and "ON" or "OFF"
+	end
 	if nextState == nil then
 		flying = not flying
 	else
@@ -1688,7 +1712,19 @@ local function handleCharacterDeath()
 	manualAttackTpTarget = nil
 	manualAttackTpPlayer = nil
 	pendingTeleportToSelectedPlayer = false
+	if walkFlingHeartbeat then
+		walkFlingHeartbeat:Disconnect()
+		walkFlingHeartbeat = nil
+	end
+	if flingAllHeartbeat then
+		flingAllHeartbeat:Disconnect()
+		flingAllHeartbeat = nil
+	end
 	flingEnabled = false
+	walkFlingEnabled = false
+	auraFlingEnabled = false
+	clickFlingEnabled = false
+	flingAllEnabled = false
 	if syncModelDropdownSelectionToManualTarget then
 		syncModelDropdownSelectionToManualTarget()
 	end
@@ -1700,72 +1736,7 @@ local function handleCharacterDeath()
 	syncTargetActionControls()
 end
 
--- ── Trash / Trashcan blocker ─────────────────────────────────────────────────
--- Checks whether a target model should be blocked from attack TP because
--- it currently holds a Trashcan (HasTrashcan attribute on local player's char)
--- OR the target is standing inside a Trashcan that still has contents.
-
-local function getTrashFolder()
-	local map = Workspace:FindFirstChild("Map")
-	return map and map:FindFirstChild("Trash")
-end
-
--- Returns true if the given Trashcan model has any MeshPart or Part inside
--- (meaning it is occupied / full) and is not marked Broken.
-local function trashcanIsOccupied(trashcanModel)
-	if not trashcanModel then return false end
-	if trashcanModel:GetAttribute("Broken") == true then return false end
-	for _, child in ipairs(trashcanModel:GetDescendants()) do
-		if child:IsA("MeshPart") or child:IsA("Part") then
-			-- Skip the trashcan's own structural parts — we look for *contents*
-			-- by checking if the part's parent is NOT the trashcan itself (i.e. nested deeper)
-			if child.Parent ~= trashcanModel then
-				return true
-			end
-		end
-	end
-	return false
-end
-
--- Returns the root part of a trashcan model (any BasePart or Model PrimaryPart)
-local function getTrashcanRoot(trashcanModel)
-	if not trashcanModel then return nil end
-	return trashcanModel.PrimaryPart
-		or trashcanModel:FindFirstChildWhichIsA("BasePart")
-end
-
--- Returns true if targetModel is within distance 14 of any occupied trashcan,
--- OR if the local player's character has the HasTrashcan attribute set to true.
-local function isBlockedByTrash(targetModel)
-	-- 1. Local player carrying trash → block all attack TP
-	local localChar = player.Character
-	if localChar and localChar:GetAttribute("HasTrashcan") == true then
-		return true
-	end
-
-	-- 2. Target is near / inside an occupied trashcan
-	local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
-	if not targetRoot then return false end
-
-	local trashFolder = getTrashFolder()
-	if not trashFolder then return false end
-
-	for _, trashcan in ipairs(trashFolder:GetChildren()) do
-		if not trashcan:IsA("Model") then continue end
-		if trashcan:GetAttribute("Broken") == true then continue end
-		if not trashcanIsOccupied(trashcan) then continue end
-
-		local trashRoot = getTrashcanRoot(trashcan)
-		if trashRoot and (trashRoot.Position - targetRoot.Position).Magnitude <= 14 then
-			return true
-		end
-	end
-
-	return false
-end
--- ─────────────────────────────────────────────────────────────────────────────
-
-local function isValidCamLockTarget(model)
+function isValidCamLockTarget(model)
 	if not model or model == char then
 		return false
 	end
@@ -1775,25 +1746,61 @@ local function isValidCamLockTarget(model)
 	return modelHumanoid and modelHumanoid.Health > 0 and modelRoot ~= nil
 end
 
-local function isValidAttackTpTarget(model)
+function isValidAttackTpTarget(model)
 	if not isValidCamLockTarget(model) then
 		return false
 	end
 
 	local modelRoot = model:FindFirstChild("HumanoidRootPart")
-	if not modelRoot or modelRoot.Anchored then
-		return false
-	end
-
-	-- Block if target is in/near an occupied trashcan, or local player has trash
-	if isBlockedByTrash(model) then
-		return false
-	end
-
-	return true
+	return modelRoot ~= nil and not modelRoot.Anchored
 end
 
-local function getTrackedPlayerTargetModel(targetPlayer)
+_G.lastValidTrashTime = 0
+
+function isTpBlocked()
+	local character = player.Character
+	if not character then
+		return false
+	end
+
+	if character:GetAttribute("HasTrashcan") then
+		return true
+	end
+
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return false
+	end
+
+	local map = Workspace:FindFirstChild("Map")
+	local trashFolder = map and map:FindFirstChild("Trash")
+	local currentlyNearValid = false
+
+	if trashFolder then
+		for _, trashcan in ipairs(trashFolder:GetChildren()) do
+			if trashcan:IsA("Model") and not trashcan:GetAttribute("Broken") then
+				local part = trashcan:FindFirstChildWhichIsA("BasePart", true)
+				if part and (part.Position - rootPart.Position).Magnitude < 9.5 then
+					currentlyNearValid = true
+					break
+				end
+			end
+		end
+	end
+
+	if currentlyNearValid then
+		_G.lastValidTrashTime = tick()
+		return true
+	end
+
+	if tick() - (_G.lastValidTrashTime or 0) < 1.1 then
+		return true
+	end
+
+	return false
+end
+
+function getTrackedPlayerTargetModel(targetPlayer)
 	if not targetPlayer or targetPlayer == player or targetPlayer.Parent ~= Players then
 		return nil
 	end
@@ -1949,13 +1956,10 @@ local function getClosestAliveTarget()
 			local model = instance.Parent
 			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
 			if model and model ~= currentCharacter and modelRoot and not modelRoot.Anchored then
-				-- Skip models blocked by trash
-				if not isBlockedByTrash(model) then
-					local distance = (modelRoot.Position - currentRoot.Position).Magnitude
-					if distance < bestDistance then
-						bestDistance = distance
-						bestModel = model
-					end
+				local distance = (modelRoot.Position - currentRoot.Position).Magnitude
+				if distance < bestDistance then
+					bestDistance = distance
+					bestModel = model
 				end
 			end
 		end
@@ -2036,7 +2040,10 @@ local function getAppliedFlySpeed()
 end
 
 local function isAirborneHumanoid(modelHumanoid)
-	if not modelHumanoid then return false end
+	if not modelHumanoid then
+		return false
+	end
+
 	local state = modelHumanoid:GetState()
 	return state == Enum.HumanoidStateType.Freefall
 		or state == Enum.HumanoidStateType.Jumping
@@ -2044,81 +2051,42 @@ local function isAirborneHumanoid(modelHumanoid)
 		or state == Enum.HumanoidStateType.Flying
 		or state == Enum.HumanoidStateType.Physics
 		or state == Enum.HumanoidStateType.PlatformStanding
-		or state == Enum.HumanoidStateType.GettingUp
-		or state == Enum.HumanoidStateType.Ragdoll
 end
-
--- ─── UNIVERSAL ATTACK TP PLACEMENT ───────────────────────────────────────────
--- Works for: ground walk, run, jump, fall, fly, TP blink, ragdoll, any state.
--- Strategy:
---   1. Sample target's velocity (linear + angular) to predict where they'll be
---      in the next frame at server tick rate (~1/60s).
---   2. Pick a snap point that matches the target's height exactly — no float,
---      no clip — so the hit registers regardless of air/ground/fly state.
---   3. Orient the attacker to face the target so attacks land front-to-front.
--- ─────────────────────────────────────────────────────────────────────────────
-local SNAP_LEAD       = 1 / 60  -- one server frame of prediction
-local SNAP_OFFSET_Y   = 0       -- exact vertical match (0 = perfect body-center snap)
-local SNAP_HORIZONTAL = 0.55    -- distance in front of target (inside hitbox)
 
 local function getAttackTpPlacement(characterRoot, targetModel)
 	if not characterRoot or not targetModel then
 		return nil, nil
 	end
 
-	local targetRoot     = targetModel:FindFirstChild("HumanoidRootPart")
+	local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
 	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
 	if not targetRoot or not targetHumanoid or targetHumanoid.Health <= 0 then
 		return nil, nil
 	end
 
-	-- Current target velocity (both linear and from angular spin/ragdoll)
-	local linVel = targetRoot.AssemblyLinearVelocity
-	local angVel = targetRoot.AssemblyAngularVelocity
-
-	-- Predict one frame ahead to compensate for latency
-	local predictedPos = targetRoot.Position + linVel * SNAP_LEAD
-
-	-- If angular velocity is very high (ragdoll / fling) project its effect too
-	if angVel.Magnitude > 1 then
-		local axis  = angVel.Magnitude > 0.001 and angVel.Unit or Vector3.yAxis
-		local angle = angVel.Magnitude * SNAP_LEAD
-		local rot   = CFrame.fromAxisAngle(axis, angle)
-		-- offset the predicted pos slightly toward the spin direction
-		predictedPos = predictedPos + (rot * linVel) * SNAP_LEAD * 0.5
+	local characterHumanoid = characterRoot.Parent and characterRoot.Parent:FindFirstChildOfClass("Humanoid")
+	local useAirTracking = isAirborneHumanoid(targetHumanoid) or isAirborneHumanoid(characterHumanoid)
+	local targetVelocity = targetRoot.AssemblyLinearVelocity
+	
+	local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
+	local lead = targetVelocity * leadTime
+	if lead.Magnitude > attackTpMaxHorizontalLead then
+		lead = lead.Unit * attackTpMaxHorizontalLead
 	end
 
-	-- Direction to snap from: use target's look vector if moving slowly,
-	-- else use the velocity direction so we stay in front regardless of facing.
-	local horizVel = Vector3.new(linVel.X, 0, linVel.Z)
-	local snapDir
-	if horizVel.Magnitude > 0.8 then
-		snapDir = horizVel.Unit
-	else
-		local look = Vector3.new(targetRoot.CFrame.LookVector.X, 0, targetRoot.CFrame.LookVector.Z)
-		if look.Magnitude > 0.001 then
-			snapDir = look.Unit
-		else
-			-- fallback: approach from our direction
-			local diff = Vector3.new(
-				targetRoot.Position.X - characterRoot.Position.X,
-				0,
-				targetRoot.Position.Z - characterRoot.Position.Z
-			)
-			snapDir = diff.Magnitude > 0.001 and diff.Unit or Vector3.new(0, 0, -1)
-		end
-	end
+	local predictedTargetPosition = targetRoot.Position + lead
+	local followDirection = getHorizontalUnit(targetVelocity)
+		or getHorizontalUnit(targetRoot.CFrame.LookVector)
+		or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+		or Vector3.new(0, 0, -1)
+	
+	local behindDistance = useAirTracking and attackTpAirBehindDistance or attackTpBehindDistance
+	local verticalOffset = useAirTracking and attackTpAirVerticalOffset or attackTpGroundVerticalOffset
+	
+	local behindPosition = predictedTargetPosition - (followDirection * behindDistance) + Vector3.new(0, verticalOffset, 0)
+	local lookPosition = predictedTargetPosition + Vector3.new(0, verticalOffset * 0.35, 0)
 
-	-- Final snap position: land directly in front of (inside) the target hitbox
-	-- Y matches the target exactly regardless of air/ground/fly height
-	local snapPos = predictedPos
-		+ snapDir * SNAP_HORIZONTAL
-		+ Vector3.new(0, SNAP_OFFSET_Y, 0)
-
-	-- Face the target so any attack animation hits
-	local lookAt = CFrame.lookAt(snapPos, predictedPos, worldUpVector)
-
-	return lookAt, linVel
+	return CFrame.lookAt(behindPosition, lookPosition, worldUpVector), targetVelocity
 end
 
 local function getCamLockTarget()
@@ -2709,7 +2677,9 @@ local function OnCharacterAdded(Char)
 	usunPusteAccessory(Char)
 end
 if speaker.Character then
-	OnCharacterAdded(speaker.Character)
+	task.spawn(function()
+		OnCharacterAdded(speaker.Character)
+	end)
 end
 ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
 task.spawn(function()
@@ -2718,12 +2688,13 @@ task.spawn(function()
 		local char = speaker.Character
 		if not char then continue end
 		usunPusteAccessory(char)
+		usunPusteAccessory(char)
 	end
 end)
-do
+task.spawn(function()
     local RunService = game:GetService("RunService")
     local Players = game:GetService("Players")
-    RunService.Heartbeat:Connect(function()
+    local connection = RunService.Heartbeat:Connect(function()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= Players.LocalPlayer and player.Character then
                 for _, part in ipairs(player.Character:GetDescendants()) do
@@ -2737,11 +2708,12 @@ do
             end
         end
     end)
-end
+end)
 end
 local StayToggle = nil
 local DashToggle = nil
 task.spawn(function()
+    task.wait(0.2)
     local stayPos = nil
     local stayConn = nil
     local stayGyro = nil
@@ -2838,6 +2810,9 @@ end
     end
 
     local function setStayState(state)
+        if (state == nil or state == true) and isSafeZoneBlocking() then
+            return
+        end
         isActive = state == true
 
         local char = player.Character
@@ -2956,6 +2931,7 @@ end
     player.CharacterAdded:Connect(setupCharacter)
 end)
 task.spawn(function()
+    task.wait(0.3)
     local flingState = {
         localPlayer = Players.LocalPlayer,
         flingConn = nil,
@@ -3181,7 +3157,6 @@ task.spawn(function()
 end)
 print("=== ACTIVE ===")
 print("(-) " .. VOID_Y .. " (-)")
-
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
@@ -4104,7 +4079,7 @@ function Dropdown(data)
 	return dropdownControl
 end
 
-local dropdown = Dropdown
+dropdown = Dropdown
 
 local modelDropdownLookup = {}
 local modelDropdownControl = nil
@@ -4389,7 +4364,10 @@ toggleView = function(nextState)
 	return viewing and "ON" or "OFF"
 end
 
-local function teleportToSelectedTarget()
+function teleportToSelectedTarget()
+	if isSafeZoneBlocking() then
+		return
+	end
 	if not hasSelectedTargetOrPendingPlayer() then
 		return
 	end
@@ -4680,12 +4658,18 @@ _G["3tog_on_one_one_button"] = function(data)
 	}
 end
 
-local three_tog_on_one_one_button = _G["3tog_on_one_one_button"]
+three_tog_on_one_one_button = _G["3tog_on_one_one_button"]
 
 _G["4tog_on_one_frame"] = function(data)
 	data = data or {}
 
 	local titleText = tostring(data.title or "Fling")
+	local saveKeys = {
+		tostring(data.saveKey1 or ""),
+		tostring(data.saveKey2 or ""),
+		tostring(data.saveKey3 or ""),
+		tostring(data.saveKey4 or ""),
+	}
 	local names = {
 		tostring(data.name1 or "One"),
 		tostring(data.name2 or "Two"),
@@ -4704,6 +4688,13 @@ _G["4tog_on_one_frame"] = function(data)
 		data.default3 == true,
 		data.default4 == true,
 	}
+
+	for index = 1, 4 do
+		local saveKey = saveKeys[index]
+		if saveKey ~= "" and type(controlSaveData[saveKey]) == "boolean" then
+			defaults[index] = controlSaveData[saveKey]
+		end
+	end
 
 	local holder = makeControlFrame(76)
 	holder.Parent = uiX
@@ -4740,7 +4731,7 @@ _G["4tog_on_one_frame"] = function(data)
 	rowLayout.Padding = UDim.new(0, 6)
 	rowLayout.Parent = rowFrame
 
-	local function createToggle(text, initialState, callback)
+	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
 		button.BackgroundTransparency = 0.06
 		button.BorderSizePixel = 0
@@ -4775,6 +4766,10 @@ _G["4tog_on_one_frame"] = function(data)
 		function control.SetValue(nextState, suppressCallback)
 			enabled = nextState == true
 			render()
+			if saveKey ~= "" then
+				controlSaveData[saveKey] = enabled
+				saveSliderSaveData()
+			end
 			if not suppressCallback and callback then
 				callback(enabled)
 			end
@@ -4794,7 +4789,7 @@ _G["4tog_on_one_frame"] = function(data)
 
 	local controls = {}
 	for index = 1, 4 do
-		controls[index] = createToggle(names[index], defaults[index], callbacks[index])
+		controls[index] = createToggle(names[index], defaults[index], callbacks[index], saveKeys[index])
 	end
 
 	return {
@@ -4806,29 +4801,49 @@ _G["4tog_on_one_frame"] = function(data)
 	}
 end
 
-local four_tog_on_one_frame = _G["4tog_on_one_frame"]
+four_tog_on_one_frame = _G["4tog_on_one_frame"]
 
-_G["3tog_on_one_frame"] = function(data)
+_G["5tog_on_one_frame"] = function(data)
 	data = data or {}
 
-	local titleText = tostring(data.title or "Toggles")
+	local titleText = tostring(data.title or "Overlay")
+	local saveKeys = {
+		tostring(data.saveKey1 or ""),
+		tostring(data.saveKey2 or ""),
+		tostring(data.saveKey3 or ""),
+		tostring(data.saveKey4 or ""),
+		tostring(data.saveKey5 or ""),
+	}
 	local names = {
 		tostring(data.name1 or "One"),
 		tostring(data.name2 or "Two"),
 		tostring(data.name3 or "Three"),
+		tostring(data.name4 or "Four"),
+		tostring(data.name5 or "Five"),
 	}
 	local callbacks = {
 		data.fun1,
 		data.fun2,
 		data.fun3,
+		data.fun4,
+		data.fun5,
 	}
 	local defaults = {
 		data.default1 == true,
 		data.default2 == true,
 		data.default3 == true,
+		data.default4 == true,
+		data.default5 == true,
 	}
 
-	local holder = makeControlFrame(76)
+	for index = 1, 5 do
+		local saveKey = saveKeys[index]
+		if saveKey ~= "" and type(controlSaveData[saveKey]) == "boolean" then
+			defaults[index] = controlSaveData[saveKey]
+		end
+	end
+
+	local holder = makeControlFrame(82)
 	holder.Parent = uiX
 
 	local titleLabel = Instance.new("TextLabel")
@@ -4852,22 +4867,22 @@ _G["3tog_on_one_frame"] = function(data)
 
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
-	rowFrame.Position = UDim2.new(0, 10, 0, 32)
-	rowFrame.Size = UDim2.new(1, -20, 0, 32)
+	rowFrame.Position = UDim2.new(0, 8, 0, 34)
+	rowFrame.Size = UDim2.new(1, -16, 0, 34)
 	rowFrame.Parent = holder
 
 	local rowLayout = Instance.new("UIListLayout")
 	rowLayout.FillDirection = Enum.FillDirection.Horizontal
 	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	rowLayout.Padding = UDim.new(0, 6)
+	rowLayout.Padding = UDim.new(0, 4)
 	rowLayout.Parent = rowFrame
 
-	local function createToggle(text, initialState, callback)
+	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
 		button.BackgroundTransparency = 0.06
 		button.BorderSizePixel = 0
-		button.Size = UDim2.new(1 / 3, -5, 1, 0)
+		button.Size = UDim2.new(0.2, -4, 1, 0)
 		button.AutoButtonColor = false
 		button.Font = Enum.Font.GothamBold
 		button.Text = tostring(text)
@@ -4882,22 +4897,25 @@ _G["3tog_on_one_frame"] = function(data)
 		corner.Parent = button
 
 		local constraint = Instance.new("UITextSizeConstraint")
-		constraint.MinTextSize = 10
-		constraint.MaxTextSize = 13
+		constraint.MinTextSize = 9
+		constraint.MaxTextSize = 12
 		constraint.Parent = button
 
 		local enabled = initialState == true
+		local control = {}
 
 		local function render()
 			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
 			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
 		end
 
-		local control = {}
-
 		function control.SetValue(nextState, suppressCallback)
 			enabled = nextState == true
 			render()
+			if saveKey ~= "" then
+				controlSaveData[saveKey] = enabled
+				saveSliderSaveData()
+			end
 			if not suppressCallback and callback then
 				callback(enabled)
 			end
@@ -4916,8 +4934,8 @@ _G["3tog_on_one_frame"] = function(data)
 	end
 
 	local controls = {}
-	for index = 1, 3 do
-		controls[index] = createToggle(names[index], defaults[index], callbacks[index])
+	for index = 1, 5 do
+		controls[index] = createToggle(names[index], defaults[index], callbacks[index], saveKeys[index])
 	end
 
 	return {
@@ -4925,126 +4943,12 @@ _G["3tog_on_one_frame"] = function(data)
 		First = controls[1],
 		Second = controls[2],
 		Third = controls[3],
+		Fourth = controls[4],
+		Fifth = controls[5],
 	}
 end
 
-local three_tog_on_one_frame = _G["3tog_on_one_frame"]
-
-_G["2tog_on_one_frame"] = function(data)
-	data = data or {}
-
-	local titleText = tostring(data.title or "Toggles")
-	local names = {
-		tostring(data.name1 or "One"),
-		tostring(data.name2 or "Two"),
-	}
-	local callbacks = {
-		data.fun1,
-		data.fun2,
-	}
-	local defaults = {
-		data.default1 == true,
-		data.default2 == true,
-	}
-
-	local holder = makeControlFrame(76)
-	holder.Parent = uiX
-
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.Position = UDim2.new(0, 16, 0, 8)
-	titleLabel.Size = UDim2.new(1, -32, 0, 18)
-	titleLabel.Font = Enum.Font.GothamBold
-	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
-	titleLabel.TextWrapped = true
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	titleLabel.Parent = holder
-
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
-
-	local rowFrame = Instance.new("Frame")
-	rowFrame.BackgroundTransparency = 1
-	rowFrame.Position = UDim2.new(0, 10, 0, 32)
-	rowFrame.Size = UDim2.new(1, -20, 0, 32)
-	rowFrame.Parent = holder
-
-	local rowLayout = Instance.new("UIListLayout")
-	rowLayout.FillDirection = Enum.FillDirection.Horizontal
-	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	rowLayout.Padding = UDim.new(0, 6)
-	rowLayout.Parent = rowFrame
-
-	local function createToggle(text, initialState, callback)
-		local button = Instance.new("TextButton")
-		button.BackgroundTransparency = 0.06
-		button.BorderSizePixel = 0
-		button.Size = UDim2.new(0.5, -5, 1, 0)
-		button.AutoButtonColor = false
-		button.Font = Enum.Font.GothamBold
-		button.Text = tostring(text)
-		button.TextStrokeTransparency = 0.15
-		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-		button.TextScaled = true
-		button.TextWrapped = true
-		button.Parent = rowFrame
-
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 10)
-		corner.Parent = button
-
-		local constraint = Instance.new("UITextSizeConstraint")
-		constraint.MinTextSize = 10
-		constraint.MaxTextSize = 13
-		constraint.Parent = button
-
-		local enabled = initialState == true
-
-		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
-		end
-
-		local control = {}
-
-		function control.SetValue(nextState, suppressCallback)
-			enabled = nextState == true
-			render()
-			if not suppressCallback and callback then
-				callback(enabled)
-			end
-		end
-
-		function control.GetValue()
-			return enabled
-		end
-
-		button.MouseButton1Click:Connect(function()
-			control.SetValue(not enabled)
-		end)
-
-		render()
-		return control
-	end
-
-	local firstControl = createToggle(names[1], defaults[1], callbacks[1])
-	local secondControl = createToggle(names[2], defaults[2], callbacks[2])
-
-	return {
-		Frame = holder,
-		First = firstControl,
-		Second = secondControl,
-	}
-end
-
-local two_tog_on_one_frame = _G["2tog_on_one_frame"]
+five_tog_on_one_frame = _G["5tog_on_one_frame"]
 
 _G["2tog_on_one_button"] = function(data)
 	data = data or {}
@@ -5210,7 +5114,7 @@ _G["2tog_on_one_button"] = function(data)
 	}
 end
 
-local two_tog_on_one_button = _G["2tog_on_one_button"]
+two_tog_on_one_button = _G["2tog_on_one_button"]
 
 function button(data)
 	data = data or {}
@@ -5677,663 +5581,392 @@ safeZone.toggleControl = tog({
 })
 safeZone.toggleControl.Frame.LayoutOrder = 10000
 
-local NothingXEsp = {
-	GuiName = "NOTHING_X-0011",
-	BillboardSize = Vector2.new(200, 80),
-	ClassColors = {
-		["Bald"] = Color3.fromRGB(220, 220, 220),
-		["Hunter"] = Color3.fromRGB(60, 170, 255),
-		["Monster"] = Color3.fromRGB(230, 60, 90),
-		["Cyborg"] = Color3.fromRGB(110, 230, 140),
-		["Ninja"] = Color3.fromRGB(180, 110, 240),
-		["Batter"] = Color3.fromRGB(255, 170, 80),
-		["Blade"] = Color3.fromRGB(240, 220, 100),
-		["Esper"] = Color3.fromRGB(255, 130, 220),
-		["Purple"] = Color3.fromRGB(220, 100, 255),
-		["Tech"] = Color3.fromRGB(80, 240, 230),
-		["KJ"] = Color3.fromRGB(255, 90, 90),
-	},
-	State = {
-		gui = nil,
-		frames = {},
-		esp = {},
-		cons = {},
-		charCons = {},
-		attributeCons = {},
-		heartbeat = nil,
-		billboardTimer = 0,
-	},
-	Toggles = {
-		Ult = nil,
-		Class = nil,
-		DetectUlt = nil,
-		Name = nil,
-		HP = nil,
-	},
-}
+local function initPlayerOverlayUi()
+	local espOverlayConfig = {
+		showCharacter = false,
+		showUltimate = false,
+		showHp = false,
+		showEsp = false,
+	}
+	local espOverlayState = {}
+	local ESP_BILLBOARD_NAME = "NOTHING_X_OverlayBillboard"
+	local ESP_HIGHLIGHT_NAME = "NOTHING_X_UltDetect"
+	local TextService = game:GetService("TextService")
+	local BILLBOARD_MIN_WIDTH = 72
+	local BILLBOARD_PADDING_TOP = 5
+	local BILLBOARD_PADDING_BOTTOM = 5
+	local BILLBOARD_PADDING_LEFT = 6
+	local BILLBOARD_PADDING_RIGHT = 6
+	local BILLBOARD_LINE_HEIGHT = 16
+	local BILLBOARD_ITEM_PADDING = 4
 
-function NothingXEsp:FitText(text, maxLen)
-	local value = tostring(text or "")
-	local limit = maxLen or 18
-	if #value <= limit then
-		return value
-	end
-	if limit <= 3 then
-		return value:sub(1, limit)
-	end
-	return value:sub(1, limit - 3) .. "..."
-end
-
-function NothingXEsp:GetClassColor(name)
-	return self.ClassColors[name] or Color3.fromRGB(200, 200, 200)
-end
-
-function NothingXEsp:GetToggleValue(key)
-	local toggle = self.Toggles[key]
-	return toggle and toggle.GetValue and toggle:GetValue() or false
-end
-
-function NothingXEsp:EnsureGui()
-	local state = self.State
-	if state.gui and state.gui.Parent then
-		return state.gui
-	end
-
-	local oldGui = CoreGui:FindFirstChild(self.GuiName)
-	if oldGui then
-		oldGui:Destroy()
-	end
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = self.GuiName
-	gui.IgnoreGuiInset = true
-	gui.ResetOnSpawn = false
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.DisplayOrder = 9999998
-	gui.Parent = CoreGui
-	state.gui = gui
-	return gui
-end
-
-function NothingXEsp:RemoveBillboard(targetPlayer)
-	local frame = self.State.frames[targetPlayer]
-	if frame then
-		frame:Destroy()
-		self.State.frames[targetPlayer] = nil
-	end
-	-- Also clean up any old head-parented billboards left from earlier sessions
-	local character = targetPlayer and targetPlayer.Character
-	local head = character and character:FindFirstChild("Head")
-	if head then
-		local name = "CombinedInfoBB_" .. tostring(targetPlayer.UserId)
-		for _, child in ipairs(head:GetChildren()) do
-			if child:IsA("BillboardGui") and child.Name == name then
-				child:Destroy()
-			end
+	local function clampPercent(value)
+		local numericValue = tonumber(value) or 0
+		if numericValue ~= numericValue then
+			numericValue = 0
 		end
-	end
-end
-
-function NothingXEsp:CreateLabel(parent, name, font)
-	local label = Instance.new("TextLabel")
-	label.Name = name
-	label.Size = UDim2.new(1, 0, 0, 15)
-	label.BackgroundTransparency = 1
-	label.Font = font
-	label.TextSize = 13
-	label.TextScaled = false
-	label.TextWrapped = false
-	label.TextTruncate = Enum.TextTruncate.AtEnd
-	label.TextXAlignment = Enum.TextXAlignment.Center
-	label.TextYAlignment = Enum.TextYAlignment.Center
-	label.TextStrokeTransparency = 0.5
-	label.TextStrokeColor3 = Color3.new(0, 0, 0)
-	label.ZIndex = 51
-	label.Visible = false
-	label.Parent = parent
-	return label
-end
-
-function NothingXEsp:EnsureBillboard(targetPlayer)
-	local character = targetPlayer.Character
-	local head = character and character:FindFirstChild("Head")
-	if not head then
-		return nil
+		return math.clamp(math.floor(numericValue + 0.5), 0, 999)
 	end
 
-	local gui = self:EnsureGui()
-	local billboard = self.State.frames[targetPlayer]
+	local function getCharacterNameColor(characterName)
+		if tostring(characterName or "") == "" then
+			return Color3.fromRGB(255, 255, 255)
+		end
+		return Color3.fromRGB(255, 0, 0)
+	end
 
-	-- Reuse if still valid and still adorning correct head
-	if billboard and billboard.Parent == gui and billboard.Adornee == head then
+	local function getUltimateColor(ultimatePercent)
+		local value = clampPercent(ultimatePercent)
+		if value <= 0 then
+			return Color3.fromRGB(255, 255, 0)
+		end
+		if value >= 100 then
+			return Color3.fromRGB(255, 0, 0)
+		end
+		return Color3.fromRGB(255, 165, 0)
+	end
+
+	local function getHpColor(hpPercent)
+		local value = clampPercent(hpPercent)
+		if value <= 0 then
+			return Color3.fromRGB(255, 0, 0)
+		end
+		if value >= 100 then
+			return Color3.fromRGB(0, 255, 0)
+		end
+		if value >= 50 then
+			return Color3.fromRGB(255, 165, 0)
+		end
+		return Color3.fromRGB(255, 255, 0)
+	end
+
+	local function getUltDetectColor(isUlted)
+		if isUlted then
+			return Color3.fromRGB(255, 165, 0)
+		end
+		return Color3.fromRGB(170, 170, 170)
+	end
+
+	local function createBillboardLine(parent, name, defaultColor)
+		local line = Instance.new("TextLabel")
+		line.Name = name
+		line.BackgroundTransparency = 1
+		line.Size = UDim2.fromOffset(0, BILLBOARD_LINE_HEIGHT)
+		line.Font = Enum.Font.GothamBold
+		line.Text = ""
+		line.TextColor3 = defaultColor or Color3.fromRGB(255, 255, 255)
+		line.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		line.TextStrokeTransparency = 0
+		line.TextScaled = false
+		line.TextSize = 14
+		line.TextWrapped = false
+		line.TextXAlignment = Enum.TextXAlignment.Left
+		line.TextYAlignment = Enum.TextYAlignment.Center
+		line.Visible = false
+		line.Parent = parent
+		return line
+	end
+
+	local function ensureOverlayBillboard(model)
+		local head = model and model:FindFirstChild("Head")
+		if not head then
+			return nil
+		end
+
+		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
+		if billboard and billboard:IsA("BillboardGui") then
+			return billboard
+		end
+
+		if billboard then
+			billboard:Destroy()
+		end
+
+		billboard = Instance.new("BillboardGui")
+		billboard.Name = ESP_BILLBOARD_NAME
+		billboard.Adornee = head
+		billboard.AlwaysOnTop = true
+		billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
+		billboard.Size = UDim2.fromOffset(BILLBOARD_MIN_WIDTH, 0)
+		billboard.MaxDistance = 2500
+		billboard.Parent = model
+
+		local frame = Instance.new("Frame")
+		frame.Name = "Root"
+		frame.Size = UDim2.new(1, 0, 0, 0)
+		frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		frame.BackgroundTransparency = 0.35
+		frame.BorderSizePixel = 0
+		frame.Parent = billboard
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 10)
+		corner.Parent = frame
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 0, 0)
+		stroke.Thickness = 1.4
+		stroke.Transparency = 0.1
+		stroke.Parent = frame
+
+		local padding = Instance.new("UIPadding")
+		padding.PaddingLeft = UDim.new(0, 6)
+		padding.PaddingRight = UDim.new(0, 6)
+		padding.PaddingTop = UDim.new(0, 5)
+		padding.PaddingBottom = UDim.new(0, 5)
+		padding.Parent = frame
+
+		local list = Instance.new("UIListLayout")
+		list.Padding = UDim.new(0, BILLBOARD_ITEM_PADDING)
+		list.FillDirection = Enum.FillDirection.Horizontal
+		list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		list.VerticalAlignment = Enum.VerticalAlignment.Center
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.Parent = frame
+
+		createBillboardLine(frame, "HpLine").LayoutOrder = 1
+		createBillboardLine(frame, "SepOne", Color3.fromRGB(255, 0, 0)).LayoutOrder = 2
+		createBillboardLine(frame, "CharacterLine").LayoutOrder = 3
+		createBillboardLine(frame, "SepTwo", Color3.fromRGB(255, 0, 0)).LayoutOrder = 4
+		createBillboardLine(frame, "UltimateLine").LayoutOrder = 5
+
 		return billboard
 	end
 
-	-- Destroy stale billboard (could be parented anywhere)
-	if billboard then
-		billboard:Destroy()
-		self.State.frames[targetPlayer] = nil
-	end
-
-	-- Also destroy any leftover billboard that may have been parented to head in older versions
-	for _, child in ipairs(head:GetChildren()) do
-		if child:IsA("BillboardGui") and child.Name == ("CombinedInfoBB_" .. tostring(targetPlayer.UserId)) then
-			child:Destroy()
+	local function ensureHighlight(model, forceRecreate, startEnabled)
+		local highlight = model and model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+		if highlight and not highlight:IsA("Highlight") then
+			highlight:Destroy()
+			highlight = nil
 		end
-	end
 
-	billboard = Instance.new("BillboardGui")
-	billboard.Name = "CombinedInfoBB_" .. tostring(targetPlayer.UserId)
-	billboard.Adornee = head
-	billboard.AlwaysOnTop = true
-	billboard.LightInfluence = 0
-	billboard.MaxDistance = 10000
-	billboard.ResetOnSpawn = false
-	-- SizeOffset keeps pixel size constant regardless of distance
-	billboard.Size = UDim2.fromOffset(self.BillboardSize.X, self.BillboardSize.Y)
-	billboard.SizeOffset = Vector2.new(0, 0)
-	billboard.StudsOffsetWorldSpace = Vector3.new(0, 2.3 + (head.Size.Y * 0.5), 0)
-	billboard.Enabled = false
-	-- Parent to ScreenGui so it survives character respawn without duplicating
-	billboard.Parent = gui
-
-	local content = Instance.new("Frame")
-	content.Name = "Content"
-	content.AnchorPoint = Vector2.new(0.5, 0.5)
-	content.Position = UDim2.new(0.5, 0, 0.5, 0)
-	-- Content fills billboard exactly, so labels can never overflow
-	content.Size = UDim2.new(1, 0, 1, 0)
-	content.BackgroundColor3 = Color3.fromRGB(10, 0, 0)
-	content.BackgroundTransparency = 0.45
-	content.BorderSizePixel = 0
-	content.ClipsDescendants = true
-	content.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = content
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(220, 0, 0)
-	stroke.Thickness = 1.5
-	stroke.Transparency = 0.1
-	stroke.Parent = content
-
-	local gradient = Instance.new("UIGradient")
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(60, 0, 0)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
-	})
-	gradient.Rotation = 90
-	gradient.Parent = content
-
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 4)
-	padding.PaddingRight = UDim.new(0, 4)
-	padding.PaddingTop = UDim.new(0, 3)
-	padding.PaddingBottom = UDim.new(0, 3)
-	padding.Parent = content
-
-	-- UIListLayout stacks labels vertically so they never overlap or go outside
-	local layout = Instance.new("UIListLayout")
-	layout.Name = "LabelLayout"
-	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.VerticalAlignment = Enum.VerticalAlignment.Center
-	layout.Padding = UDim.new(0, 1)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = content
-
-	self:CreateLabel(content, "ClassLabel", Enum.Font.GothamSemibold)
-	self:CreateLabel(content, "NameLabel", Enum.Font.GothamBold)
-	self:CreateLabel(content, "UltLabel", Enum.Font.GothamBold)
-	self:CreateLabel(content, "HpLabel", Enum.Font.GothamBold)
-
-	self.State.frames[targetPlayer] = billboard
-	return billboard
-end
-
-function NothingXEsp:ClearUltEsp(targetPlayer)
-	local hl = self.State.esp[targetPlayer]
-	if hl then
-		hl.Enabled = false
-	end
-end
-
-function NothingXEsp:CreateUltHighlight(character)
-	local highlight = Instance.new("Highlight")
-	highlight.Name = "NOTHING-X-ULT"
-	highlight.Adornee = character
-	highlight.FillColor = Color3.fromRGB(0, 0, 0)
-	highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-	highlight.FillTransparency = 0.6
-	highlight.OutlineTransparency = 0
-	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	highlight.Enabled = false
-	highlight.Parent = character
-	return highlight
-end
-
-function NothingXEsp:EnsureUltHighlight(targetPlayer)
-	local character = targetPlayer.Character
-	if not character then
-		return nil
-	end
-
-	local highlight = self.State.esp[targetPlayer]
-	if highlight and highlight.Parent ~= character then
-		highlight:Destroy()
-		highlight = nil
-	end
-
-	if not highlight then
-		local existing = character:FindFirstChild("NOTHING-X-ULT")
-		if existing and existing:IsA("Highlight") then
-			highlight = existing
-			highlight.Adornee = character
-		else
-			highlight = self:CreateUltHighlight(character)
+		if forceRecreate and highlight then
+			highlight:Destroy()
+			highlight = nil
 		end
-		self.State.esp[targetPlayer] = highlight
-	end
 
-	return highlight
-end
-
-function NothingXEsp:SyncUltEsp(targetPlayer)
-	if targetPlayer == player then
-		return
-	end
-
-	local highlight = self:EnsureUltHighlight(targetPlayer)
-	if not highlight then
-		return
-	end
-
-	if not self:GetToggleValue("DetectUlt") then
-		highlight.Enabled = false
-		return
-	end
-
-	local character = targetPlayer.Character
-	if not character or character:GetAttribute("Ulted") ~= true then
-		highlight.Enabled = false
-		return
-	end
-
-	-- Just enable it — no need to destroy and recreate
-	highlight.Enabled = true
-end
-
-function NothingXEsp:GetActiveInfo(targetPlayer)
-	local toggles = self.Toggles
-	return {
-		showName = toggles.Name and toggles.Name:GetValue() or false,
-		showHp = toggles.HP and toggles.HP:GetValue() or false,
-		showUlt = toggles.Ult and toggles.Ult:GetValue() or false,
-		showClass = toggles.Class and toggles.Class:GetValue() or false,
-	}
-end
-
-function NothingXEsp:HideBillboard(targetPlayer)
-	local frame = self.State.frames[targetPlayer]
-	if frame then
-		frame.Enabled = false
-	end
-end
-
-function NothingXEsp:ApplyLineLayout(activeLabels, content)
-	-- With UIListLayout, just set LayoutOrder so labels stack in the right order
-	-- and resize content height to fit exactly (clamped to billboard height)
-	local lineH = 15
-	local gap = 1
-	local padding = 6
-	local totalH = math.clamp(#activeLabels * lineH + math.max(0, #activeLabels - 1) * gap + padding, lineH + padding, self.BillboardSize.Y)
-	if content then
-		content.Size = UDim2.new(1, 0, 0, totalH)
-		content.Position = UDim2.new(0.5, 0, 0.5, 0)
-		content.AnchorPoint = Vector2.new(0.5, 0.5)
-	end
-	for i, label in ipairs(activeLabels) do
-		label.LayoutOrder = i
-	end
-end
-
-function NothingXEsp:UpdateBillboard(targetPlayer)
-	if targetPlayer == player then
-		return
-	end
-
-	local info = self:GetActiveInfo(targetPlayer)
-	if not info.showName and not info.showHp and not info.showUlt and not info.showClass then
-		self:RemoveBillboard(targetPlayer)
-		return
-	end
-
-	local character = targetPlayer.Character
-	local head = character and character:FindFirstChild("Head")
-	if not head then
-		self:RemoveBillboard(targetPlayer)
-		return
-	end
-
-	local camera = Workspace.CurrentCamera
-	if not camera then
-		self:RemoveBillboard(targetPlayer)
-		return
-	end
-
-	local headOffset = (head.Size.Y * 0.5) + 2.3
-	local worldPos = head.Position + Vector3.new(0, headOffset, 0)
-	local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
-	local root = character and getRootUniversal(character)
-	local myRoot = player.Character and getRootUniversal(player.Character)
-	local cameraDistance = (camera.CFrame.Position - worldPos).Magnitude
-	local targetDistance = root and myRoot and (myRoot.Position - root.Position).Magnitude or math.huge
-	if screenPos.Z <= 0 or not root or not myRoot or (not onScreen and cameraDistance > 25) or (targetDistance > 140 and cameraDistance > 180) then
-		self:HideBillboard(targetPlayer)
-		return
-	end
-
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then
-		self:HideBillboard(targetPlayer)
-		return
-	end
-
-	local frame = self:EnsureBillboard(targetPlayer)
-	if not frame then
-		return
-	end
-	-- Always sync adornee so respawn doesn't break it
-	frame.Adornee = head
-	frame.StudsOffsetWorldSpace = Vector3.new(0, 2.3 + (head.Size.Y * 0.5), 0)
-
-	local content = frame:FindFirstChild("Content")
-	local labels = {
-		Class = content and content:FindFirstChild("ClassLabel"),
-		Ult = content and content:FindFirstChild("UltLabel"),
-		Name = content and content:FindFirstChild("NameLabel"),
-		Hp = content and content:FindFirstChild("HpLabel"),
-	}
-	local activeLabels = {}
-
-	for _, label in pairs(labels) do
-		if label then
-			label.Visible = false
+		if highlight then
+			return highlight
 		end
+
+		highlight = Instance.new("Highlight")
+		highlight.Name = ESP_HIGHLIGHT_NAME
+		highlight.Adornee = model
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.FillColor = Color3.fromRGB(255, 0, 0)
+		highlight.FillTransparency = 0.6
+		highlight.OutlineTransparency = 0
+		highlight.OutlineColor = startEnabled and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(128, 128, 128)
+		highlight.Enabled = startEnabled == true
+		highlight.Parent = model
+		return highlight
 	end
 
-	local function addLabel(label, text, color, maxLen)
-		if not label then
+	local function measureTextWidth(text)
+		local textSize = TextService:GetTextSize(tostring(text or ""), 14, Enum.Font.GothamBold, Vector2.new(1000, BILLBOARD_LINE_HEIGHT))
+		return math.max(textSize.X + 2, 1)
+	end
+
+	local function updateLine(line, isVisible, text, color)
+		if not line then
+			return false
+		end
+		line.Visible = isVisible == true
+		if not isVisible then
+			line.Text = ""
+			line.Size = UDim2.new(1, 0, 0, 0)
+			return false
+		end
+		local displayText = tostring(text or "")
+		line.Text = displayText
+		line.TextColor3 = color
+		line.Size = UDim2.fromOffset(measureTextWidth(displayText), BILLBOARD_LINE_HEIGHT)
+		return true
+	end
+
+	local function updateBillboardVisibility(billboard, frame, visibleCount, contentWidth)
+		if not billboard or not frame then
 			return
 		end
-		label.Text = self:FitText(text, maxLen)
-		label.TextColor3 = color
-		label.Visible = true
-		activeLabels[#activeLabels + 1] = label
+		local hasVisibleRows = (visibleCount or 0) > 0
+		local contentHeight = hasVisibleRows and (BILLBOARD_PADDING_TOP + BILLBOARD_PADDING_BOTTOM + BILLBOARD_LINE_HEIGHT) or 0
+		local finalWidth = hasVisibleRows and math.max(BILLBOARD_MIN_WIDTH, (contentWidth or 0) + BILLBOARD_PADDING_LEFT + BILLBOARD_PADDING_RIGHT) or 0
+		billboard.Size = UDim2.fromOffset(finalWidth, contentHeight)
+		frame.Size = UDim2.new(1, 0, 0, contentHeight)
+		frame.Visible = hasVisibleRows
+		billboard.Enabled = hasVisibleRows
 	end
 
-	if info.showClass then
-		local className = tostring(targetPlayer:GetAttribute("Character") or "???")
-		addLabel(labels.Class, className, self:GetClassColor(className), 20)
-	end
-
-	if info.showUlt and character:GetAttribute("Ulted") ~= true then
-		local ultValue = math.clamp(math.round(tonumber(targetPlayer:GetAttribute("Ultimate") or 0) or 0), 0, 100)
-		addLabel(labels.Ult, string.format("%d%%", ultValue), Color3.fromRGB(255, 210, 90), 18)
-	end
-
-	if info.showName then
-		local isFriend = false
-		pcall(function()
-			isFriend = player:IsFriendsWith(targetPlayer.UserId)
-		end)
-		addLabel(labels.Name, targetPlayer.Name, isFriend and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(255, 255, 255), 20)
-	end
-
-	if info.showHp then
-		local hpPercent = 0
-		if humanoid.MaxHealth > 0 then
-			hpPercent = math.clamp(math.floor((humanoid.Health / humanoid.MaxHealth) * 100 + 0.5), 0, 100)
+	local function updatePlayerOverlay(targetPlayer)
+		if targetPlayer == player or targetPlayer.Parent ~= Players then
+			return
 		end
-		addLabel(labels.Hp, string.format("%d%% HP", hpPercent), Color3.fromRGB(255, 0, 0), 18)
-	end
 
-	if #activeLabels == 0 then
-		frame.Enabled = false
-		return
-	end
+		local model = getTrackedPlayerTargetModel(targetPlayer)
+		if not model then
+			return
+		end
 
-	self:ApplyLineLayout(activeLabels, content)
-	frame.Enabled = true
-end
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		local head = model:FindFirstChild("Head")
+		local rootPart = model:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not head or not rootPart then
+			return
+		end
 
-function NothingXEsp:DisconnectPlayer(targetPlayer)
-	local collections = {
-		self.State.cons[targetPlayer],
-		self.State.charCons[targetPlayer],
-	}
-	for _, entries in ipairs(collections) do
-		if entries then
-			for _, connection in ipairs(entries) do
-				if connection then
-					connection:Disconnect()
+		local attributes = {
+			Character = model:GetAttribute("Character"),
+			Ultimate = targetPlayer:GetAttribute("Ultimate"),
+			Ulted = model:GetAttribute("Ulted"),
+		}
+		local characterAttr = attributes.Character
+		local ultimateAttr = attributes.Ultimate
+		local hasUltimateAttr = ultimateAttr ~= nil
+		local ultedAttr = attributes.Ulted == true
+		local isBald = tostring(characterAttr or "") == "Bald"
+		local hpPercent = humanoid.MaxHealth > 0 and ((humanoid.Health / humanoid.MaxHealth) * 100) or 0
+		local hpValue = clampPercent(hpPercent)
+		local ultimateValue = clampPercent(ultimateAttr)
+		local billboard = ensureOverlayBillboard(model)
+		if billboard then
+			billboard.Adornee = head
+
+			local frame = billboard:FindFirstChild("Root")
+			local hpLine = frame and frame:FindFirstChild("HpLine")
+			local sepOne = frame and frame:FindFirstChild("SepOne")
+			local characterLine = frame and frame:FindFirstChild("CharacterLine")
+			local sepTwo = frame and frame:FindFirstChild("SepTwo")
+			local ultimateLine = frame and frame:FindFirstChild("UltimateLine")
+			local visibleCount = 0
+			local contentWidth = 0
+			local visibleGuiCount = 0
+			local hpVisible = updateLine(
+				hpLine,
+				espOverlayConfig.showHp,
+				string.format("%d%%", hpValue),
+				getHpColor(hpValue)
+			)
+			local characterVisible = updateLine(
+				characterLine,
+				espOverlayConfig.showCharacter and tostring(characterAttr or "") ~= "",
+				tostring(characterAttr or ""),
+				getCharacterNameColor(characterAttr)
+			)
+			local hideUltimateForBaldUlted = isBald and ultedAttr
+			local ultimateVisible = updateLine(
+				ultimateLine,
+				espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
+				string.format("%d%%", ultimateValue),
+				getUltimateColor(ultimateValue)
+			)
+
+			if hpVisible then
+				visibleCount = visibleCount + 1
+			end
+			if characterVisible then
+				visibleCount = visibleCount + 1
+			end
+			if ultimateVisible then
+				visibleCount = visibleCount + 1
+			end
+
+			local showSepOne = hpVisible and characterVisible
+			local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
+			updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 0, 0))
+			updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 0, 0))
+
+			for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine }) do
+				if guiObject and guiObject.Visible then
+					visibleGuiCount = visibleGuiCount + 1
+					contentWidth = contentWidth + guiObject.Size.X.Offset
 				end
 			end
+			if visibleGuiCount > 1 then
+				contentWidth = contentWidth + ((visibleGuiCount - 1) * BILLBOARD_ITEM_PADDING)
+			end
+
+			updateBillboardVisibility(billboard, frame, visibleCount, contentWidth)
 		end
-	end
-	self.State.cons[targetPlayer] = nil
-	self.State.charCons[targetPlayer] = nil
 
-	local attrConnection = self.State.attributeCons[targetPlayer]
-	if attrConnection then
-		attrConnection:Disconnect()
-		self.State.attributeCons[targetPlayer] = nil
-	end
-end
-
-function NothingXEsp:DisconnectCharacter(targetPlayer)
-	local entries = self.State.charCons[targetPlayer]
-	if entries then
-		for _, connection in ipairs(entries) do
-			if connection then
-				connection:Disconnect()
+		local state = espOverlayState[targetPlayer] or {}
+		local canUseHighlight = espOverlayConfig.showEsp and not isBald
+		if canUseHighlight then
+			local forceRecreate = ultedAttr and state.lastUlted ~= true
+			local highlight = ensureHighlight(model, forceRecreate, ultedAttr)
+			highlight.Enabled = ultedAttr
+			highlight.FillColor = Color3.fromRGB(255, 0, 0)
+			highlight.FillTransparency = 0.6
+			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			highlight.OutlineColor = ultedAttr and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(128, 128, 128)
+		else
+			local highlight = model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+			if highlight and highlight:IsA("Highlight") then
+				highlight.Enabled = false
+				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
 			end
 		end
-	end
-	self.State.charCons[targetPlayer] = nil
 
-	local attrConnection = self.State.attributeCons[targetPlayer]
-	if attrConnection then
-		attrConnection:Disconnect()
-		self.State.attributeCons[targetPlayer] = nil
-	end
-end
-
-function NothingXEsp:HookCharacter(targetPlayer, character)
-	if targetPlayer == player or not character then
-		return
+		state.lastUlted = ultedAttr
+		state.model = model
+		espOverlayState[targetPlayer] = state
 	end
 
-	self:DisconnectCharacter(targetPlayer)
-	self.State.charCons[targetPlayer] = {}
-
-	local oldAttr = self.State.attributeCons[targetPlayer]
-	if oldAttr then
-		oldAttr:Disconnect()
-	end
-	self.State.attributeCons[targetPlayer] = character:GetAttributeChangedSignal("Ulted"):Connect(function()
-		self:SyncUltEsp(targetPlayer)
-	end)
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		table.insert(self.State.charCons[targetPlayer], humanoid.HealthChanged:Connect(function()
-			self:UpdateBillboard(targetPlayer)
-		end))
-		table.insert(self.State.charCons[targetPlayer], humanoid.Died:Connect(function()
-			self:ClearUltEsp(targetPlayer)
-			self:UpdateBillboard(targetPlayer)
-		end))
-	end
-
-	task.defer(function()
-		self:UpdateBillboard(targetPlayer)
-		self:SyncUltEsp(targetPlayer)
-	end)
-end
-
-function NothingXEsp:SetupPlayer(targetPlayer)
-	if targetPlayer == player then
-		return
-	end
-
-	self:DisconnectPlayer(targetPlayer)
-	self.State.cons[targetPlayer] = {}
-	self.State.charCons[targetPlayer] = {}
-
-	table.insert(self.State.cons[targetPlayer], targetPlayer.CharacterAdded:Connect(function(character)
-		self:HookCharacter(targetPlayer, character)
-		self:QueueBillboardRefresh(targetPlayer)
-	end))
-	table.insert(self.State.cons[targetPlayer], targetPlayer:GetAttributeChangedSignal("Ultimate"):Connect(function()
-		self:UpdateBillboard(targetPlayer)
-	end))
-	table.insert(self.State.cons[targetPlayer], targetPlayer:GetAttributeChangedSignal("Character"):Connect(function()
-		self:UpdateBillboard(targetPlayer)
-	end))
-
-	if targetPlayer.Character then
-		self:HookCharacter(targetPlayer, targetPlayer.Character)
-	end
-	self:QueueBillboardRefresh(targetPlayer)
-end
-
-function NothingXEsp:CleanupPlayer(targetPlayer)
-	self:DisconnectPlayer(targetPlayer)
-	self:DisconnectCharacter(targetPlayer)
-	self:RemoveBillboard(targetPlayer)
-	local highlight = self.State.esp[targetPlayer]
-	if highlight then
-		highlight:Destroy()
-		self.State.esp[targetPlayer] = nil
-	end
- end
-
-function NothingXEsp:UpdateAll()
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		if targetPlayer ~= player then
-			self:UpdateBillboard(targetPlayer)
-			self:SyncUltEsp(targetPlayer)
-		end
-	end
-end
-
-function NothingXEsp:SyncHeartbeat()
-	local info = self:GetActiveInfo(player)
-	local enabled = info.showName or info.showHp or info.showUlt or info.showClass
-	if not enabled then
-		if self.State.heartbeat then
-			self.State.heartbeat:Disconnect()
-			self.State.heartbeat = nil
-		end
-		for targetPlayer, frame in pairs(self.State.frames) do
-			if frame then
-				frame.Enabled = false
-			end
-			if targetPlayer and targetPlayer.Parent == nil then
-				self:RemoveBillboard(targetPlayer)
+	local function cleanupPlayerOverlay(targetPlayer)
+		local state = espOverlayState[targetPlayer]
+		local model = state and state.model
+		if model and model.Parent then
+			local highlight = model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+			if highlight and highlight:IsA("Highlight") then
+				highlight.Enabled = false
+				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
 			end
 		end
-		return
+		espOverlayState[targetPlayer] = nil
 	end
 
-	if self.State.heartbeat then
-		return
-	end
-
-	self.State.billboardTimer = 0
-	-- Use Heartbeat (not RenderStepped) and throttle to ~20fps to avoid FPS drops
-	self.State.heartbeat = RunService.Heartbeat:Connect(function(dt)
-		if isSafeTeleportLocked() then
-			return
-		end
-		self.State.billboardTimer = self.State.billboardTimer + dt
-		if self.State.billboardTimer < 0.05 then -- ~20fps is plenty for ESP labels
-			return
-		end
-		self.State.billboardTimer = 0
-		-- Check toggles once, not inside UpdateAll per-player loop
-		local n = self:GetActiveInfo(player)
-		if not n.showName and not n.showHp and not n.showUlt and not n.showClass then
-			return
-		end
-		self:UpdateAll()
-	end)
-end
-
-function NothingXEsp:RefreshAll()
-	self:UpdateAll()
-	self:SyncHeartbeat()
-end
-
-function NothingXEsp:QueueBillboardRefresh(targetPlayer)
-	-- Defer once; the heartbeat loop will keep it updated after that
-	task.defer(function()
-		if targetPlayer and targetPlayer.Parent == Players then
-			self:UpdateBillboard(targetPlayer)
-		end
-	end)
-end
-
-function NothingXEsp:InitUi()
-	local mainToggles = _G["3tog_on_one_frame"]({
-		title = "ESP Main",
-		name1 = "Show Class",
-		name2 = "Show ULT%",
-		name3 = "ULT ESP",
-		default1 = false,
-		default2 = false,
-		default3 = false,
-		fun1 = function() self:RefreshAll() end,
-		fun2 = function() self:RefreshAll() end,
-		fun3 = function() self:RefreshAll() end,
+	_G["4tog_on_one_frame"]({
+		title = "Overlay",
+		name1 = "HP %",
+		name2 = "Character",
+		name3 = "ULT %",
+		name4 = "ULTED ESP",
+		saveKey1 = "Overlay4HP",
+		saveKey2 = "Overlay4Character",
+		saveKey3 = "Overlay4Ultimate",
+		saveKey4 = "Overlay4ESP",
+		default1 = espOverlayConfig.showHp,
+		default2 = espOverlayConfig.showCharacter,
+		default3 = espOverlayConfig.showUltimate,
+		default4 = espOverlayConfig.showEsp,
+		fun1 = function(enabled)
+			espOverlayConfig.showHp = enabled
+		end,
+		fun2 = function(enabled)
+			espOverlayConfig.showCharacter = enabled
+		end,
+		fun3 = function(enabled)
+			espOverlayConfig.showUltimate = enabled
+		end,
+		fun4 = function(enabled)
+			espOverlayConfig.showEsp = enabled
+		end,
 	})
-	self.Toggles.Class = mainToggles.First
-	self.Toggles.Ult = mainToggles.Second
-	self.Toggles.DetectUlt = mainToggles.Third
 
-	local infoToggles = _G["2tog_on_one_frame"]({
-		title = "ESP Info",
-		name1 = "Name",
-		name2 = "HP",
-		default1 = false,
-		default2 = false,
-		fun1 = function() self:RefreshAll() end,
-		fun2 = function() self:RefreshAll() end,
-	})
-	self.Toggles.Name = infoToggles.First
-	self.Toggles.HP = infoToggles.Second
-end
+	Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
 
-function NothingXEsp:Init()
-	self:InitUi()
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		self:SetupPlayer(targetPlayer)
-	end
-	Players.PlayerAdded:Connect(function(targetPlayer)
-		self:SetupPlayer(targetPlayer)
-	end)
-	Players.PlayerRemoving:Connect(function(targetPlayer)
-		self:CleanupPlayer(targetPlayer)
-	end)
-	task.defer(function()
-		self:RefreshAll()
+	task.spawn(function()
+		while screenGui.Parent do
+			for _, targetPlayer in ipairs(Players:GetPlayers()) do
+				if targetPlayer ~= player then
+					updatePlayerOverlay(targetPlayer)
+				end
+			end
+			task.wait(0.1)
+		end
 	end)
 end
 
-NothingXEsp:Init()
+task.spawn(initPlayerOverlayUi)
 
 parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
 syncFlingModeControls()
@@ -6581,102 +6214,106 @@ end)
 task.spawn(function()
 	while true do
 		task.wait()
-
-		if (viewing or autoTpEnabled or flingEnabled) and not hasSelectedTargetOrPendingPlayer() then
-			if viewing then
-				stopView()
+		task.spawn(function()
+			if isSafeZoneBlocking() then
+				return
 			end
-			autoTpEnabled = false
-			flingEnabled = false
-			syncTargetActionControls()
-		end
+			if (viewing or autoTpEnabled or flingEnabled) and not hasSelectedTargetOrPendingPlayer() then
+				if viewing then
+					stopView()
+				end
+				autoTpEnabled = false
+				flingEnabled = false
+				syncTargetActionControls()
+			end
 
-		if viewing and not isValidCamLockTarget(currentViewTarget) then
-			if currentViewPlayer and currentViewPlayer.Parent == Players then
-				local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
-				if isValidCamLockTarget(newViewTarget) then
-					currentViewTarget = newViewTarget
-					local newViewHumanoid = newViewTarget:FindFirstChildOfClass("Humanoid")
-					if newViewHumanoid and cam then
-						cam.CameraSubject = newViewHumanoid
+			if viewing and not isValidCamLockTarget(currentViewTarget) then
+				if currentViewPlayer and currentViewPlayer.Parent == Players then
+					local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
+					if isValidCamLockTarget(newViewTarget) then
+						currentViewTarget = newViewTarget
+						local newViewHumanoid = newViewTarget:FindFirstChildOfClass("Humanoid")
+						if newViewHumanoid and cam then
+							cam.CameraSubject = newViewHumanoid
+						end
+					else
+						stopView()
 					end
 				else
 					stopView()
 				end
-			else
-				stopView()
 			end
-		end
 
-		if not autoTpEnabled then
-			if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
-				teleportToSelectedTarget()
-			end
-		elseif not flingEnabled then
-			local character = player.Character
-			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-			if characterRoot then
-				local targetModel = resolveAttackTpTarget()
-				if isValidAttackTpTarget(targetModel) then
-					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
-					if targetCFrame then
-						characterRoot.CFrame = targetCFrame
-						characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
-						if pendingTeleportToSelectedPlayer then
+			if not autoTpEnabled then
+				if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+					teleportToSelectedTarget()
+				end
+			elseif not flingEnabled then
+				local character = player.Character
+				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+				if characterRoot then
+					local targetModel = resolveAttackTpTarget()
+					if isValidAttackTpTarget(targetModel) then
+						local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
+						if targetCFrame then
+							characterRoot.CFrame = targetCFrame
+							characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
+							if pendingTeleportToSelectedPlayer then
+								teleportToSelectedTarget()
+							end
+
+							if flying and bv and bg then
+								bv.Position = characterRoot.Position
+								bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+							end
+						elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(targetModel) then
 							teleportToSelectedTarget()
 						end
-
-						if flying and bv and bg then
-							bv.Position = characterRoot.Position
-							bg.CFrame = getRotationOnlyCFrame(targetCFrame)
-						end
-					elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(targetModel) then
-						teleportToSelectedTarget()
 					end
 				end
+			elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+				teleportToSelectedTarget()
 			end
-		elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
-			teleportToSelectedTarget()
-		end
 
-		if attackTpEnabled and attackTpHolding then
-			local character = player.Character
-			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-			if characterRoot then
-				if not manualAttackTpPlayer and manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
-					manualAttackTpTarget = nil
-					if syncModelDropdownSelectionToManualTarget then
-						syncModelDropdownSelectionToManualTarget()
-					end
-					syncTargetPickKeybindDisplay()
-					updateTargetDisplay()
-				end
-
-				if not isValidAttackTpTarget(attackTpTarget) then
-					attackTpTarget = nil
-				end
-
-				local preferredTarget = resolveAttackTpTarget()
-				if preferredTarget then
-					attackTpTarget = preferredTarget
-				end
-
-				if isValidAttackTpTarget(attackTpTarget) then
-					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
-					if targetCFrame and targetVelocity then
-						characterRoot.CFrame = targetCFrame
-						characterRoot.AssemblyLinearVelocity = targetVelocity
-
-						if flying and bv and bg then
-							bv.Position = characterRoot.Position
-							bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+			if attackTpEnabled and attackTpHolding then
+				local character = player.Character
+				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+				if characterRoot and not isTpBlocked() then
+					if not manualAttackTpPlayer and manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
+						manualAttackTpTarget = nil
+						if syncModelDropdownSelectionToManualTarget then
+							syncModelDropdownSelectionToManualTarget()
 						end
-					else
+						syncTargetPickKeybindDisplay()
+						updateTargetDisplay()
+					end
+
+					if not isValidAttackTpTarget(attackTpTarget) then
 						attackTpTarget = nil
 					end
+
+					local preferredTarget = resolveAttackTpTarget()
+					if preferredTarget then
+						attackTpTarget = preferredTarget
+					end
+
+					if isValidAttackTpTarget(attackTpTarget) then
+						local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
+						if targetCFrame and targetVelocity then
+							characterRoot.CFrame = targetCFrame
+							characterRoot.AssemblyLinearVelocity = targetVelocity
+
+							if flying and bv and bg then
+								bv.Position = characterRoot.Position
+								bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+							end
+						else
+							attackTpTarget = nil
+						end
+					end
 				end
 			end
-		end
+		end)
 	end
 end)
 
@@ -6780,7 +6417,7 @@ function startIntroUi()
 
 	local titlePulse = TweenService:Create(
 		topLabel,
-		TweenInfo.new(0.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 		{
 			TextColor3 = Color3.fromRGB(255, 90, 90),
 		}
@@ -6788,7 +6425,7 @@ function startIntroUi()
 
 	local subtitlePulse = TweenService:Create(
 		subtitleLabel,
-		TweenInfo.new(0.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 		{
 			TextColor3 = Color3.fromRGB(255, 90, 90),
 		}
@@ -6797,11 +6434,11 @@ function startIntroUi()
 	titlePulse:Play()
 	subtitlePulse:Play()
 
-	task.delay(1.6, function()
+	task.delay(3, function()
 		titlePulse:Cancel()
 		subtitlePulse:Cancel()
 
-		local fadeInfo = TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 		TweenService:Create(background, fadeInfo, {
 			BackgroundTransparency = 1,
@@ -6827,20 +6464,17 @@ function startIntroUi()
 			targetFrame.Visible = true
 			updateTargetDisplay()
 
-			-- Bounce-in effect
-			keybindFrame.Size = UDim2.fromScale(0.0, 0.0)
-			TweenService:Create(keybindFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Size = UDim2.fromScale(0.09, 0.24),
+			TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 				BackgroundTransparency = 0.5,
 			}):Play()
 
-			TweenService:Create(leftStroke, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TweenService:Create(leftStroke, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 				Transparency = 0.1,
 			}):Play()
 
 			TweenService:Create(
 				leftStroke,
-				TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+				TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 				{
 					Thickness = 5,
 					Transparency = 0.35,
