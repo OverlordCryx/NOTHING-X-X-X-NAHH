@@ -1,3 +1,63 @@
+task.spawn(function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+local tracked = {}
+local antiflingConnection
+local function applyAntiFling(character)
+    for _, v in ipairs(character:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+        end
+    end
+    character.DescendantAdded:Connect(function(v)
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+        end
+    end)
+end
+local function trackPlayer(player)
+    if player == localPlayer then return end
+    tracked[player] = true
+    local function onCharacter(char)
+        applyAntiFling(char)
+    end
+    if player.Character then
+        onCharacter(player.Character)
+    end
+    player.CharacterAdded:Connect(onCharacter)
+end
+local function untrackPlayer(player)
+    tracked[player] = nil
+end
+local function enableAntiFling()
+    for _, player in ipairs(Players:GetPlayers()) do
+        trackPlayer(player)
+    end
+    Players.PlayerAdded:Connect(trackPlayer)
+    Players.PlayerRemoving:Connect(untrackPlayer)
+    antiflingConnection = RunService.Stepped:Connect(function()
+        for player, _ in pairs(tracked) do
+            if player and player.Character then
+                for _, v in ipairs(player.Character:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        v.CanCollide = false
+                    end
+                end
+            end
+        end
+    end)
+end
+local function disableAntiFling()
+    if antiflingConnection then
+        antiflingConnection:Disconnect()
+        antiflingConnection = nil
+    end
+    tracked = {}
+end
+enableAntiFling()
+end)
+
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
