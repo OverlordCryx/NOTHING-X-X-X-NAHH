@@ -946,6 +946,26 @@ function setWalkFlingEnabled(enabled)
 				return
 			end
 
+			-- Safety Check: Don't fling if near unsafe players
+			local myPosition = rootPart.Position
+			local tooNearUnsafe = false
+			for _, otherPlayer in ipairs(getOtherPlayers()) do
+				local targetCharacter = otherPlayer.Character
+				local targetRoot = getRootUniversal(targetCharacter)
+				if targetRoot and (targetRoot.Position - myPosition).Magnitude < 15 then
+					if not isTargetSafe(targetCharacter) then
+						tooNearUnsafe = true
+						break
+					end
+				end
+			end
+
+			if tooNearUnsafe then
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				rootPart.AssemblyAngularVelocity = Vector3.zero
+				return
+			end
+
 			local originalVelocity = rootPart.Velocity
 			if walkFlingUseNormal then
 				rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
@@ -1032,8 +1052,9 @@ function setAuraFlingEnabled(enabled)
 			local touchedAny = false
 
 			for _, otherPlayer in ipairs(getOtherPlayers()) do
-				local targetRoot = getRootUniversal(otherPlayer.Character)
-				if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
+				local targetModel = otherPlayer.Character
+				local targetRoot = getRootUniversal(targetModel)
+				if targetRoot and isValidAttackTpTarget(targetModel) and (targetRoot.Position - myPosition).Magnitude <= auraRange then
 					touchedAny = true
 					myRoot.AssemblyLinearVelocity = Vector3.zero
 					myRoot.AssemblyAngularVelocity = Vector3.zero
@@ -1093,8 +1114,9 @@ function clickFlingTargetPlayer(targetPlayer)
 			return
 		end
 
-		targetRoot = getRootUniversal(targetPlayer and targetPlayer.Character)
-		if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
+		local targetCharacter = targetPlayer.Character
+		targetRoot = getRootUniversal(targetCharacter)
+		if not targetRoot or not targetRoot.Parent or not myRoot.Parent or not isValidAttackTpTarget(targetCharacter) then
 			if connection then
 				connection:Disconnect()
 				connection = nil
@@ -1199,8 +1221,9 @@ function setFlingAllEnabled(enabled)
 
 			local targetRoots = {}
 			for _, otherPlayer in ipairs(getOtherPlayers()) do
-				local targetRoot = getRootUniversal(otherPlayer.Character)
-				if targetRoot then
+				local targetModel = otherPlayer.Character
+				local targetRoot = getRootUniversal(targetModel)
+				if targetRoot and isValidAttackTpTarget(targetModel) then
 					targetRoots[#targetRoots + 1] = targetRoot
 				end
 			end
@@ -2292,8 +2315,53 @@ local function handleCharacterDeath()
 	syncTargetActionControls()
 end
 
+function isTargetSafe(model)
+	if not model then
+		return false
+	end
+
+	-- Trash Check
+	if model:GetAttribute("HasTrashcan") == true then
+		return false
+	end
+
+	local modelRoot = model:FindFirstChild("HumanoidRootPart")
+	if not modelRoot then
+		return false
+	end
+
+	local map = Workspace:FindFirstChild("Map")
+	local trashFolder = map and map:FindFirstChild("Trash")
+	if trashFolder then
+		for _, trashcan in ipairs(trashFolder:GetChildren()) do
+			if trashcan:IsA("Model") and not trashcan:GetAttribute("Broken") then
+				local part = trashcan:FindFirstChildWhichIsA("BasePart", true)
+				if part and (part.Position - modelRoot.Position).Magnitude < 9.5 then
+					return false
+				end
+			end
+		end
+	end
+
+	-- Safe Zone Check (High Y)
+	if modelRoot.Position.Y > 2500 then
+		return false
+	end
+
+	-- Anti-Void Check (Low Y)
+	if modelRoot.Position.Y < -50 then
+		return false
+	end
+
+	return true
+end
+
 function isValidCamLockTarget(model)
 	if not model or model == char then
+		return false
+	end
+
+	if not isTargetSafe(model) then
 		return false
 	end
 
@@ -2507,7 +2575,7 @@ local function getClosestAliveTarget()
 		if instance:IsA("Humanoid") and instance.Health > 0 then
 			local model = instance.Parent
 			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
-			if model and model ~= currentCharacter and modelRoot and not modelRoot.Anchored then
+			if model and model ~= currentCharacter and modelRoot and not modelRoot.Anchored and isTargetSafe(model) then
 				local distance = (modelRoot.Position - currentRoot.Position).Magnitude
 				if distance < bestDistance then
 					bestDistance = distance
@@ -7147,4 +7215,3 @@ function startIntroUi()
 end
 
 startIntroUi()
-
