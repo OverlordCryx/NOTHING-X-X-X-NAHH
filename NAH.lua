@@ -424,6 +424,23 @@ local camLockKeybind = Enum.KeyCode.Z
 local attackTpKeybind = Enum.KeyCode.T
 local targetSelectKeybind = Enum.KeyCode.C
 setBackKeybind = Enum.KeyCode.N
+local getTrashState = {
+	keybind = Enum.KeyCode.LeftControl,
+	running = false,
+	returning = false,
+	collisionState = nil,
+	savedCFrame = nil,
+	holdCFrame = nil,
+	stepDistance = 100,
+	stepDelay = 0,
+	returnStepDistance = 10,
+	returnStepDelay = 0.047,
+	lastToggleAt = 0,
+	toggleCooldown = 0.35,
+	token = 0,
+	keyHeld = false,
+	blockSetBack = false,
+}
 setBackSavedCFrame = nil
 setBackTravelConn = nil
 setBackPressToken = 0
@@ -450,7 +467,7 @@ local safeZone = {
 	enabled = false,
 	pointStart = 3e3,
 	pointAdd = 3e3,
-	pointMax = 16e16,
+	pointMax = 33e33,
 	pointCurrent = 3e3,
 	lowHp = 30,
 	returnHp = 47,
@@ -526,6 +543,7 @@ local targetActionControls = nil
 local flingModeControls = nil
 local zeroLocalPlayerRoot
 local syncFlingModeControls
+local runGetTrash
 
 local function encodeKeybindValue(keyCode)
 	return keyCode and keyCode.Name or ""
@@ -642,6 +660,13 @@ do
 	end
 end
 
+do
+	local savedGetTrashKeybind = decodeKeybindValue(controlSaveData.GetTrashKeybind)
+	if savedGetTrashKeybind then
+		getTrashState.keybind = savedGetTrashKeybind
+	end
+end
+
 local function parseEnabledValue(value)
 	if type(value) == "boolean" then
 		return value
@@ -657,7 +682,7 @@ end
 
 local function updateKeybindText()
 	local lines = {}
-	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "Custom" }
+	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "Custom" }
 
 	local function appendEntry(entry)
 		if not entry then
@@ -761,6 +786,15 @@ function syncWalkFlingKeybindDisplay()
 		name = "WalkFling",
 		keybind = encodeKeybindValue(walkFlingKeybind),
 		enabled = walkFlingEnabled,
+	}
+	updateKeybindText()
+end
+
+local function syncGetTrashKeybindDisplay()
+	keybindEntries.GetTrash = {
+		name = "Get trash",
+		keybind = getTrashState.keybind == Enum.KeyCode.LeftControl and "LeftCtrl" or encodeKeybindValue(getTrashState.keybind),
+		enabled = getTrashState.running,
 	}
 	updateKeybindText()
 end
@@ -1155,6 +1189,26 @@ function WalkFling_toggle()
 	return setWalkFlingEnabled()
 end
 
+function GetTrash_bind(value)
+	local decoded = decodeKeybindValue(value)
+	if decoded == nil then
+		return encodeKeybindValue(getTrashState.keybind)
+	end
+
+	getTrashState.keybind = decoded
+	setSavedControlValue("GetTrashKeybind", encodeKeybindValue(getTrashState.keybind))
+	syncGetTrashKeybindDisplay()
+	return encodeKeybindValue(getTrashState.keybind)
+end
+
+function GetTrash_key(value)
+	return GetTrash_bind(value)
+end
+
+function GetTrash_use()
+	return runGetTrash()
+end
+
 function AuraFling_tog(value)
 	return setAuraFlingEnabled(value == nil and nil or parseEnabledValue(value))
 end
@@ -1335,6 +1389,424 @@ function setSetBackNoclipEnabled(enabled)
 		end
 		setBackCollisionState = nil
 	end
+end
+
+local function hasLocalTrashcan()
+	local currentCharacter = player.Character
+	local playerAttribute = player:GetAttribute("HasTrashcan")
+	local characterAttribute = currentCharacter and currentCharacter:GetAttribute("HasTrashcan")
+	if playerAttribute ~= nil then
+		return playerAttribute ~= false
+	end
+	if characterAttribute ~= nil then
+		return characterAttribute ~= false
+	end
+	return false
+end
+
+local function clickTrashcan()
+	local virtualInputManager = game:GetService("VirtualInputManager")
+	virtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+	virtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+end
+
+local function setGetTrashNoclipEnabled(enabled)
+	if enabled then
+		if getTrashState.collisionState then
+			return
+		end
+
+		getTrashState.collisionState = {}
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") then
+				getTrashState.collisionState[obj] = obj.CanCollide
+				obj.CanCollide = false
+			end
+		end
+		return
+	end
+
+	if not getTrashState.collisionState then
+		return
+	end
+
+	for part, canCollide in pairs(getTrashState.collisionState) do
+		if part and part.Parent then
+			part.CanCollide = canCollide
+		end
+	end
+	getTrashState.collisionState = nil
+end
+
+local function getTrashTravelCFrame(position, targetPosition)
+	local lookTarget = Vector3.new(targetPosition.X, position.Y, targetPosition.Z)
+	if (lookTarget - position).Magnitude <= 0.01 then
+		lookTarget = position + Vector3.new(0, 0, -1)
+	end
+
+	return CFrame.lookAt(position, lookTarget, Vector3.new(0, 1, 0)) * CFrame.Angles(math.rad(-90), 0, 0)
+end
+
+local function startGetTrashHoldLoop(runToken)
+	task.spawn(function()
+		while getTrashState.running and getTrashState.token == runToken do
+			task.wait()
+			local currentCharacter = player.Character
+			local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+			if rootPart and rootPart.Parent and getTrashState.holdCFrame then
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				rootPart.AssemblyAngularVelocity = Vector3.zero
+				rootPart.CFrame = getTrashState.holdCFrame
+			end
+		end
+	end)
+end
+
+local function getTrashTargetParts()
+	local map = Workspace:FindFirstChild("Map")
+	local trashFolder = map and map:FindFirstChild("Trash")
+	local targets = {}
+
+	if not trashFolder then
+		return targets
+	end
+
+	for _, obj in ipairs(trashFolder:GetDescendants()) do
+		if obj:IsA("MeshPart") and obj.Name == "Trashcan" then
+			local ownerModel = obj:FindFirstAncestorOfClass("Model")
+			if ownerModel and ownerModel:IsDescendantOf(trashFolder) and ownerModel:GetAttribute("Broken") ~= true then
+				targets[#targets + 1] = {
+					part = obj,
+					model = ownerModel,
+				}
+			end
+		end
+	end
+
+	return targets
+end
+
+local function getRandomTrashTarget(ignoredModels)
+	local availableTargets = {}
+
+	for _, entry in ipairs(getTrashTargetParts()) do
+		local targetPart = entry.part
+		local targetModel = entry.model
+		local ignoredUntil = ignoredModels[targetModel]
+		if ignoredUntil and tick() >= ignoredUntil then
+			ignoredModels[targetModel] = nil
+			ignoredUntil = nil
+		end
+
+		if targetPart and targetPart.Parent and not ignoredUntil then
+			availableTargets[#availableTargets + 1] = entry
+		end
+	end
+
+	if #availableTargets == 0 then
+		return nil
+	end
+
+	return availableTargets[math.random(1, #availableTargets)]
+end
+
+local function isValidTrashTarget(entry)
+	if type(entry) ~= "table" then
+		return false
+	end
+
+	local targetPart = entry.part
+	local targetModel = entry.model
+	if not targetPart or not targetPart.Parent or not targetModel or not targetModel.Parent then
+		return false
+	end
+
+	if targetModel:GetAttribute("Broken") == true then
+		return false
+	end
+
+	return true
+end
+
+local function hasTrashcanAfterChecks(attempts, delayTime)
+	local checkCount = attempts or 3
+	local waitTime = delayTime or 0.08
+	for index = 1, checkCount do
+		if hasLocalTrashcan() then
+			return true
+		end
+		if index < checkCount then
+			task.wait(waitTime)
+		end
+	end
+	return false
+end
+
+local function moveRootToTrashTarget(rootPart, targetPart, runToken)
+	if not rootPart or not rootPart.Parent or not targetPart or not targetPart.Parent then
+		return false
+	end
+
+	local startPosition = rootPart.Position
+	local targetDistance = (targetPart.Position - startPosition).Magnitude
+	local yOffset = targetDistance <= 21 and -1 or -15
+	local destination = targetPart.Position + Vector3.new(0, yOffset, 0)
+	local totalDistance = (destination - startPosition).Magnitude
+	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.stepDistance))
+
+	for stepIndex = 1, stepCount do
+		if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
+			return false
+		end
+
+		local nextPosition = startPosition:Lerp(destination, stepIndex / stepCount)
+		getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, targetPart.Position)
+		task.wait(getTrashState.stepDelay)
+	end
+
+	return true
+end
+
+local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
+	if not rootPart or not rootPart.Parent or not targetCFrame then
+		return false
+	end
+
+	local startPosition = rootPart.Position
+	local destination = targetCFrame.Position
+	local totalDistance = (destination - startPosition).Magnitude
+	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.returnStepDistance))
+	local travelDestination = destination + Vector3.new(0, -10, 0)
+
+	for stepIndex = 1, stepCount do
+		if not getTrashState.running or getTrashState.token ~= runToken or not rootPart.Parent then
+			return false
+		end
+
+		local alpha = stepIndex / stepCount
+		local nextPosition = startPosition:Lerp(travelDestination, alpha)
+		if stepIndex >= stepCount then
+			getTrashState.holdCFrame = targetCFrame
+		else
+			getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, destination)
+		end
+		task.wait(getTrashState.returnStepDelay)
+	end
+
+	return true
+end
+
+local function returnFromTrashRun(runToken)
+	local currentCharacter = player.Character
+	local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not rootPart or not getTrashState.savedCFrame then
+		setGetTrashNoclipEnabled(false)
+		getTrashState.blockSetBack = false
+		return
+	end
+
+	moveRootToSavedTrashCFrame(rootPart, getTrashState.savedCFrame, runToken)
+	if getTrashState.token == runToken then
+		getTrashState.holdCFrame = nil
+		setGetTrashNoclipEnabled(false)
+		getTrashState.blockSetBack = false
+	end
+end
+
+local function liftOutOfTrashRun()
+	local currentCharacter = player.Character
+	local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not rootPart or not rootPart.Parent then
+		return
+	end
+
+	rootPart.AssemblyLinearVelocity = Vector3.zero
+	rootPart.AssemblyAngularVelocity = Vector3.zero
+	rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 17, 0)
+end
+
+local function teleportBackToSavedTrashPositionInstant()
+	local currentCharacter = player.Character
+	local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not rootPart or not rootPart.Parent or not getTrashState.savedCFrame then
+		return
+	end
+
+	rootPart.AssemblyLinearVelocity = Vector3.zero
+	rootPart.AssemblyAngularVelocity = Vector3.zero
+	rootPart.CFrame = getTrashState.savedCFrame
+end
+
+local function stopGetTrashImmediate()
+	getTrashState.running = false
+	getTrashState.returning = false
+	getTrashState.blockSetBack = false
+	getTrashState.holdCFrame = nil
+	getTrashState.savedCFrame = nil
+	_G.SafeTeleportLock = false
+	task.spawn(function()
+		for _ = 1, 10 do
+			if getTrashState.running then
+				break
+			end
+			setGetTrashNoclipEnabled(false)
+			task.wait(0.05)
+		end
+	end)
+	syncGetTrashKeybindDisplay()
+end
+
+local function finishGetTrashRun()
+	getTrashState.running = false
+	getTrashState.returning = false
+	getTrashState.blockSetBack = false
+	_G.SafeTeleportLock = false
+	setGetTrashNoclipEnabled(false)
+	getTrashState.savedCFrame = nil
+	getTrashState.holdCFrame = nil
+	syncGetTrashKeybindDisplay()
+end
+
+runGetTrash = function()
+	local now = tick()
+	if now - (getTrashState.lastToggleAt or 0) < (getTrashState.toggleCooldown or 0.35) then
+		return getTrashState.running and "ON" or "OFF"
+	end
+	getTrashState.lastToggleAt = now
+
+	if getTrashState.running then
+		local stopToken = (getTrashState.token or 0) + 1
+		getTrashState.token = stopToken
+		if getTrashState.returning or getTrashState.holdCFrame ~= nil then
+			teleportBackToSavedTrashPositionInstant()
+		end
+		stopGetTrashImmediate()
+		return "OFF"
+	end
+
+	local currentCharacter = player.Character
+	local humanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+	local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not currentCharacter or not humanoid or humanoid.Health <= 0 or not rootPart then
+		return "OFF"
+	end
+
+	getTrashState.running = true
+	getTrashState.returning = false
+	getTrashState.blockSetBack = true
+	local runToken = (getTrashState.token or 0) + 1
+	getTrashState.token = runToken
+	getTrashState.savedCFrame = nil
+	getTrashState.holdCFrame = nil
+	setGetTrashNoclipEnabled(true)
+	syncGetTrashKeybindDisplay()
+	startGetTrashHoldLoop(runToken)
+
+	task.spawn(function()
+		local ignoredModels = {}
+		local switchedTargets = 0
+
+		while getTrashState.running and getTrashState.token == runToken do
+			currentCharacter = player.Character
+			rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+			humanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+			if not currentCharacter or not rootPart or not humanoid or humanoid.Health <= 0 then
+				break
+			end
+
+			if hasTrashcanAfterChecks(3, 0.08) then
+				getTrashState.returning = true
+				setGetTrashNoclipEnabled(true)
+				getTrashState.blockSetBack = true
+				returnFromTrashRun(runToken)
+				if getTrashState.token ~= runToken or not getTrashState.running then
+					break
+				end
+				getTrashState.returning = false
+				getTrashState.holdCFrame = nil
+				getTrashState.blockSetBack = false
+
+				while getTrashState.running and getTrashState.token == runToken and hasLocalTrashcan() do
+					setGetTrashNoclipEnabled(false)
+					getTrashState.blockSetBack = false
+					task.wait(0.2)
+				end
+
+				setGetTrashNoclipEnabled(true)
+				getTrashState.blockSetBack = true
+				ignoredModels = {}
+				switchedTargets = 0
+				continue
+			end
+
+			if switchedTargets >= 40 then
+				ignoredModels = {}
+				switchedTargets = 0
+				task.wait(0.15)
+				continue
+			end
+
+			getTrashState.savedCFrame = rootPart.CFrame
+			task.wait(0.15)
+			if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken then
+				break
+			end
+			currentCharacter = player.Character
+			rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+			humanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+			if not currentCharacter or not rootPart or not humanoid or humanoid.Health <= 0 then
+				break
+			end
+
+			local targetEntry = getRandomTrashTarget(ignoredModels)
+			if not isValidTrashTarget(targetEntry) then
+				ignoredModels = {}
+				switchedTargets = 0
+				task.wait(0.2)
+				continue
+			end
+
+			if not moveRootToTrashTarget(rootPart, targetEntry.part, runToken) then
+				break
+			end
+
+			local clickAttempts = 0
+			while getTrashState.running and not getTrashState.returning and getTrashState.token == runToken and clickAttempts < 4 and not hasLocalTrashcan() do
+				if not isValidTrashTarget(targetEntry) or not rootPart.Parent then
+					break
+				end
+
+				local distanceToTarget = (targetEntry.part.Position - rootPart.Position).Magnitude
+				if distanceToTarget > 5 then
+					if not moveRootToTrashTarget(rootPart, targetEntry.part, runToken) then
+						break
+					end
+				else
+					local closePosition = targetEntry.part.Position + Vector3.new(0, -1, 0)
+					getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position)
+					clickTrashcan()
+					clickAttempts += 1
+					task.wait(0.2)
+				end
+			end
+
+			if hasTrashcanAfterChecks(3, 0.08) then
+				continue
+			end
+
+			ignoredModels[targetEntry.model] = tick() + 1.5
+			switchedTargets += 1
+			task.wait(0.1)
+		end
+
+		if getTrashState.token == runToken and getTrashState.running then
+			getTrashState.returning = true
+			returnFromTrashRun(runToken)
+			finishGetTrashRun()
+		end
+	end)
+
+	return "ON"
 end
 
 function getUprightSetBackCFrame(position, sourceCFrame)
@@ -2436,7 +2908,7 @@ function INFO(title, text, time)
 
 	showInfo(title, text, time)
 end
-do
+local function initSeriousModeTracker()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local strongSkills = {
@@ -2614,6 +3086,8 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(setupPlayer)
 end
+
+initSeriousModeTracker()
 
 do
 local Players = game:GetService("Players")
@@ -3017,146 +3491,182 @@ task.spawn(function()
         end
     end
 end)
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local player = Players.LocalPlayer
-_G.NOTHINGX_Protection = _G.NOTHINGX_Protection or {}
-_G.NOTHINGX_Protection.Enabled = true
-_G.NOTHINGX_Protection.boundarySize = Vector3.new(200000, 0, 200000)   
-local Y_BOUNDARY_UP = 200000          
-local EXTREME_LOW_OFFSET = -1000    
-local VOID_BUFFER = 90
-local VOID_Y = nil
-local SAVE_INTERVAL = 3.0
-local MIN_DISTANCE_TO_SAVE = 7
-_G.NOTHINGX_Protection.safePositionHistory = {}
-_G.NOTHINGX_Protection.lastSafePosition = nil
-_G.NOTHINGX_Protection.lastSaveTime = 0
-local function detectVoidY()
-	local official = Workspace.FallenPartsDestroyHeight
-	if official and official > -500000 and official < 10000 then
-		VOID_Y = official
-	else
-		local lowest = 200
-		for i = 1, 6 do
-			local probe = Instance.new("Part")
-			probe.Size = Vector3.new(8,8,8)
-			probe.Position = Vector3.new(0, 600, 0)
-			probe.Anchored = false
-			probe.CanCollide = false
-			probe.Transparency = 1
-			probe.Parent = Workspace
-			task.wait(1.8)
-			if probe and probe.Parent then
-				lowest = math.min(lowest, probe.Position.Y)
-				probe:Destroy()
+
+local function initProtectionRuntime()
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+	local Workspace = game:GetService("Workspace")
+	local player = Players.LocalPlayer
+	_G.NOTHINGX_Protection = _G.NOTHINGX_Protection or {}
+	_G.NOTHINGX_Protection.Enabled = true
+	_G.NOTHINGX_Protection.boundarySize = Vector3.new(200000, 0, 200000)
+	local Y_BOUNDARY_UP = 200000
+	local EXTREME_LOW_OFFSET = -1000
+	local VOID_BUFFER = 90
+	local VOID_Y = nil
+	local SAVE_INTERVAL = 3.0
+	local MIN_DISTANCE_TO_SAVE = 7
+	_G.NOTHINGX_Protection.safePositionHistory = {}
+	_G.NOTHINGX_Protection.lastSafePosition = nil
+	_G.NOTHINGX_Protection.lastSaveTime = 0
+
+	local function detectVoidY()
+		local official = Workspace.FallenPartsDestroyHeight
+		if official and official > -500000 and official < 10000 then
+			VOID_Y = official
+		else
+			local lowest = 200
+			for _ = 1, 6 do
+				local probe = Instance.new("Part")
+				probe.Size = Vector3.new(8, 8, 8)
+				probe.Position = Vector3.new(0, 600, 0)
+				probe.Anchored = false
+				probe.CanCollide = false
+				probe.Transparency = 1
+				probe.Parent = Workspace
+				task.wait(1.8)
+				if probe and probe.Parent then
+					lowest = math.min(lowest, probe.Position.Y)
+					probe:Destroy()
+				end
+				task.wait(0.3)
 			end
-			task.wait(0.3)
+			VOID_Y = lowest - 90
 		end
-		VOID_Y = lowest - 90
+		_G.NOTHINGX_Protection.EXTREME_LOW_Y = VOID_Y + EXTREME_LOW_OFFSET
 	end
-	_G.NOTHINGX_Protection.EXTREME_LOW_Y = VOID_Y + EXTREME_LOW_OFFSET
-end
-detectVoidY()
-local function getReferenceCFrame()
-	local map = Workspace:FindFirstChild("Map")
-	if map then
-		local main = map:FindFirstChild("MainPart")
-		if main then return main.CFrame end
+
+	local function getReferenceCFrame()
+		local map = Workspace:FindFirstChild("Map")
+		if map then
+			local main = map:FindFirstChild("MainPart")
+			if main then
+				return main.CFrame
+			end
+		end
+		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = player.Character.HumanoidRootPart
+			return CFrame.new(hrp.Position.X, 200, hrp.Position.Z)
+		end
+		return _G.NOTHINGX_Protection.defaultCFrame
 	end
-	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-		local hrp = player.Character.HumanoidRootPart
-		return CFrame.new(hrp.Position.X, 200, hrp.Position.Z)
+
+	function _G.NOTHINGX_Protection.isOutsideBoundary(pos)
+		local cf = getReferenceCFrame()
+		local localPos = cf:PointToObjectSpace(pos)
+		local half = _G.NOTHINGX_Protection.boundarySize / 2
+		return math.abs(localPos.X) > half.X
+			or math.abs(localPos.Z) > half.Z
+			or pos.Y > Y_BOUNDARY_UP
 	end
-	return _G.NOTHINGX_Protection.defaultCFrame
-end
-function _G.NOTHINGX_Protection.isOutsideBoundary(pos)
-	local cf = getReferenceCFrame()
-	local localPos = cf:PointToObjectSpace(pos)
-	local half = _G.NOTHINGX_Protection.boundarySize / 2
-	return math.abs(localPos.X) > half.X 
-		or math.abs(localPos.Z) > half.Z 
-		or pos.Y > Y_BOUNDARY_UP        
-end
-local function isAnyObjectBelow(hrp)
-	if not hrp or not hrp.Parent then return false end
-	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = {hrp.Parent}
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	local result = Workspace:Raycast(hrp.Position + Vector3.new(0, 6, 0), Vector3.new(0, -35, 0), params)
-	return result ~= nil
-end
-local function saveSafePosition(hrp)
-	if not hrp then return end
-	if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then return end
-	if not isAnyObjectBelow(hrp) then return end
-	local now = tick()
-	if now - (_G.NOTHINGX_Protection.lastSaveTime or 0) < SAVE_INTERVAL then return end
-	local lastPos = _G.NOTHINGX_Protection.lastSafePosition
-	if lastPos and (lastPos.Position - hrp.Position).Magnitude < MIN_DISTANCE_TO_SAVE then
-		return
+
+	local function isAnyObjectBelow(hrp)
+		if not hrp or not hrp.Parent then
+			return false
+		end
+		local params = RaycastParams.new()
+		params.FilterDescendantsInstances = { hrp.Parent }
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		local result = Workspace:Raycast(hrp.Position + Vector3.new(0, 6, 0), Vector3.new(0, -35, 0), params)
+		return result ~= nil
 	end
-	_G.NOTHINGX_Protection.lastSafePosition = hrp.CFrame
-	_G.NOTHINGX_Protection.lastSaveTime = now
-	table.insert(_G.NOTHINGX_Protection.safePositionHistory, 1, hrp.CFrame)
-	if #_G.NOTHINGX_Protection.safePositionHistory > 10 then
-		table.remove(_G.NOTHINGX_Protection.safePositionHistory)
+
+	local function saveSafePosition(hrp)
+		if not hrp then
+			return
+		end
+		if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then
+			return
+		end
+		if not isAnyObjectBelow(hrp) then
+			return
+		end
+		local now = tick()
+		if now - (_G.NOTHINGX_Protection.lastSaveTime or 0) < SAVE_INTERVAL then
+			return
+		end
+		local lastPos = _G.NOTHINGX_Protection.lastSafePosition
+		if lastPos and (lastPos.Position - hrp.Position).Magnitude < MIN_DISTANCE_TO_SAVE then
+			return
+		end
+		_G.NOTHINGX_Protection.lastSafePosition = hrp.CFrame
+		_G.NOTHINGX_Protection.lastSaveTime = now
+		table.insert(_G.NOTHINGX_Protection.safePositionHistory, 1, hrp.CFrame)
+		if #_G.NOTHINGX_Protection.safePositionHistory > 10 then
+			table.remove(_G.NOTHINGX_Protection.safePositionHistory)
+		end
 	end
-end
-local function getRescueCFrame()
-	if _G.NOTHINGX_Protection.lastSafePosition then
-		return _G.NOTHINGX_Protection.lastSafePosition + Vector3.new(0, 8, 0)
+
+	local function getRescueCFrame()
+		if _G.NOTHINGX_Protection.lastSafePosition then
+			return _G.NOTHINGX_Protection.lastSafePosition + Vector3.new(0, 8, 0)
+		end
+		for _, cf in ipairs(_G.NOTHINGX_Protection.safePositionHistory) do
+			if cf then
+				return cf + Vector3.new(0, 8, 0)
+			end
+		end
+		return getReferenceCFrame() + Vector3.new(0, 180, 0)
 	end
-	for _, cf in ipairs(_G.NOTHINGX_Protection.safePositionHistory) do
-		if cf then return cf + Vector3.new(0, 8, 0) end
-	end
-	return getReferenceCFrame() + Vector3.new(0, 180, 0)
-end
-local function tpBack(char, hrp, reason)
-	_G.SafeTeleportLock = true
-	local target = getRescueCFrame()
-	for i = 1, 222 do
+
+	local function tpBack(char, hrp)
+		_G.SafeTeleportLock = true
+		local target = getRescueCFrame()
+		for _ = 1, 222 do
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			char:PivotTo(target)
+			task.wait()
+		end
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
-		char:PivotTo(target)
-		task.wait()
+		task.wait(0.03)
+		_G.SafeTeleportLock = false
 	end
-	hrp.AssemblyLinearVelocity = Vector3.zero
-	hrp.AssemblyAngularVelocity = Vector3.zero
-	task.wait(0.03)
-	_G.SafeTeleportLock = false
-end
-task.spawn(function()
-	while true do
-		task.wait()
-		if not _G.NOTHINGX_Protection.Enabled then continue end
-		local char = player.Character
-		if not char then continue end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp then continue end
-		if _G.NOTHINGX_FlyActive == true then
+
+	detectVoidY()
+
+	task.spawn(function()
+		while true do
+			task.wait()
+			if not _G.NOTHINGX_Protection.Enabled then
+				continue
+			end
+			local char = player.Character
+			if not char then
+				continue
+			end
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if not hrp then
+				continue
+			end
+			if _G.NOTHINGX_FlyActive == true then
+				saveSafePosition(hrp)
+				continue
+			end
 			saveSafePosition(hrp)
-			continue
+			local y = hrp.Position.Y
+			if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then
+				tpBack(char, hrp)
+				continue
+			end
+			if y < _G.NOTHINGX_Protection.EXTREME_LOW_Y then
+				tpBack(char, hrp)
+				continue
+			end
+			local minSafeY = VOID_Y and (VOID_Y + VOID_BUFFER) or -999999
+			if y < minSafeY then
+				tpBack(char, hrp)
+			end
 		end
-		saveSafePosition(hrp)
-		local y = hrp.Position.Y
-		if _G.NOTHINGX_Protection.isOutsideBoundary(hrp.Position) then
-			tpBack(char, hrp, "")
-			continue
-		end
-		if y < _G.NOTHINGX_Protection.EXTREME_LOW_Y then
-			tpBack(char, hrp, "")
-			continue
-		end
-		local minSafeY = VOID_Y and (VOID_Y + VOID_BUFFER) or -999999
-		if y < minSafeY then
-			tpBack(char, hrp, "")
-		end
-	end
-end)
-print("=== ACTIVE ===")
-print("(-) " .. VOID_Y .. " (-)")
+	end)
+
+	print("=== ACTIVE ===")
+	print("(-) " .. VOID_Y .. " (-)")
+end
+
+initProtectionRuntime()
+
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
@@ -4664,6 +5174,12 @@ _G["4tog_on_one_frame"] = function(data)
 	data = data or {}
 
 	local titleText = tostring(data.title or "Fling")
+	local saveKeys = {
+		tostring(data.saveKey1 or ""),
+		tostring(data.saveKey2 or ""),
+		tostring(data.saveKey3 or ""),
+		tostring(data.saveKey4 or ""),
+	}
 	local names = {
 		tostring(data.name1 or "One"),
 		tostring(data.name2 or "Two"),
@@ -4682,6 +5198,13 @@ _G["4tog_on_one_frame"] = function(data)
 		data.default3 == true,
 		data.default4 == true,
 	}
+
+	for index = 1, 4 do
+		local saveKey = saveKeys[index]
+		if saveKey ~= "" and type(controlSaveData[saveKey]) == "boolean" then
+			defaults[index] = controlSaveData[saveKey]
+		end
+	end
 
 	local holder = makeControlFrame(76)
 	holder.Parent = uiX
@@ -4718,7 +5241,7 @@ _G["4tog_on_one_frame"] = function(data)
 	rowLayout.Padding = UDim.new(0, 6)
 	rowLayout.Parent = rowFrame
 
-	local function createToggle(text, initialState, callback)
+	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
 		button.BackgroundTransparency = 0.06
 		button.BorderSizePixel = 0
@@ -4753,6 +5276,10 @@ _G["4tog_on_one_frame"] = function(data)
 		function control.SetValue(nextState, suppressCallback)
 			enabled = nextState == true
 			render()
+			if saveKey ~= "" then
+				controlSaveData[saveKey] = enabled
+				saveSliderSaveData()
+			end
 			if not suppressCallback and callback then
 				callback(enabled)
 			end
@@ -4772,7 +5299,7 @@ _G["4tog_on_one_frame"] = function(data)
 
 	local controls = {}
 	for index = 1, 4 do
-		controls[index] = createToggle(names[index], defaults[index], callbacks[index])
+		controls[index] = createToggle(names[index], defaults[index], callbacks[index], saveKeys[index])
 	end
 
 	return {
@@ -4785,6 +5312,153 @@ _G["4tog_on_one_frame"] = function(data)
 end
 
 four_tog_on_one_frame = _G["4tog_on_one_frame"]
+
+_G["5tog_on_one_frame"] = function(data)
+	data = data or {}
+
+	local titleText = tostring(data.title or "Overlay")
+	local saveKeys = {
+		tostring(data.saveKey1 or ""),
+		tostring(data.saveKey2 or ""),
+		tostring(data.saveKey3 or ""),
+		tostring(data.saveKey4 or ""),
+		tostring(data.saveKey5 or ""),
+	}
+	local names = {
+		tostring(data.name1 or "One"),
+		tostring(data.name2 or "Two"),
+		tostring(data.name3 or "Three"),
+		tostring(data.name4 or "Four"),
+		tostring(data.name5 or "Five"),
+	}
+	local callbacks = {
+		data.fun1,
+		data.fun2,
+		data.fun3,
+		data.fun4,
+		data.fun5,
+	}
+	local defaults = {
+		data.default1 == true,
+		data.default2 == true,
+		data.default3 == true,
+		data.default4 == true,
+		data.default5 == true,
+	}
+
+	for index = 1, 5 do
+		local saveKey = saveKeys[index]
+		if saveKey ~= "" and type(controlSaveData[saveKey]) == "boolean" then
+			defaults[index] = controlSaveData[saveKey]
+		end
+	end
+
+	local holder = makeControlFrame(82)
+	holder.Parent = uiX
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 16, 0, 8)
+	titleLabel.Size = UDim2.new(1, -32, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = titleText
+	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextScaled = true
+	titleLabel.TextWrapped = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
+
+	local titleConstraint = Instance.new("UITextSizeConstraint")
+	titleConstraint.MinTextSize = 12
+	titleConstraint.MaxTextSize = 18
+	titleConstraint.Parent = titleLabel
+
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.new(0, 8, 0, 34)
+	rowFrame.Size = UDim2.new(1, -16, 0, 34)
+	rowFrame.Parent = holder
+
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 4)
+	rowLayout.Parent = rowFrame
+
+	local function createToggle(text, initialState, callback, saveKey)
+		local button = Instance.new("TextButton")
+		button.BackgroundTransparency = 0.06
+		button.BorderSizePixel = 0
+		button.Size = UDim2.new(0.2, -4, 1, 0)
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = tostring(text)
+		button.TextStrokeTransparency = 0.15
+		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		button.TextScaled = true
+		button.TextWrapped = true
+		button.Parent = rowFrame
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 10)
+		corner.Parent = button
+
+		local constraint = Instance.new("UITextSizeConstraint")
+		constraint.MinTextSize = 9
+		constraint.MaxTextSize = 12
+		constraint.Parent = button
+
+		local enabled = initialState == true
+		local control = {}
+
+		local function render()
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+		end
+
+		function control.SetValue(nextState, suppressCallback)
+			enabled = nextState == true
+			render()
+			if saveKey ~= "" then
+				controlSaveData[saveKey] = enabled
+				saveSliderSaveData()
+			end
+			if not suppressCallback and callback then
+				callback(enabled)
+			end
+		end
+
+		function control.GetValue()
+			return enabled
+		end
+
+		button.MouseButton1Click:Connect(function()
+			control.SetValue(not enabled)
+		end)
+
+		render()
+		return control
+	end
+
+	local controls = {}
+	for index = 1, 5 do
+		controls[index] = createToggle(names[index], defaults[index], callbacks[index], saveKeys[index])
+	end
+
+	return {
+		Frame = holder,
+		First = controls[1],
+		Second = controls[2],
+		Third = controls[3],
+		Fourth = controls[4],
+		Fifth = controls[5],
+	}
+end
+
+five_tog_on_one_frame = _G["5tog_on_one_frame"]
 
 _G["2tog_on_one_button"] = function(data)
 	data = data or {}
@@ -5240,6 +5914,7 @@ syncAttackTpKeybindDisplay()
 syncTargetPickKeybindDisplay()
 syncWalkFlingKeybindDisplay()
 syncSetBackKeybindDisplay()
+syncGetTrashKeybindDisplay()
 updateTargetDisplay()
 
 hum.Died:Connect(handleCharacterDeath)
@@ -5417,6 +6092,398 @@ safeZone.toggleControl = tog({
 })
 safeZone.toggleControl.Frame.LayoutOrder = 10000
 
+task.spawn(function()
+	if game.GameId ~= 3808081382 then
+		return
+	end
+
+	local espOverlayConfig = {
+		showCharacter = false,
+		showUltimate = false,
+		showHp = false,
+		showEsp = false,
+	}
+	local espOverlayState = {}
+	local ESP_BILLBOARD_NAME = "NOTHING_X_OverlayBillboard"
+	local ESP_HIGHLIGHT_NAME = "NOTHING_X_UltDetect"
+	local TextService = game:GetService("TextService")
+	local BILLBOARD_MIN_WIDTH = 72
+	local BILLBOARD_PADDING_TOP = 5
+	local BILLBOARD_PADDING_BOTTOM = 5
+	local BILLBOARD_PADDING_LEFT = 6
+	local BILLBOARD_PADDING_RIGHT = 6
+	local BILLBOARD_LINE_HEIGHT = 16
+	local BILLBOARD_ITEM_PADDING = 4
+
+	local function clampPercent(value)
+		local numericValue = tonumber(value) or 0
+		if numericValue ~= numericValue then
+			numericValue = 0
+		end
+		return math.clamp(math.floor(numericValue + 0.5), 0, 999)
+	end
+
+	local function getCharacterNameColor(characterName)
+		if tostring(characterName or "") == "" then
+			return Color3.fromRGB(255, 255, 255)
+		end
+		return Color3.fromRGB(255, 0, 0)
+	end
+
+	local function getUltimateColor(ultimatePercent)
+		local value = clampPercent(ultimatePercent)
+		if value <= 0 then
+			return Color3.fromRGB(255, 255, 0)
+		end
+		if value >= 100 then
+			return Color3.fromRGB(255, 0, 0)
+		end
+		return Color3.fromRGB(255, 165, 0)
+	end
+
+	local function getHpColor(hpPercent)
+		local value = clampPercent(hpPercent)
+		if value <= 0 then
+			return Color3.fromRGB(255, 0, 0)
+		end
+		if value >= 100 then
+			return Color3.fromRGB(0, 255, 0)
+		end
+		if value >= 50 then
+			return Color3.fromRGB(255, 165, 0)
+		end
+		return Color3.fromRGB(255, 255, 0)
+	end
+
+	local function getUltDetectColor(isUlted)
+		if isUlted then
+			return Color3.fromRGB(255, 165, 0)
+		end
+		return Color3.fromRGB(170, 170, 170)
+	end
+
+	local function createBillboardLine(parent, name, defaultColor)
+		local line = Instance.new("TextLabel")
+		line.Name = name
+		line.BackgroundTransparency = 1
+		line.Size = UDim2.fromOffset(0, BILLBOARD_LINE_HEIGHT)
+		line.Font = Enum.Font.GothamBold
+		line.Text = ""
+		line.TextColor3 = defaultColor or Color3.fromRGB(255, 255, 255)
+		line.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		line.TextStrokeTransparency = 0
+		line.TextScaled = false
+		line.TextSize = 14
+		line.TextWrapped = false
+		line.TextXAlignment = Enum.TextXAlignment.Left
+		line.TextYAlignment = Enum.TextYAlignment.Center
+		line.Visible = false
+		line.Parent = parent
+		return line
+	end
+
+	local function ensureOverlayBillboard(model)
+		local head = model and model:FindFirstChild("Head")
+		if not head then
+			return nil
+		end
+
+		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
+		if billboard and billboard:IsA("BillboardGui") then
+			return billboard
+		end
+
+		if billboard then
+			billboard:Destroy()
+		end
+
+		billboard = Instance.new("BillboardGui")
+		billboard.Name = ESP_BILLBOARD_NAME
+		billboard.Adornee = head
+		billboard.AlwaysOnTop = true
+		billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
+		billboard.Size = UDim2.fromOffset(BILLBOARD_MIN_WIDTH, 0)
+		billboard.MaxDistance = 2500
+		billboard.Parent = model
+
+		local frame = Instance.new("Frame")
+		frame.Name = "Root"
+		frame.Size = UDim2.new(1, 0, 0, 0)
+		frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		frame.BackgroundTransparency = 0.35
+		frame.BorderSizePixel = 0
+		frame.Parent = billboard
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 10)
+		corner.Parent = frame
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 0, 0)
+		stroke.Thickness = 1.4
+		stroke.Transparency = 0.1
+		stroke.Parent = frame
+
+		local padding = Instance.new("UIPadding")
+		padding.PaddingLeft = UDim.new(0, 6)
+		padding.PaddingRight = UDim.new(0, 6)
+		padding.PaddingTop = UDim.new(0, 5)
+		padding.PaddingBottom = UDim.new(0, 5)
+		padding.Parent = frame
+
+		local list = Instance.new("UIListLayout")
+		list.Padding = UDim.new(0, BILLBOARD_ITEM_PADDING)
+		list.FillDirection = Enum.FillDirection.Horizontal
+		list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		list.VerticalAlignment = Enum.VerticalAlignment.Center
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.Parent = frame
+
+		createBillboardLine(frame, "HpLine").LayoutOrder = 1
+		createBillboardLine(frame, "SepOne", Color3.fromRGB(255, 0, 0)).LayoutOrder = 2
+		createBillboardLine(frame, "CharacterLine").LayoutOrder = 3
+		createBillboardLine(frame, "SepTwo", Color3.fromRGB(255, 0, 0)).LayoutOrder = 4
+		createBillboardLine(frame, "UltimateLine").LayoutOrder = 5
+
+		return billboard
+	end
+
+	local function ensureHighlight(model, forceRecreate, startEnabled)
+		local highlight = model and model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+		if highlight and not highlight:IsA("Highlight") then
+			highlight:Destroy()
+			highlight = nil
+		end
+
+		if forceRecreate and highlight then
+			highlight:Destroy()
+			highlight = nil
+		end
+
+		if highlight then
+			return highlight
+		end
+
+		highlight = Instance.new("Highlight")
+		highlight.Name = ESP_HIGHLIGHT_NAME
+		highlight.Adornee = model
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.FillColor = Color3.fromRGB(255, 0, 0)
+		highlight.FillTransparency = 0.6
+		highlight.OutlineTransparency = 0
+		highlight.OutlineColor = startEnabled and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(128, 128, 128)
+		highlight.Enabled = startEnabled == true
+		highlight.Parent = model
+		return highlight
+	end
+
+	local function measureTextWidth(text)
+		local textSize = TextService:GetTextSize(tostring(text or ""), 14, Enum.Font.GothamBold, Vector2.new(1000, BILLBOARD_LINE_HEIGHT))
+		return math.max(textSize.X + 2, 1)
+	end
+
+	local function updateLine(line, isVisible, text, color)
+		if not line then
+			return false
+		end
+		line.Visible = isVisible == true
+		if not isVisible then
+			line.Text = ""
+			line.Size = UDim2.new(1, 0, 0, 0)
+			return false
+		end
+		local displayText = tostring(text or "")
+		line.Text = displayText
+		line.TextColor3 = color
+		line.Size = UDim2.fromOffset(measureTextWidth(displayText), BILLBOARD_LINE_HEIGHT)
+		return true
+	end
+
+	local function updateBillboardVisibility(billboard, frame, visibleCount, contentWidth)
+		if not billboard or not frame then
+			return
+		end
+		local hasVisibleRows = (visibleCount or 0) > 0
+		local contentHeight = hasVisibleRows and (BILLBOARD_PADDING_TOP + BILLBOARD_PADDING_BOTTOM + BILLBOARD_LINE_HEIGHT) or 0
+		local finalWidth = hasVisibleRows and math.max(BILLBOARD_MIN_WIDTH, (contentWidth or 0) + BILLBOARD_PADDING_LEFT + BILLBOARD_PADDING_RIGHT) or 0
+		billboard.Size = UDim2.fromOffset(finalWidth, contentHeight)
+		frame.Size = UDim2.new(1, 0, 0, contentHeight)
+		frame.Visible = hasVisibleRows
+		billboard.Enabled = hasVisibleRows
+	end
+
+	local function updatePlayerOverlay(targetPlayer)
+		if targetPlayer == player or targetPlayer.Parent ~= Players then
+			return
+		end
+
+		local model = getTrackedPlayerTargetModel(targetPlayer)
+		if not model then
+			return
+		end
+
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		local head = model:FindFirstChild("Head")
+		local rootPart = model:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not head or not rootPart then
+			return
+		end
+
+		local attributes = {
+			Character = model:GetAttribute("Character"),
+			Ultimate = targetPlayer:GetAttribute("Ultimate"),
+			Ulted = model:GetAttribute("Ulted"),
+		}
+		local characterAttr = attributes.Character
+		local ultimateAttr = attributes.Ultimate
+		local hasUltimateAttr = ultimateAttr ~= nil
+		local ultedAttr = attributes.Ulted == true
+		local isBald = tostring(characterAttr or "") == "Bald"
+		local hpPercent = humanoid.MaxHealth > 0 and ((humanoid.Health / humanoid.MaxHealth) * 100) or 0
+		local hpValue = clampPercent(hpPercent)
+		local ultimateValue = clampPercent(ultimateAttr)
+		local billboard = ensureOverlayBillboard(model)
+		if billboard then
+			billboard.Adornee = head
+
+			local frame = billboard:FindFirstChild("Root")
+			local hpLine = frame and frame:FindFirstChild("HpLine")
+			local sepOne = frame and frame:FindFirstChild("SepOne")
+			local characterLine = frame and frame:FindFirstChild("CharacterLine")
+			local sepTwo = frame and frame:FindFirstChild("SepTwo")
+			local ultimateLine = frame and frame:FindFirstChild("UltimateLine")
+			local visibleCount = 0
+			local contentWidth = 0
+			local visibleGuiCount = 0
+			local hpVisible = updateLine(
+				hpLine,
+				espOverlayConfig.showHp,
+				string.format("%d%%", hpValue),
+				getHpColor(hpValue)
+			)
+			local characterVisible = updateLine(
+				characterLine,
+				espOverlayConfig.showCharacter and tostring(characterAttr or "") ~= "",
+				tostring(characterAttr or ""),
+				getCharacterNameColor(characterAttr)
+			)
+			local hideUltimateForBaldUlted = isBald and ultedAttr
+			local ultimateVisible = updateLine(
+				ultimateLine,
+				espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
+				string.format("%d%%", ultimateValue),
+				getUltimateColor(ultimateValue)
+			)
+
+			if hpVisible then
+				visibleCount = visibleCount + 1
+			end
+			if characterVisible then
+				visibleCount = visibleCount + 1
+			end
+			if ultimateVisible then
+				visibleCount = visibleCount + 1
+			end
+
+			local showSepOne = hpVisible and characterVisible
+			local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
+			updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 0, 0))
+			updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 0, 0))
+
+			for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine }) do
+				if guiObject and guiObject.Visible then
+					visibleGuiCount = visibleGuiCount + 1
+					contentWidth = contentWidth + guiObject.Size.X.Offset
+				end
+			end
+			if visibleGuiCount > 1 then
+				contentWidth = contentWidth + ((visibleGuiCount - 1) * BILLBOARD_ITEM_PADDING)
+			end
+
+			updateBillboardVisibility(billboard, frame, visibleCount, contentWidth)
+		end
+
+		local state = espOverlayState[targetPlayer] or {}
+		local canUseHighlight = espOverlayConfig.showEsp and not isBald
+		if canUseHighlight then
+			local forceRecreate = ultedAttr and state.lastUlted ~= true
+			local highlight = ensureHighlight(model, forceRecreate, ultedAttr)
+			highlight.Enabled = ultedAttr
+			highlight.FillColor = Color3.fromRGB(255, 0, 0)
+			highlight.FillTransparency = 0.6
+			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			highlight.OutlineColor = ultedAttr and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(128, 128, 128)
+		else
+			local highlight = model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+			if highlight and highlight:IsA("Highlight") then
+				highlight.Enabled = false
+				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
+			end
+		end
+
+		state.lastUlted = ultedAttr
+		state.model = model
+		espOverlayState[targetPlayer] = state
+	end
+
+	local function cleanupPlayerOverlay(targetPlayer)
+		local state = espOverlayState[targetPlayer]
+		local model = state and state.model
+		if model and model.Parent then
+			local highlight = model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+			if highlight and highlight:IsA("Highlight") then
+				highlight.Enabled = false
+				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
+			end
+		end
+		espOverlayState[targetPlayer] = nil
+	end
+
+	local overlayToggleControl = _G["4tog_on_one_frame"]({
+		title = "Overlay",
+		name1 = "HP %",
+		name2 = "Character",
+		name3 = "ULT %",
+		name4 = "ULTED ESP",
+		saveKey1 = "Overlay4HP",
+		saveKey2 = "Overlay4Character",
+		saveKey3 = "Overlay4Ultimate",
+		saveKey4 = "Overlay4ESP",
+		default1 = espOverlayConfig.showHp,
+		default2 = espOverlayConfig.showCharacter,
+		default3 = espOverlayConfig.showUltimate,
+		default4 = espOverlayConfig.showEsp,
+		fun1 = function(enabled)
+			espOverlayConfig.showHp = enabled
+		end,
+		fun2 = function(enabled)
+			espOverlayConfig.showCharacter = enabled
+		end,
+		fun3 = function(enabled)
+			espOverlayConfig.showUltimate = enabled
+		end,
+		fun4 = function(enabled)
+			espOverlayConfig.showEsp = enabled
+		end,
+	})
+	if overlayToggleControl and overlayToggleControl.Frame then
+		overlayToggleControl.Frame.LayoutOrder = 100000
+	end
+
+	Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
+
+	task.spawn(function()
+		while screenGui.Parent do
+			for _, targetPlayer in ipairs(Players:GetPlayers()) do
+				if targetPlayer ~= player then
+					updatePlayerOverlay(targetPlayer)
+				end
+			end
+			task.wait(0.1)
+		end
+	end)
+end)
+
 parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
 syncFlingModeControls()
 
@@ -5545,7 +6612,19 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 
 	if key == setBackKeybind then
+		if getTrashState.blockSetBack then
+			return
+		end
 		handleSetBackKeybind()
+		return
+	end
+
+	if key == getTrashState.keybind then
+		if getTrashState.keyHeld then
+			return
+		end
+		getTrashState.keyHeld = true
+		runGetTrash()
 		return
 	end
 
@@ -5566,6 +6645,17 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 player.CharacterAdded:Connect(function(newChar)
+	if getTrashState.running then
+		getTrashState.running = false
+		getTrashState.returning = false
+		getTrashState.blockSetBack = false
+		_G.SafeTeleportLock = false
+		setGetTrashNoclipEnabled(false)
+		syncGetTrashKeybindDisplay()
+	end
+	getTrashState.keyHeld = false
+	getTrashState.savedCFrame = nil
+	getTrashState.holdCFrame = nil
 	stopSafeZoneTravel()
 	safeZone.savedCFrame = nil
 	safeZone.atDestination = false
@@ -5811,6 +6901,11 @@ UserInputService.InputEnded:Connect(function(input)
 
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		attackTpHolding = false
+		return
+	end
+
+	if key == getTrashState.keybind then
+		getTrashState.keyHeld = false
 		return
 	end
 
