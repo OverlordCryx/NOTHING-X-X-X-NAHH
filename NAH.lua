@@ -108,7 +108,7 @@ local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
 keybindFrame.Position = UDim2.fromScale(0.03, 0.5)
-keybindFrame.Size = UDim2.fromScale(0.09, 0.24)
+keybindFrame.Size = UDim2.fromScale(0.1, 0.2)
 keybindFrame.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
 keybindFrame.BackgroundTransparency = 1
 keybindFrame.BorderSizePixel = 0
@@ -212,7 +212,7 @@ local infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
 infoContainer.Position = UDim2.fromScale(0.5, 0.12)
-infoContainer.Size = UDim2.fromScale(0.24, 0.12)
+infoContainer.Size = UDim2.fromScale(0.2, 0.1)
 infoContainer.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
 infoContainer.BackgroundTransparency = 1
 infoContainer.BorderSizePixel = 0
@@ -792,7 +792,7 @@ end
 
 local function syncGetTrashKeybindDisplay()
 	keybindEntries.GetTrash = {
-		name = "Get trash",
+		name = "Trash",
 		keybind = getTrashState.keybind == Enum.KeyCode.LeftControl and "LeftCtrl" or encodeKeybindValue(getTrashState.keybind),
 		enabled = getTrashState.running,
 	}
@@ -3089,7 +3089,7 @@ end
 
 initSeriousModeTracker()
 
-do
+local function initCharacterCleanupRuntime()
 local Players = game:GetService("Players")
 local speaker = Players.LocalPlayer
 local speed = 25.66
@@ -3184,6 +3184,9 @@ task.spawn(function()
     end)
 end)
 end
+
+initCharacterCleanupRuntime()
+
 local StayToggle = nil
 local DashToggle = nil
 task.spawn(function()
@@ -3660,8 +3663,6 @@ local function initProtectionRuntime()
 			end
 		end
 	end)
-
-	print("=== ACTIVE ===")
 	print("(-) " .. VOID_Y .. " (-)")
 end
 
@@ -4593,154 +4594,158 @@ dropdown = Dropdown
 
 local modelDropdownLookup = {}
 local modelDropdownControl = nil
-
-isSelectablePlayerDropdownTarget = function(targetPlayer)
-	return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
-end
-
-local function isSelectableModelDropdownTarget(model)
-	if not model or model == char then
-		return false
+local applyModelDropdownSelection
+local function initModelDropdownRuntime()
+	isSelectablePlayerDropdownTarget = function(targetPlayer)
+		return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
 	end
 
-	if Players:GetPlayerFromCharacter(model) == player then
-		return false
+	local function isSelectableModelDropdownTarget(model)
+		if not model or model == char then
+			return false
+		end
+
+		if Players:GetPlayerFromCharacter(model) == player then
+			return false
+		end
+
+		return isValidAttackTpTarget(model)
 	end
 
-	return isValidAttackTpTarget(model)
-end
+	local function getModelDropdownLabelForSelection(model, targetPlayer)
+		if not model and not targetPlayer then
+			return nil
+		end
 
-local function getModelDropdownLabelForSelection(model, targetPlayer)
-	if not model and not targetPlayer then
+		for label, mappedTarget in pairs(modelDropdownLookup) do
+			if mappedTarget.player == targetPlayer then
+				return label
+			end
+
+			if mappedTarget.player == nil and mappedTarget.model == model then
+				return label
+			end
+		end
+
 		return nil
 	end
 
-	for label, mappedTarget in pairs(modelDropdownLookup) do
-		if mappedTarget.player == targetPlayer then
-			return label
-		end
+	local function buildPlayerModelDropdownItems()
+		local discoveredModels = {}
+		local namedEntries = {}
 
-		if mappedTarget.player == nil and mappedTarget.model == model then
-			return label
-		end
-	end
+		for _, targetPlayer in ipairs(Players:GetPlayers()) do
+			if isSelectablePlayerDropdownTarget(targetPlayer) then
+				local targetModel = getTrackedPlayerTargetModel(targetPlayer)
+				if targetModel then
+					discoveredModels[targetModel] = true
+				end
 
-	return nil
-end
-
-local function buildPlayerModelDropdownItems()
-	local discoveredModels = {}
-	local namedEntries = {}
-
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		if isSelectablePlayerDropdownTarget(targetPlayer) then
-			local targetModel = getTrackedPlayerTargetModel(targetPlayer)
-			if targetModel then
-				discoveredModels[targetModel] = true
-			end
-
-			namedEntries[#namedEntries + 1] = {
-				baseName = tostring(targetPlayer.Name ~= "" and targetPlayer.Name or "Player"),
-				fullName = targetPlayer:GetFullName(),
-				player = targetPlayer,
-				model = targetModel,
-			}
-		end
-	end
-
-	for _, instance in ipairs(Workspace:GetDescendants()) do
-		if instance:IsA("Humanoid") and instance.Health > 0 then
-			local model = instance.Parent
-			if model and model:IsA("Model") and not discoveredModels[model] and isSelectableModelDropdownTarget(model) then
-				discoveredModels[model] = true
 				namedEntries[#namedEntries + 1] = {
-					baseName = tostring(model.Name ~= "" and model.Name or "Model"),
-					fullName = model:GetFullName(),
-					model = model,
+					baseName = tostring(targetPlayer.Name ~= "" and targetPlayer.Name or "Player"),
+					fullName = targetPlayer:GetFullName(),
+					player = targetPlayer,
+					model = targetModel,
 				}
 			end
 		end
-	end
 
-	table.sort(namedEntries, function(left, right)
-		local leftName = string.lower(left.baseName)
-		local rightName = string.lower(right.baseName)
-		if leftName == rightName then
-			return left.fullName < right.fullName
-		end
-		return leftName < rightName
-	end)
-
-	table.clear(modelDropdownLookup)
-
-	local usedLabels = {}
-	local items = {}
-	for _, entry in ipairs(namedEntries) do
-		local label = entry.baseName
-		local suffix = 1
-
-		while usedLabels[label] do
-			suffix = suffix + 1
-			label = string.format("%s (%d)", entry.baseName, suffix)
+		for _, instance in ipairs(Workspace:GetDescendants()) do
+			if instance:IsA("Humanoid") and instance.Health > 0 then
+				local model = instance.Parent
+				if model and model:IsA("Model") and not discoveredModels[model] and isSelectableModelDropdownTarget(model) then
+					discoveredModels[model] = true
+					namedEntries[#namedEntries + 1] = {
+						baseName = tostring(model.Name ~= "" and model.Name or "Model"),
+						fullName = model:GetFullName(),
+						model = model,
+					}
+				end
+			end
 		end
 
-		usedLabels[label] = true
-		items[#items + 1] = label
-		modelDropdownLookup[label] = {
-			player = entry.player,
-			model = entry.model,
-		}
+		table.sort(namedEntries, function(left, right)
+			local leftName = string.lower(left.baseName)
+			local rightName = string.lower(right.baseName)
+			if leftName == rightName then
+				return left.fullName < right.fullName
+			end
+			return leftName < rightName
+		end)
+
+		table.clear(modelDropdownLookup)
+
+		local usedLabels = {}
+		local items = {}
+		for _, entry in ipairs(namedEntries) do
+			local label = entry.baseName
+			local suffix = 1
+
+			while usedLabels[label] do
+				suffix = suffix + 1
+				label = string.format("%s (%d)", entry.baseName, suffix)
+			end
+
+			usedLabels[label] = true
+			items[#items + 1] = label
+			modelDropdownLookup[label] = {
+				player = entry.player,
+				model = entry.model,
+			}
+		end
+
+		return items
 	end
 
-	return items
+	applyModelDropdownSelection = function(selectedValue)
+		local resolvedValue = tostring(selectedValue or "")
+		if resolvedValue == "" then
+			setManualAttackTpTarget(nil)
+			return
+		end
+
+		local selectedEntry = modelDropdownLookup[resolvedValue]
+		if not selectedEntry then
+			setManualAttackTpTarget(nil)
+			return
+		end
+
+		if isSelectablePlayerDropdownTarget(selectedEntry.player) then
+			setManualAttackTpTarget(selectedEntry.model, selectedEntry.player)
+		elseif isSelectableModelDropdownTarget(selectedEntry.model) then
+			setManualAttackTpTarget(selectedEntry.model)
+		else
+			setManualAttackTpTarget(nil)
+		end
+	end
+
+	syncModelDropdownSelectionToManualTarget = function()
+		if not modelDropdownControl or not modelDropdownControl.SetValue then
+			return
+		end
+
+		modelDropdownControl.SetValue(getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer), true)
+	end
+
+	refreshModelDropdown = function(preferredValue)
+		if not modelDropdownControl or not modelDropdownControl.SetItems then
+			return
+		end
+
+		local items = buildPlayerModelDropdownItems()
+		local nextPreferredValue = preferredValue
+		if hasManualAttackTpSelection() then
+			nextPreferredValue = getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer)
+		elseif nextPreferredValue == nil and modelDropdownControl.GetValue then
+			nextPreferredValue = modelDropdownControl.GetValue()
+		end
+
+		modelDropdownControl.SetItems(items, nextPreferredValue)
+		syncModelDropdownSelectionToManualTarget()
+	end
 end
 
-local function applyModelDropdownSelection(selectedValue)
-	local resolvedValue = tostring(selectedValue or "")
-	if resolvedValue == "" then
-		setManualAttackTpTarget(nil)
-		return
-	end
-
-	local selectedEntry = modelDropdownLookup[resolvedValue]
-	if not selectedEntry then
-		setManualAttackTpTarget(nil)
-		return
-	end
-
-	if isSelectablePlayerDropdownTarget(selectedEntry.player) then
-		setManualAttackTpTarget(selectedEntry.model, selectedEntry.player)
-	elseif isSelectableModelDropdownTarget(selectedEntry.model) then
-		setManualAttackTpTarget(selectedEntry.model)
-	else
-		setManualAttackTpTarget(nil)
-	end
-end
-
-syncModelDropdownSelectionToManualTarget = function()
-	if not modelDropdownControl or not modelDropdownControl.SetValue then
-		return
-	end
-
-	modelDropdownControl.SetValue(getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer), true)
-end
-
-local function refreshModelDropdown(preferredValue)
-	if not modelDropdownControl or not modelDropdownControl.SetItems then
-		return
-	end
-
-	local items = buildPlayerModelDropdownItems()
-	local nextPreferredValue = preferredValue
-	if hasManualAttackTpSelection() then
-		nextPreferredValue = getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer)
-	elseif nextPreferredValue == nil and modelDropdownControl.GetValue then
-		nextPreferredValue = modelDropdownControl.GetValue()
-	end
-
-	modelDropdownControl.SetItems(items, nextPreferredValue)
-	syncModelDropdownSelectionToManualTarget()
-end
+initModelDropdownRuntime()
 
 stopView = function()
 	viewing = false
@@ -6440,9 +6445,9 @@ task.spawn(function()
 	end
 
 	local overlayToggleControl = _G["4tog_on_one_frame"]({
-		title = "Overlay",
+		title = "UI",
 		name1 = "HP %",
-		name2 = "Character",
+		name2 = "Character Name",
 		name3 = "ULT %",
 		name4 = "ULTED ESP",
 		saveKey1 = "Overlay4HP",
@@ -6871,14 +6876,14 @@ task.spawn(function()
 						safeZone.atDestination = false
 						safeZone.savedCFrame = nil
 						safeZone.pointCurrent = safeZone.pointStart
-						showInfo("SAFE ZONE", "Returned to saved position", 2)
+
 					end)
 				elseif humanoid.Health <= safeZone.lowHp and not safeZone.atDestination and safeZone.travelMode ~= "to_safe" and canSaveSafeZonePosition(character, characterRoot, humanoid) then
 					safeZone.savedCFrame = getUprightSetBackCFrame(characterRoot.Position, characterRoot.CFrame)
 					safeZone.pointCurrent = safeZone.pointStart
 					setNothingXProtectionEnabled(false)
 					safeZone.atDestination = true
-					showInfo("SAFE ZONE", "Low HP detected", 2)
+					
 				elseif safeZone.atDestination and safeZone.savedCFrame then
 					local safeDestination = getSafeZoneDestination(safeZone.savedCFrame)
 					startSafeZoneTravel(safeDestination, "to_safe")
