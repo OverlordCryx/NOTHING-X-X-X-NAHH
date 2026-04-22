@@ -5582,6 +5582,10 @@ safeZone.toggleControl = tog({
 safeZone.toggleControl.Frame.LayoutOrder = 10000
 
 local function initPlayerOverlayUi()
+	if game.GameId ~= 3808081382 then
+		return
+	end
+
 	local espOverlayConfig = {
 		showCharacter = false,
 		showUltimate = false,
@@ -5924,7 +5928,7 @@ local function initPlayerOverlayUi()
 		espOverlayState[targetPlayer] = nil
 	end
 
-	_G["4tog_on_one_frame"]({
+	local overlayToggleControl = _G["4tog_on_one_frame"]({
 		title = "Overlay",
 		name1 = "HP %",
 		name2 = "Character",
@@ -5951,6 +5955,9 @@ local function initPlayerOverlayUi()
 			espOverlayConfig.showEsp = enabled
 		end,
 	})
+	if overlayToggleControl and overlayToggleControl.Frame then
+		overlayToggleControl.Frame.LayoutOrder = 100000
+	end
 
 	Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
 
