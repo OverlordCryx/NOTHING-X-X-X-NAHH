@@ -6368,7 +6368,7 @@ task.spawn(function()
 		billboard.AlwaysOnTop = true
 		billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
 		billboard.Size = UDim2.fromOffset(BILLBOARD_MIN_WIDTH, 0)
-		billboard.MaxDistance = 2500
+		billboard.MaxDistance = 333
 		billboard.Parent = model
 
 		local frame = Instance.new("Frame")
