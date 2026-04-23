@@ -3422,7 +3422,6 @@ initCharacterCleanupRuntime()
 local StayToggle = nil
 local DashToggle = nil
 task.spawn(function()
-    task.wait(0.2)
     local stayPos = nil
     local stayConn = nil
     local stayGyro = nil
@@ -3640,7 +3639,6 @@ end
     player.CharacterAdded:Connect(setupCharacter)
 end)
 task.spawn(function()
-    task.wait(0.3)
     local flingState = {
         localPlayer = Players.LocalPlayer,
         taskToken = 0,
