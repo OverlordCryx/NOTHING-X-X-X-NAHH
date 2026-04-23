@@ -491,10 +491,10 @@ local getTrashState = {
 	collisionState = nil,
 	savedCFrame = nil,
 	holdCFrame = nil,
-	stepDistance = 100,
-	stepDelay = 0,
+	stepDistance = 50,
+	stepDelay = 0.003,
 	returnStepDistance = 10,
-	returnStepDelay = 0.047,
+	returnStepDelay = 0.046,
 	lastToggleAt = 0,
 	toggleCooldown = 0.35,
 	token = 0,
@@ -2256,6 +2256,12 @@ function handleSetBackKeybind()
 		return
 	end
 
+	if not setBackSavedCFrame then
+		setBackLastPressAt = 0
+		saveSetBackPosition()
+		return
+	end
+
 	setBackLastPressAt = now
 	task.delay(0.35, function()
 		if currentToken ~= setBackPressToken or setBackLastPressAt ~= now then
@@ -2497,6 +2503,15 @@ function getTrackedPlayerTargetModel(targetPlayer)
 	return nil
 end
 
+local function getSelectablePlayerForTargetModel(model)
+	local targetPlayer = model and Players:GetPlayerFromCharacter(model)
+	if isSelectablePlayerDropdownTarget(targetPlayer) then
+		return targetPlayer
+	end
+
+	return nil
+end
+
 local function resolveManualAttackTpTargetModel()
 	if manualAttackTpPlayer then
 		manualAttackTpTarget = getTrackedPlayerTargetModel(manualAttackTpPlayer)
@@ -2556,7 +2571,11 @@ syncFlingModeControls = function()
 end
 
 local function getDisplayedTargetModel()
-	local currentTarget = resolveAttackTpTarget()
+	if isValidAttackTpTarget(camLockTarget) then
+		return camLockTarget
+	end
+
+	local currentTarget = resolveManualAttackTpTargetModel()
 	if isValidAttackTpTarget(currentTarget) then
 		return currentTarget
 	end
@@ -2843,9 +2862,14 @@ local function getClosestMouseTarget()
 end
 
 local function setManualAttackTpTarget(model, targetPlayer)
-	if isSelectablePlayerDropdownTarget(targetPlayer) then
-		manualAttackTpPlayer = targetPlayer
-		manualAttackTpTarget = getTrackedPlayerTargetModel(targetPlayer)
+	local resolvedTargetPlayer = targetPlayer
+	if not isSelectablePlayerDropdownTarget(resolvedTargetPlayer) then
+		resolvedTargetPlayer = getSelectablePlayerForTargetModel(model)
+	end
+
+	if isSelectablePlayerDropdownTarget(resolvedTargetPlayer) then
+		manualAttackTpPlayer = resolvedTargetPlayer
+		manualAttackTpTarget = getTrackedPlayerTargetModel(resolvedTargetPlayer)
 	elseif isValidAttackTpTarget(model) then
 		manualAttackTpPlayer = nil
 		manualAttackTpTarget = model
