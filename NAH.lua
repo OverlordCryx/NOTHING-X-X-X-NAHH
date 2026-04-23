@@ -1,62 +1,49 @@
-task.spawn(function()
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local localPlayer = Players.LocalPlayer
-local tracked = {}
-local antiflingConnection
-local function applyAntiFling(character)
-    for _, v in ipairs(character:GetDescendants()) do
-        if v:IsA("BasePart") then
-            v.CanCollide = false
-        end
-    end
-    character.DescendantAdded:Connect(function(v)
-        if v:IsA("BasePart") then
-            v.CanCollide = false
-        end
-    end)
-end
-local function trackPlayer(player)
-    if player == localPlayer then return end
-    tracked[player] = true
-    local function onCharacter(char)
-        applyAntiFling(char)
-    end
-    if player.Character then
-        onCharacter(player.Character)
-    end
-    player.CharacterAdded:Connect(onCharacter)
-end
-local function untrackPlayer(player)
-    tracked[player] = nil
-end
-local function enableAntiFling()
-    for _, player in ipairs(Players:GetPlayers()) do
-        trackPlayer(player)
-    end
-    Players.PlayerAdded:Connect(trackPlayer)
-    Players.PlayerRemoving:Connect(untrackPlayer)
-    antiflingConnection = RunService.Stepped:Connect(function()
-        for player, _ in pairs(tracked) do
-            if player and player.Character then
-                for _, v in ipairs(player.Character:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.CanCollide = false
-                    end
-                end
+do
+    local antiFlingPlayers = game:GetService("Players")
+    local antiFlingLocalPlayer = antiFlingPlayers.LocalPlayer
+    local tracked = {}
+    local antiFlingCharacterConnections = {}
+
+    local function applyAntiFling(character)
+        for _, v in ipairs(character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
             end
         end
-    end)
-end
-local function disableAntiFling()
-    if antiflingConnection then
-        antiflingConnection:Disconnect()
-        antiflingConnection = nil
+        character.DescendantAdded:Connect(function(v)
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end)
     end
-    tracked = {}
+
+    local function trackPlayer(player)
+        if player == antiFlingLocalPlayer or tracked[player] then return end
+        tracked[player] = true
+        local function onCharacter(char)
+            applyAntiFling(char)
+        end
+        if player.Character then
+            onCharacter(player.Character)
+        end
+        antiFlingCharacterConnections[player] = player.CharacterAdded:Connect(onCharacter)
+    end
+
+    local function untrackPlayer(player)
+        tracked[player] = nil
+        local connection = antiFlingCharacterConnections[player]
+        if connection then
+            connection:Disconnect()
+            antiFlingCharacterConnections[player] = nil
+        end
+    end
+
+    for _, player in ipairs(antiFlingPlayers:GetPlayers()) do
+        trackPlayer(player)
+    end
+    antiFlingPlayers.PlayerAdded:Connect(trackPlayer)
+    antiFlingPlayers.PlayerRemoving:Connect(untrackPlayer)
 end
-enableAntiFling()
-end)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -536,6 +523,7 @@ local safeZone = {
 	travelMode = nil,
 	atDestination = false,
 	toggleControl = nil,
+	targetDisplayAccumulator = 0,
 }
 
 local function isSafeZoneBlocking()
@@ -3383,37 +3371,16 @@ local function OnCharacterAdded(Char)
 	usunPusteAccessory(Char)
 end
 if speaker.Character then
-	task.spawn(function()
-		OnCharacterAdded(speaker.Character)
-	end)
+	OnCharacterAdded(speaker.Character)
 end
 ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
 task.spawn(function()
-	while true do
-		task.wait()
+	while speaker.Parent do
+		task.wait(0.35)
 		local char = speaker.Character
 		if not char then continue end
 		usunPusteAccessory(char)
-		usunPusteAccessory(char)
 	end
-end)
-task.spawn(function()
-    local RunService = game:GetService("RunService")
-    local Players = game:GetService("Players")
-    local connection = RunService.Heartbeat:Connect(function()
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= Players.LocalPlayer and player.Character then
-                for _, part in ipairs(player.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                        part.Velocity = Vector3.zero
-                        part.AssemblyLinearVelocity = Vector3.zero
-                        part.AssemblyAngularVelocity = Vector3.zero
-                    end
-                end
-            end
-        end
-    end)
 end)
 end
 
@@ -3604,7 +3571,13 @@ end
     local hasDummyMainPart = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MainPart")
     local supportsDashBlock = game.GameId == 3808081382
 
-    local panel = _G["2tog_on_one_button"]({
+    local createMovementPanel = _G["2tog_on_one_button"]
+    while type(createMovementPanel) ~= "function" do
+        task.wait()
+        createMovementPanel = _G["2tog_on_one_button"]
+    end
+
+    local panel = createMovementPanel({
         title = "Movement",
         name1 = "Stay",
         name2 = supportsDashBlock and "Dash Block FE" or nil,
@@ -6721,12 +6694,21 @@ task.spawn(function()
 
 	task.spawn(function()
 		while screenGui.Parent do
-			for _, targetPlayer in ipairs(Players:GetPlayers()) do
-				if targetPlayer ~= player then
-					updatePlayerOverlay(targetPlayer)
+			local overlayEnabled = espOverlayConfig.showHp
+				or espOverlayConfig.showCharacter
+				or espOverlayConfig.showUltimate
+				or espOverlayConfig.showEsp
+
+			if overlayEnabled then
+				for _, targetPlayer in ipairs(Players:GetPlayers()) do
+					if targetPlayer ~= player then
+						updatePlayerOverlay(targetPlayer)
+					end
 				end
+				task.wait(0.2)
+			else
+				task.wait(0.5)
 			end
-			task.wait(0.1)
 		end
 	end)
 end)
@@ -6738,7 +6720,7 @@ refreshModelDropdown(getSavedControlValue("model"))
 
 task.spawn(function()
 	while screenGui.Parent do
-		task.wait(1)
+		task.wait(2)
 		refreshModelDropdown()
 	end
 end)
@@ -6951,57 +6933,52 @@ task.spawn(function()
 	end
 end)
 
-task.spawn(function()
-	while true do
-		task.wait()
+do
+	if targetActionHeartbeat then
+		targetActionHeartbeat:Disconnect()
+		targetActionHeartbeat = nil
+	end
+	targetActionHeartbeat = RunService.Heartbeat:Connect(function(dt)
+	local shouldRefreshTargetDisplay = false
 
-		if camLockEnabled then
-			cam = Workspace.CurrentCamera or cam
-			if cam then
-				if not isValidCamLockTarget(camLockTarget) then
-					camLockTarget = nil
-					camLockTarget = getCamLockTarget()
-				end
+	if camLockEnabled then
+		cam = Workspace.CurrentCamera or cam
+		if cam then
+			local previousTarget = camLockTarget
+			local previousWaiting = camLockWaiting
+			local nextTarget = camLockTarget
 
-				if not isValidCamLockTarget(camLockTarget) then
+			if not isValidCamLockTarget(nextTarget) then
+				nextTarget = getCamLockTarget()
+			end
+
+			camLockTarget = isValidCamLockTarget(nextTarget) and nextTarget or nil
+			camLockWaiting = camLockTarget == nil
+
+			if camLockTarget then
+				local targetRoot = camLockTarget:FindFirstChild("HumanoidRootPart")
+				if not targetRoot then
 					camLockWaiting = true
-					syncCamLockKeybindDisplay()
-					syncTargetPickKeybindDisplay()
-					updateTargetDisplay()
 				else
-					camLockWaiting = false
-					syncCamLockKeybindDisplay()
-					syncTargetPickKeybindDisplay()
-					updateTargetDisplay()
-
-					local targetRoot = camLockTarget:FindFirstChild("HumanoidRootPart")
-					if not targetRoot then
-						camLockWaiting = true
-						syncCamLockKeybindDisplay()
-						syncTargetPickKeybindDisplay()
-						updateTargetDisplay()
-					else
-						local cameraPosition = cam.CFrame.Position
-						cam.CFrame = CFrame.lookAt(cameraPosition, targetRoot.Position, targetRoot.CFrame.UpVector)
-					end
+					local cameraPosition = cam.CFrame.Position
+					cam.CFrame = CFrame.lookAt(cameraPosition, targetRoot.Position, targetRoot.CFrame.UpVector)
 				end
+			end
+
+			if previousTarget ~= camLockTarget or previousWaiting ~= camLockWaiting then
+				syncCamLockKeybindDisplay()
+				syncTargetPickKeybindDisplay()
+				shouldRefreshTargetDisplay = true
 			end
 		end
 	end
-end)
 
-task.spawn(function()
-	while true do
-		task.wait(0.15)
+	safeZone.targetDisplayAccumulator = (safeZone.targetDisplayAccumulator or 0) + dt
+	if shouldRefreshTargetDisplay or safeZone.targetDisplayAccumulator >= 0.15 then
+		safeZone.targetDisplayAccumulator = 0
 		updateTargetDisplay()
 	end
-end)
 
-if targetActionHeartbeat then
-	targetActionHeartbeat:Disconnect()
-	targetActionHeartbeat = nil
-end
-targetActionHeartbeat = RunService.Heartbeat:Connect(function()
 	if isSafeZoneBlocking() then
 		return
 	end
@@ -7116,7 +7093,8 @@ targetActionHeartbeat = RunService.Heartbeat:Connect(function()
 			end
 		end
 	end
-end)
+	end)
+end
 
 task.spawn(function()
 	while true do
