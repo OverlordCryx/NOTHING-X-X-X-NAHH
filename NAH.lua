@@ -2932,10 +2932,6 @@ local function toggleAttackTp(nextState)
 		nextTarget = getPreferredAttackTpTarget()
 	end
 
-	if shouldEnable and not isValidAttackTpTarget(nextTarget) then
-		shouldEnable = false
-	end
-
 	attackTpEnabled = shouldEnable == true
 
 	if attackTpEnabled then
