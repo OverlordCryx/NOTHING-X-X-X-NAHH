@@ -569,7 +569,6 @@ walkFlingUseNormal = false
 walkFlingDirections = {
 	Forward = true,
 }
-walkFlingHeartbeat = nil
 walkFlingTaskToken = 0
 auraFlingHeartbeat = nil
 auraFlingTaskToken = 0
@@ -984,49 +983,43 @@ function setWalkFlingEnabled(enabled)
 	walkFlingEnabled = nextState
 
 	if walkFlingEnabled then
-		local moveOffset = 0.1
-		if walkFlingHeartbeat then
-			walkFlingHeartbeat:Disconnect()
-			walkFlingHeartbeat = nil
-		end
-		walkFlingHeartbeat = RunService.Heartbeat:Connect(function()
-			local currentCharacter = player.Character
-			local rootPart = getRootUniversal(currentCharacter)
-			if not rootPart then
-				return
-			end
-
-			local originalVelocity = rootPart.Velocity
-			if walkFlingUseNormal then
-				rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
-				RunService.RenderStepped:Wait()
-				if rootPart.Parent then
-					rootPart.Velocity = originalVelocity
+		walkFlingTaskToken += 1
+		local currentToken = walkFlingTaskToken
+		task.spawn(function()
+			local moveOffset = 0.1
+			while walkFlingEnabled and walkFlingTaskToken == currentToken do
+				RunService.Heartbeat:Wait()
+				local currentCharacter = player.Character
+				local rootPart = getRootUniversal(currentCharacter)
+				if currentCharacter and rootPart then
+					if not walkFlingUseNormal then
+						local originalVelocity = rootPart.Velocity
+						local direction = getWalkFlingDirectionVector(rootPart)
+						if direction then
+							rootPart.Velocity = direction * walkFlingPower
+						end
+						RunService.RenderStepped:Wait()
+						if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
+							rootPart.Velocity = originalVelocity
+						end
+					else
+						local originalVelocity = rootPart.Velocity
+						rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
+						RunService.RenderStepped:Wait()
+						if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
+							rootPart.Velocity = originalVelocity
+						end
+						RunService.Stepped:Wait()
+						if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
+							rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
+							moveOffset *= -1
+						end
+					end
 				end
-				RunService.Stepped:Wait()
-				if rootPart.Parent then
-					rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
-					moveOffset *= -1
-				end
-				return
-			end
-
-			local direction = getWalkFlingDirectionVector(rootPart)
-			if not direction then
-				return
-			end
-
-			rootPart.Velocity = direction * walkFlingPower
-			RunService.RenderStepped:Wait()
-			if rootPart.Parent then
-				rootPart.Velocity = originalVelocity
 			end
 		end)
 	else
-		if walkFlingHeartbeat then
-			walkFlingHeartbeat:Disconnect()
-			walkFlingHeartbeat = nil
-		end
+		walkFlingTaskToken += 1
 		zeroLocalPlayerRoot()
 	end
 
@@ -2308,10 +2301,7 @@ local function handleCharacterDeath()
 	manualAttackTpTarget = nil
 	manualAttackTpPlayer = nil
 	pendingTeleportToSelectedPlayer = false
-	if walkFlingHeartbeat then
-		walkFlingHeartbeat:Disconnect()
-		walkFlingHeartbeat = nil
-	end
+	walkFlingTaskToken += 1
 	if auraFlingHeartbeat then
 		pcall(function()
 			auraFlingHeartbeat:Disconnect()
@@ -7386,3 +7376,4 @@ task.spawn(function()
 end)
 updateCurrentGui()
 end)
+
