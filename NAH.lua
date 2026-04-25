@@ -4813,12 +4813,12 @@ dropdown = Dropdown
 local modelDropdownLookup = {}
 local modelDropdownControl = nil
 local applyModelDropdownSelection
-local function initModelDropdownRuntime()
+do
 	isSelectablePlayerDropdownTarget = function(targetPlayer)
 		return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
 	end
 
-	local function isSelectableModelDropdownTarget(model)
+	isSelectableModelDropdownTarget = function(model)
 		if not model or model == char then
 			return false
 		end
@@ -4830,7 +4830,7 @@ local function initModelDropdownRuntime()
 		return isValidAttackTpTarget(model)
 	end
 
-	local function getModelDropdownLabelForSelection(model, targetPlayer)
+	getModelDropdownLabelForSelection = function(model, targetPlayer)
 		if not model and not targetPlayer then
 			return nil
 		end
@@ -4848,7 +4848,7 @@ local function initModelDropdownRuntime()
 		return nil
 	end
 
-	local function buildPlayerModelDropdownItems()
+	buildPlayerModelDropdownItems = function()
 		local discoveredModels = {}
 		local namedEntries = {}
 
@@ -4962,8 +4962,6 @@ local function initModelDropdownRuntime()
 		syncModelDropdownSelectionToManualTarget()
 	end
 end
-
-initModelDropdownRuntime()
 
 stopView = function()
 	viewing = false
