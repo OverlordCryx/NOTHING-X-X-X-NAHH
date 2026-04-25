@@ -583,9 +583,9 @@ flingOrbitTime = 0
 flingOrbitStepXZ = 0
 flingOrbitStepY = 0
 flingTargetIndex = 1
-flingOrbitSpeed = 4e9
-flingOrbitIncrement = 0.35
-flingOrbitMax = 2.2
+flingOrbitSpeed = 999999999999999
+flingOrbitIncrement = 0.1
+flingOrbitMax = 1.3
 local viewing = false
 local currentViewTarget = nil
 local currentViewPlayer = nil
@@ -1036,72 +1036,61 @@ function setWalkFlingEnabled(enabled)
 end
 
 function setAuraFlingEnabled(enabled)
-	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
-		return auraFlingEnabled and "ON" or "OFF"
-	end
 	local nextState = enabled == nil and not auraFlingEnabled or enabled == true
 	auraFlingEnabled = nextState
-	auraFlingTaskToken += 1
-
-	if not auraFlingEnabled then
-		if auraFlingHeartbeat then
-			auraFlingHeartbeat:Disconnect()
-			auraFlingHeartbeat = nil
-		end
-		resetGlobalFlingMotion()
-		syncFlingModeControls()
-		return "OFF"
-	end
-
-	local taskToken = auraFlingTaskToken
 	if auraFlingHeartbeat then
-		auraFlingHeartbeat:Disconnect()
+		pcall(function()
+			auraFlingHeartbeat:Disconnect()
+		end)
 		auraFlingHeartbeat = nil
 	end
-	auraFlingHeartbeat = RunService.Heartbeat:Connect(function()
-		if not auraFlingEnabled or auraFlingTaskToken ~= taskToken then
-			if auraFlingHeartbeat then
-				auraFlingHeartbeat:Disconnect()
-				auraFlingHeartbeat = nil
-			end
-			if not auraFlingEnabled then
-				resetGlobalFlingMotion()
-			end
-			return
-		end
-		local myCharacter = player.Character
-		local myRoot = getRootUniversal(myCharacter)
-		if myRoot then
-			local savedCFrame = myRoot.CFrame
-			local myPosition = myRoot.Position
-			local touchedAny = false
 
-			for _, otherPlayer in ipairs(getOtherPlayers()) do
-				local targetModel = otherPlayer.Character
-				local targetRoot = getRootUniversal(targetModel)
-				if targetRoot and isValidAttackTpTarget(targetModel) and (targetRoot.Position - myPosition).Magnitude <= auraRange then
-					touchedAny = true
-					myRoot.AssemblyLinearVelocity = Vector3.zero
-					myRoot.AssemblyAngularVelocity = Vector3.zero
-					myCharacter:PivotTo(targetRoot.CFrame)
-					if not auraFlingEnabled or auraFlingTaskToken ~= taskToken or not myRoot.Parent then
-						break
+	if auraFlingEnabled then
+		auraFlingHeartbeat = task.spawn(function()
+			while auraFlingEnabled do
+				local myCharacter = player.Character
+				local myRoot = getRootUniversal(myCharacter)
+				if myRoot then
+					local savedCFrame = myRoot.CFrame
+					local myPosition = myRoot.Position
+					local touchedAny = false
+
+					for _, otherPlayer in ipairs(getOtherPlayers()) do
+						local targetModel = otherPlayer.Character
+						local targetRoot = getRootUniversal(targetModel)
+						if targetRoot and isValidAttackTpTarget(targetModel) and (targetRoot.Position - myPosition).Magnitude <= auraRange then
+							touchedAny = true
+							myRoot.AssemblyLinearVelocity = Vector3.zero
+							myRoot.AssemblyAngularVelocity = Vector3.zero
+							myCharacter:PivotTo(targetRoot.CFrame)
+							task.wait()
+							if not auraFlingEnabled or not myRoot.Parent then
+								break
+							end
+							myRoot.AssemblyAngularVelocity = Vector3.new(flingPower, flingPower, flingPower)
+							myRoot.AssemblyLinearVelocity = myRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+						end
 					end
-					myRoot.AssemblyAngularVelocity = Vector3.new(flingPower, flingPower, flingPower)
-					myRoot.AssemblyLinearVelocity = myRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+
+					if touchedAny and myRoot.Parent then
+						task.wait()
+						myRoot.AssemblyAngularVelocity = Vector3.zero
+						myRoot.AssemblyLinearVelocity = Vector3.zero
+						myCharacter:PivotTo(savedCFrame)
+					end
 				end
+
+				task.wait()
 			end
 
-			if touchedAny and myRoot.Parent then
-				myRoot.AssemblyAngularVelocity = Vector3.zero
-				myRoot.AssemblyLinearVelocity = Vector3.zero
-				myCharacter:PivotTo(savedCFrame)
-			end
-		end
-	end)
+			resetGlobalFlingMotion()
+		end)
+	else
+		resetGlobalFlingMotion()
+	end
 
 	syncFlingModeControls()
-	return "ON"
+	return auraFlingEnabled and "ON" or "OFF"
 end
 
 function clickFlingTargetPlayer(targetPlayer)
@@ -1110,50 +1099,43 @@ function clickFlingTargetPlayer(targetPlayer)
 	end
 
 	clickFlingBusy = true
-	local myCharacter = player.Character
-	local myRoot = getRootUniversal(myCharacter)
-	local targetRoot = getRootUniversal(targetPlayer and targetPlayer.Character)
+	task.spawn(function()
+		local myCharacter = player.Character
+		local targetCharacter = targetPlayer and targetPlayer.Character
+		local myRoot = getRootUniversal(myCharacter)
+		local targetRoot = getRootUniversal(targetCharacter)
+		if myRoot and targetRoot and isValidAttackTpTarget(targetCharacter) then
+			local savedCFrame = myRoot.CFrame
+			local startedAt = tick()
+			local lastTick = tick()
+			resetGlobalFlingMotion()
 
-	if not myRoot or not targetRoot then
-		clickFlingBusy = false
-		return
-	end
+			while tick() - startedAt < 8 do
+				if not clickFlingEnabled then
+					break
+				end
 
-	local savedCFrame = myRoot.CFrame
-	local startedAt = tick()
-	local lastTick = tick()
-	resetGlobalFlingMotion()
-	local connection
-	connection = RunService.Heartbeat:Connect(function()
-		if not clickFlingEnabled or tick() - startedAt >= 8 then
-			if connection then
-				connection:Disconnect()
-				connection = nil
+				targetCharacter = targetPlayer and targetPlayer.Character
+				targetRoot = getRootUniversal(targetCharacter)
+				if not targetRoot or not targetRoot.Parent or not myRoot.Parent or not isValidAttackTpTarget(targetCharacter) then
+					break
+				end
+
+				local now = tick()
+				local dt = now - lastTick
+				lastTick = now
+				applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+				RunService.Heartbeat:Wait()
 			end
+
+			myRoot.AssemblyAngularVelocity = Vector3.zero
+			myRoot.AssemblyLinearVelocity = Vector3.zero
 			if myRoot.Parent then
-				myRoot.AssemblyAngularVelocity = Vector3.zero
-				myRoot.AssemblyLinearVelocity = Vector3.zero
 				myRoot.CFrame = savedCFrame
 			end
-			clickFlingBusy = false
-			return
 		end
 
-		local targetCharacter = targetPlayer.Character
-		targetRoot = getRootUniversal(targetCharacter)
-		if not targetRoot or not targetRoot.Parent or not myRoot.Parent or not isValidAttackTpTarget(targetCharacter) then
-			if connection then
-				connection:Disconnect()
-				connection = nil
-			end
-			clickFlingBusy = false
-			return
-		end
-
-		local now = tick()
-		local dt = now - lastTick
-		lastTick = now
-		applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+		clickFlingBusy = false
 	end)
 end
 
@@ -1172,43 +1154,27 @@ function getPlayerFromClickedPart(part)
 end
 
 function setClickFlingEnabled(enabled)
-	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
-		return clickFlingEnabled and "ON" or "OFF"
-	end
 	local nextState = enabled == nil and not clickFlingEnabled or enabled == true
 	clickFlingEnabled = nextState
-	clickFlingTaskToken += 1
+
+	if clickFlingConnection then
+		clickFlingConnection:Disconnect()
+		clickFlingConnection = nil
+	end
 
 	if clickFlingEnabled then
-		local taskToken = clickFlingTaskToken
 		local mouse = player:GetMouse()
-		local wasMouseDown = false
-		if clickFlingConnection then
-			clickFlingConnection:Disconnect()
-			clickFlingConnection = nil
-		end
-		clickFlingConnection = RunService.Heartbeat:Connect(function()
-			if not clickFlingEnabled or clickFlingTaskToken ~= taskToken then
-				if clickFlingConnection then
-					clickFlingConnection:Disconnect()
-					clickFlingConnection = nil
-				end
+		clickFlingConnection = mouse.Button1Down:Connect(function()
+			if not clickFlingEnabled then
 				return
 			end
-			local isMouseDown = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-			if isMouseDown and not wasMouseDown then
-				local targetPlayer = getPlayerFromClickedPart(mouse.Target)
-				if targetPlayer then
-					clickFlingTargetPlayer(targetPlayer)
-				end
+
+			local targetPlayer = getPlayerFromClickedPart(mouse.Target)
+			if targetPlayer then
+				clickFlingTargetPlayer(targetPlayer)
 			end
-			wasMouseDown = isMouseDown
 		end)
 	else
-		if clickFlingConnection then
-			clickFlingConnection:Disconnect()
-			clickFlingConnection = nil
-		end
 		resetGlobalFlingMotion()
 	end
 
@@ -1217,28 +1183,27 @@ function setClickFlingEnabled(enabled)
 end
 
 function setFlingAllEnabled(enabled)
-	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
-		return flingAllEnabled and "ON" or "OFF"
-	end
 	local nextState = enabled == nil and not flingAllEnabled or enabled == true
 	flingAllEnabled = nextState
-	flingAllTaskToken += 1
+
+	if flingAllHeartbeat then
+		flingAllHeartbeat:Disconnect()
+		flingAllHeartbeat = nil
+	end
 
 	if flingAllEnabled then
-		local taskToken = flingAllTaskToken
 		resetGlobalFlingMotion()
-		if flingAllHeartbeat then
-			flingAllHeartbeat:Disconnect()
-			flingAllHeartbeat = nil
-		end
+		flingTargetIndex = 1
 		flingAllHeartbeat = RunService.Heartbeat:Connect(function(dt)
-			if not flingAllEnabled or flingAllTaskToken ~= taskToken then
+			if not flingAllEnabled then
 				if flingAllHeartbeat then
 					flingAllHeartbeat:Disconnect()
 					flingAllHeartbeat = nil
 				end
+				resetGlobalFlingMotion()
 				return
 			end
+
 			local myRoot = getRootUniversal(player.Character)
 			if not myRoot then
 				return
@@ -1266,10 +1231,6 @@ function setFlingAllEnabled(enabled)
 			flingTargetIndex += 1
 		end)
 	else
-		if flingAllHeartbeat then
-			flingAllHeartbeat:Disconnect()
-			flingAllHeartbeat = nil
-		end
 		resetGlobalFlingMotion()
 	end
 
@@ -2319,7 +2280,9 @@ local function handleCharacterDeath()
 		walkFlingHeartbeat = nil
 	end
 	if auraFlingHeartbeat then
-		auraFlingHeartbeat:Disconnect()
+		pcall(function()
+			auraFlingHeartbeat:Disconnect()
+		end)
 		auraFlingHeartbeat = nil
 	end
 	if clickFlingConnection then
@@ -2721,6 +2684,12 @@ local function isAirborneHumanoid(modelHumanoid)
 		or state == Enum.HumanoidStateType.PlatformStanding
 end
 
+local function isAliveHumanoid(humanoid)
+	return humanoid ~= nil
+		and humanoid.Health > 0
+		and humanoid:GetState() ~= Enum.HumanoidStateType.Dead
+end
+
 local function getAttackTpPlacement(characterRoot, targetModel)
 	if not characterRoot or not targetModel then
 		return nil, nil
@@ -2728,31 +2697,36 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 
 	local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
 	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
-	if not targetRoot or not targetHumanoid or targetHumanoid.Health <= 0 then
+	if not targetRoot or not isAliveHumanoid(targetHumanoid) or targetRoot.Anchored then
 		return nil, nil
 	end
 
 	local characterHumanoid = characterRoot.Parent and characterRoot.Parent:FindFirstChildOfClass("Humanoid")
-	local useAirTracking = isAirborneHumanoid(targetHumanoid) or isAirborneHumanoid(characterHumanoid)
-	local targetVelocity = targetRoot.AssemblyLinearVelocity
-	
-	local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
-	local lead = targetVelocity * leadTime
-	if lead.Magnitude > attackTpMaxHorizontalLead then
-		lead = lead.Unit * attackTpMaxHorizontalLead
+	if not isAliveHumanoid(characterHumanoid) then
+		return nil, nil
 	end
 
-	local predictedTargetPosition = targetRoot.Position + lead
+	local useAirTracking = isAirborneHumanoid(targetHumanoid) or isAirborneHumanoid(characterHumanoid)
+	local targetVelocity = targetRoot.AssemblyLinearVelocity
+
+	local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
+	local horizontalVelocity = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
+	local horizontalLead = horizontalVelocity * leadTime
+	if horizontalLead.Magnitude > attackTpMaxHorizontalLead then
+		horizontalLead = horizontalLead.Unit * attackTpMaxHorizontalLead
+	end
+
+	local verticalLead = math.clamp((targetVelocity.Y * leadTime) + attackTpVerticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
+	local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
 	local followDirection = getHorizontalUnit(targetVelocity)
 		or getHorizontalUnit(targetRoot.CFrame.LookVector)
 		or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
 		or Vector3.new(0, 0, -1)
-	
+
 	local behindDistance = useAirTracking and attackTpAirBehindDistance or attackTpBehindDistance
 	local verticalOffset = useAirTracking and attackTpAirVerticalOffset or attackTpGroundVerticalOffset
-	
 	local behindPosition = predictedTargetPosition - (followDirection * behindDistance) + Vector3.new(0, verticalOffset, 0)
-	local lookPosition = predictedTargetPosition + Vector3.new(0, verticalOffset * 0.35, 0)
+	local lookPosition = behindPosition + followDirection + Vector3.new(0, math.clamp(verticalLead * 0.12, -0.35, 0.35), 0)
 
 	return CFrame.lookAt(behindPosition, lookPosition, worldUpVector), targetVelocity
 end
@@ -3594,12 +3568,12 @@ task.spawn(function()
         taskToken = 0,
         runnerActive = false,
         runnerConnection = nil,
-        flingPower = 2e12,
-        orbitSpeed = 2e9,
+        flingPower = flingPower,
+        orbitSpeed = flingOrbitSpeed,
         orbitStepXZ = 0,
-        orbitStepY = 8,
-        orbitIncrement = 1.4,
-        orbitMax = 4,
+        orbitStepY = 0,
+        orbitIncrement = flingOrbitIncrement,
+        orbitMax = flingOrbitMax,
     }
 
     local function getRoot(char)
@@ -3625,6 +3599,7 @@ task.spawn(function()
         stopFlingRuntime()
         flingState.runnerActive = true
         local taskToken = flingState.taskToken
+        local lastTick = tick()
         flingState.runnerConnection = RunService.Heartbeat:Connect(function()
             if not flingEnabled or flingState.taskToken ~= taskToken then
                 stopFlingRuntime()
@@ -3637,7 +3612,7 @@ task.spawn(function()
             end
 
             local targetModel = getDisplayedTargetModel()
-            if not targetModel then
+            if not isValidAttackTpTarget(targetModel) then
                 return
             end
 
@@ -3646,25 +3621,10 @@ task.spawn(function()
                 return
             end
 
-            flingState.orbitStepXZ = flingState.orbitStepXZ + flingState.orbitIncrement
-            flingState.orbitStepY = flingState.orbitStepY + flingState.orbitIncrement
-            if flingState.orbitStepXZ > flingState.orbitMax then
-                flingState.orbitStepXZ = 0
-            end
-            if flingState.orbitStepY > flingState.orbitMax then
-                flingState.orbitStepY = 0
-            end
-
-            local t = tick() * flingState.orbitSpeed
-            local offset = Vector3.new(
-                math.cos(t) * flingState.orbitStepXZ,
-                flingState.orbitStepY,
-                math.sin(t) * flingState.orbitStepXZ
-            )
-
-            myRoot.CFrame = targetRoot.CFrame + offset
-            myRoot.AssemblyAngularVelocity = Vector3.new(flingState.flingPower, flingState.flingPower, flingState.flingPower)
-            myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * flingState.flingPower + Vector3.new(0, flingState.flingPower * 0.6, 0)
+            local now = tick()
+            local dt = now - lastTick
+            lastTick = now
+            applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
         end)
     end
 
@@ -4776,9 +4736,9 @@ end
 
 dropdown = Dropdown
 
-local modelDropdownLookup = {}
-local modelDropdownControl = nil
-local applyModelDropdownSelection
+modelDropdownLookup = {}
+modelDropdownControl = nil
+applyModelDropdownSelection = nil
 do
 	isSelectablePlayerDropdownTarget = function(targetPlayer)
 		return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
@@ -5070,13 +5030,13 @@ function teleportToSelectedTarget()
 	end
 	local character = player.Character
 	local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+	local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local targetModel = resolveAttackTpTarget()
-	local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
-	if not characterRoot then
+	if not characterRoot or not isAliveHumanoid(characterHumanoid) then
 		return
 	end
 
-	if not targetRoot then
+	if not isValidAttackTpTarget(targetModel) then
 		if isWaitingForSelectedPlayerRespawn() then
 			pendingTeleportToSelectedPlayer = true
 		end
@@ -5084,15 +5044,16 @@ function teleportToSelectedTarget()
 	end
 
 	pendingTeleportToSelectedPlayer = false
-	local targetCFrame = targetRoot.CFrame
-	local forwardDirection = targetCFrame.LookVector   
-	local distanceInFront = 4.5   
-	local tpPosition = targetRoot.Position + (forwardDirection * distanceInFront)
-	tpPosition = tpPosition + Vector3.new(0, 2.5, 0)
-	characterRoot.CFrame = CFrame.lookAt(tpPosition, targetRoot.Position)  
+	local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
+	if not targetCFrame then
+		return
+	end
+
+	characterRoot.CFrame = targetCFrame
+	characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
 	if flying and bv and bg then
 		bv.Position = characterRoot.Position
-		bg.CFrame = getRotationOnlyCFrame(characterRoot.CFrame)
+		bg.CFrame = getRotationOnlyCFrame(targetCFrame)
 	end
 end
 
@@ -7007,7 +6968,8 @@ do
 	elseif not flingEnabled then
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-		if characterRoot then
+		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if characterRoot and isAliveHumanoid(characterHumanoid) then
 			local targetModel = resolveAttackTpTarget()
 			if isValidAttackTpTarget(targetModel) then
 				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
@@ -7034,7 +6996,8 @@ do
 	if attackTpEnabled and attackTpHolding then
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-		if characterRoot and not isTpBlocked() then
+		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
 			if not manualAttackTpPlayer and manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
 				manualAttackTpTarget = nil
 				if syncModelDropdownSelectionToManualTarget then
