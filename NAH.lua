@@ -844,7 +844,18 @@ function syncWalkFlingKeybindDisplay()
 	updateKeybindText()
 end
 
+local function hasTrashMainPart()
+	local map = Workspace:FindFirstChild("Map")
+	return map and map:FindFirstChild("MainPart") ~= nil
+end
+
 local function syncGetTrashKeybindDisplay()
+	if not hasTrashMainPart() then
+		keybindEntries.GetTrash = nil
+		updateKeybindText()
+		return
+	end
+
 	keybindEntries.GetTrash = {
 		name = "Trash",
 		keybind = getTrashState.keybind == Enum.KeyCode.LeftControl and "LeftCtrl" or encodeKeybindValue(getTrashState.keybind),
@@ -1811,6 +1822,10 @@ local function finishGetTrashRun()
 end
 
 runGetTrash = function()
+	if not hasTrashMainPart() then
+		return "OFF"
+	end
+
 	local now = tick()
 	if now - (getTrashState.lastToggleAt or 0) < (getTrashState.toggleCooldown or 0.35) then
 		return getTrashState.running and "ON" or "OFF"
@@ -7271,4 +7286,125 @@ function startIntroUi()
 end
 
 startIntroUi()
+task.spawn(function()
 
+local GAME_ID = 3808081382
+if game.GameId ~= GAME_ID then
+    return  
+end
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local alreadyDestroyed = {}
+local isWaitingForNewGui = false
+local function destroyOnce(obj)
+    if not obj or alreadyDestroyed[obj] then return end
+    pcall(function()
+        if obj and obj.Parent then
+            obj:Destroy()
+            alreadyDestroyed[obj] = true
+        end
+    end)
+end
+local oneTimeDestroy = {
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("LocalScript"):WaitForChild("Preview"),
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("fake"),
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):GetChildren()[9],
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("GamepassTwo"),
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Switch"),
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Gamepass"),
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Limited"),
+    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Bulk"),
+    playerGui:WaitForChild("Version", 5),
+    playerGui:WaitForChild("TopbarPlus", 5):WaitForChild("TopbarContainer"):GetChildren()[10],
+    playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):WaitForChild("fake"),
+    playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):GetChildren()[11],
+    playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):WaitForChild("Bulk"),
+    playerGui:WaitForChild("Gifting", 5),
+}
+task.wait(0.2)
+for _, obj in ipairs(oneTimeDestroy) do
+    if obj then destroyOnce(obj) end
+end
+local currentHotbar = playerGui:WaitForChild("Hotbar", 5)
+local currentBar = playerGui:WaitForChild("Bar", 5)
+local function hasAnyToolInBackpack()
+    if not player.Backpack then return false end
+    return #player.Backpack:GetChildren() > 0
+end
+local runningLoop = false
+local function startMainLoop()
+    if runningLoop then return end
+    runningLoop = true
+    task.spawn(function()
+        while runningLoop do
+            if isWaitingForNewGui then
+                task.wait(0.1)
+                continue
+            end
+            task.wait()
+            if not hasAnyToolInBackpack() then
+                runningLoop = false
+                break
+            end
+            local magicHealth = currentBar and currentBar:FindFirstChild("MagicHealth")
+            if not magicHealth then continue end
+            local freecam     = playerGui:FindFirstChild("Freecam")
+            local lock        = playerGui:FindFirstChild("Lock")
+            local mobileJunk  = playerGui:FindFirstChild("MobileJunk")
+            local magicUlt    = magicHealth:FindFirstChild("Ult")
+            local magicText   = magicHealth:FindFirstChild("TextLabel")
+            local magicButton = magicHealth:FindFirstChild("ImageButton")
+            if freecam    then destroyOnce(freecam) end
+            if lock       then destroyOnce(lock) end
+            if mobileJunk then destroyOnce(mobileJunk) end
+            if magicUlt    then destroyOnce(magicUlt) end
+            if magicText   then destroyOnce(magicText) end
+            if magicButton then destroyOnce(magicButton) end
+            if magicUlt and (magicUlt:IsA("ImageLabel") or magicUlt:IsA("ImageButton")) then
+                local ultimateValue = player:GetAttribute("Ultimate") or 0
+                magicUlt.ImageTransparency = (ultimateValue == 100) and 0.33 or 0.5
+            end
+            local healthSection = magicHealth:FindFirstChild("Health")
+            local specialBar = healthSection and healthSection:FindFirstChild("Bar") 
+                and healthSection.Bar:FindFirstChild("Bar")
+            if specialBar and (specialBar:IsA("ImageLabel") or specialBar:IsA("ImageButton")) then
+                local ultimateValue = player:GetAttribute("Ultimate") or 0
+                specialBar.ImageTransparency = (ultimateValue == 100) and 0.1 or 0.5
+                specialBar.ImageColor3 = Color3.new(0, 0, 0)
+            end
+            local cooldown = currentHotbar and currentHotbar:FindFirstChild("Backpack")
+                and currentHotbar.Backpack:FindFirstChild("LocalScript")
+                and currentHotbar.Backpack.LocalScript:FindFirstChild("Cooldown")
+            if cooldown then
+                cooldown.BackgroundColor3 = Color3.new(0, 0, 0)
+                cooldown.BackgroundTransparency = 0.45
+            end
+        end
+    end)
+end
+local function updateCurrentGui()
+    isWaitingForNewGui = true
+    task.wait(0.5)
+    currentHotbar = playerGui:WaitForChild("Hotbar", 5)
+    currentBar = playerGui:WaitForChild("Bar", 5)
+    isWaitingForNewGui = false
+end
+playerGui.ChildRemoved:Connect(function(child)
+    if child.Name == "Hotbar" or child.Name == "Bar" then
+        updateCurrentGui()
+    end
+end)
+player.CharacterAdded:Connect(function()
+    updateCurrentGui()
+end)
+task.spawn(function()
+    while true do
+        if hasAnyToolInBackpack() then
+            startMainLoop()
+        end
+        task.wait(0.2) 
+    end
+end)
+updateCurrentGui()
+end)
