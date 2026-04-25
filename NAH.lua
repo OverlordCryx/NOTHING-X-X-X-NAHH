@@ -478,8 +478,8 @@ local getTrashState = {
 	collisionState = nil,
 	savedCFrame = nil,
 	holdCFrame = nil,
-	stepDistance = 50,
-	stepDelay = 0.003,
+	stepDistance = 150,
+	stepDelay = 0.001,
 	returnStepDistance = 10,
 	returnStepDelay = 0.046,
 	lastToggleAt = 0,
@@ -1786,7 +1786,7 @@ runGetTrash = function()
 				break
 			end
 
-			if hasTrashcanAfterChecks(7, 0.05) then
+			if hasTrashcanAfterChecks(11, 0.05) then
 				getTrashState.returning = true
 				setGetTrashNoclipEnabled(true)
 				getTrashState.blockSetBack = true
@@ -1862,7 +1862,7 @@ runGetTrash = function()
 				end
 			end
 
-			if hasTrashcanAfterChecks(7, 0.05) then
+			if hasTrashcanAfterChecks(11, 0.05) then
 				continue
 			end
 
@@ -2192,6 +2192,21 @@ local function startSafeZoneTravel(destination, mode, onComplete)
 end
 
 function handleSetBackKeybind()
+	if getTrashState.blockSetBack
+		and not getTrashState.running
+		and not getTrashState.returning
+		and getTrashState.holdCFrame == nil
+		and not hasLocalTrashcan()
+	then
+		getTrashState.blockSetBack = false
+		setGetTrashNoclipEnabled(false)
+		syncGetTrashKeybindDisplay()
+	end
+
+	if getTrashState.blockSetBack then
+		return
+	end
+
 	if isSafeZoneBlocking() then
 		return
 	end
@@ -6836,8 +6851,15 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 
 	if key == setBackKeybind then
-		if getTrashState.blockSetBack then
-			return
+		if getTrashState.blockSetBack
+			and not getTrashState.running
+			and not getTrashState.returning
+			and getTrashState.holdCFrame == nil
+			and not hasLocalTrashcan()
+		then
+			getTrashState.blockSetBack = false
+			setGetTrashNoclipEnabled(false)
+			syncGetTrashKeybindDisplay()
 		end
 		handleSetBackKeybind()
 		return
