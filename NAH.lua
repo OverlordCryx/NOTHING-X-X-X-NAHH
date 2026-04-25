@@ -702,6 +702,9 @@ end
 if tonumber(controlSaveData.AuraRange) then
 	auraRange = tonumber(controlSaveData.AuraRange)
 end
+if type(controlSaveData.WalkFlingUseNormal) == "boolean" then
+	walkFlingUseNormal = controlSaveData.WalkFlingUseNormal
+end
 
 if type(controlSaveData.AutoSafeZone) == "boolean" then
 	safeZone.enabled = controlSaveData.AutoSafeZone
@@ -972,9 +975,6 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 end
 
 function setWalkFlingEnabled(enabled)
-	if (enabled == nil or enabled == true) and isSafeZoneBlocking() then
-		return walkFlingEnabled and "ON" or "OFF"
-	end
 	local nextState = enabled == nil and not walkFlingEnabled or enabled == true
 	if walkFlingEnabled == nextState then
 		syncWalkFlingKeybindDisplay()
@@ -982,65 +982,32 @@ function setWalkFlingEnabled(enabled)
 	end
 
 	walkFlingEnabled = nextState
-	walkFlingTaskToken += 1
 
 	if walkFlingEnabled then
 		local moveOffset = 0.1
-		local taskToken = walkFlingTaskToken
 		if walkFlingHeartbeat then
 			walkFlingHeartbeat:Disconnect()
 			walkFlingHeartbeat = nil
 		end
 		walkFlingHeartbeat = RunService.Heartbeat:Connect(function()
-			if not walkFlingEnabled or walkFlingTaskToken ~= taskToken then
-				if walkFlingHeartbeat then
-					walkFlingHeartbeat:Disconnect()
-					walkFlingHeartbeat = nil
-				end
-				return
-			end
 			local currentCharacter = player.Character
 			local rootPart = getRootUniversal(currentCharacter)
 			if not rootPart then
 				return
 			end
 
-			-- Safety Check: Don't fling if near unsafe players
-			local myPosition = rootPart.Position
-			local tooNearUnsafe = false
-			for _, otherPlayer in ipairs(getOtherPlayers()) do
-				local targetCharacter = otherPlayer.Character
-				local targetRoot = getRootUniversal(targetCharacter)
-				if targetRoot and (targetRoot.Position - myPosition).Magnitude < 15 then
-					if not isTargetSafe(targetCharacter) then
-						tooNearUnsafe = true
-						break
-					end
-				end
-			end
-
-			if tooNearUnsafe then
-				rootPart.AssemblyLinearVelocity = Vector3.zero
-				rootPart.AssemblyAngularVelocity = Vector3.zero
-				return
-			end
-
 			local originalVelocity = rootPart.Velocity
 			if walkFlingUseNormal then
 				rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
-				task.defer(function()
-					if not walkFlingEnabled or walkFlingTaskToken ~= taskToken or not rootPart.Parent then
-						return
-					end
+				RunService.RenderStepped:Wait()
+				if rootPart.Parent then
 					rootPart.Velocity = originalVelocity
-					task.defer(function()
-						if not walkFlingEnabled or walkFlingTaskToken ~= taskToken or not rootPart.Parent then
-							return
-						end
-						rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
-						moveOffset *= -1
-					end)
-				end)
+				end
+				RunService.Stepped:Wait()
+				if rootPart.Parent then
+					rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
+					moveOffset *= -1
+				end
 				return
 			end
 
@@ -1050,11 +1017,10 @@ function setWalkFlingEnabled(enabled)
 			end
 
 			rootPart.Velocity = direction * walkFlingPower
-			task.defer(function()
-				if walkFlingEnabled and walkFlingTaskToken == taskToken and rootPart.Parent then
-					rootPart.Velocity = originalVelocity
-				end
-			end)
+			RunService.RenderStepped:Wait()
+			if rootPart.Parent then
+				rootPart.Velocity = originalVelocity
+			end
 		end)
 	else
 		if walkFlingHeartbeat then
@@ -6271,7 +6237,7 @@ Slider({
 
 flingModeControls = _G["4tog_on_one_frame"]({
 	title = "Fling",
-	name1 = "Noraml Walkfling",
+	name1 = "Normal Walkfling",
 	name2 = "Aura Fling",
 	name3 = "Click Fling",
 	name4 = "Fling All",
@@ -6281,6 +6247,7 @@ flingModeControls = _G["4tog_on_one_frame"]({
 	default4 = flingAllEnabled,
 	fun1 = function(enabled)
 		walkFlingUseNormal = enabled
+		setSavedControlValue("WalkFlingUseNormal", walkFlingUseNormal)
 		syncFlingModeControls()
 	end,
 	fun2 = function(enabled)
