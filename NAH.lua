@@ -1058,7 +1058,7 @@ function setAuraFlingEnabled(enabled)
 					for _, otherPlayer in ipairs(getOtherPlayers()) do
 						local targetModel = otherPlayer.Character
 						local targetRoot = getRootUniversal(targetModel)
-						if targetRoot and isValidAttackTpTarget(targetModel) and (targetRoot.Position - myPosition).Magnitude <= auraRange then
+						if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
 							touchedAny = true
 							myRoot.AssemblyLinearVelocity = Vector3.zero
 							myRoot.AssemblyAngularVelocity = Vector3.zero
@@ -1082,11 +1082,7 @@ function setAuraFlingEnabled(enabled)
 
 				task.wait()
 			end
-
-			resetGlobalFlingMotion()
 		end)
-	else
-		resetGlobalFlingMotion()
 	end
 
 	syncFlingModeControls()
@@ -1104,10 +1100,9 @@ function clickFlingTargetPlayer(targetPlayer)
 		local targetCharacter = targetPlayer and targetPlayer.Character
 		local myRoot = getRootUniversal(myCharacter)
 		local targetRoot = getRootUniversal(targetCharacter)
-		if myRoot and targetRoot and isValidAttackTpTarget(targetCharacter) then
+		if myRoot and targetRoot then
 			local savedCFrame = myRoot.CFrame
 			local startedAt = tick()
-			local lastTick = tick()
 			resetGlobalFlingMotion()
 
 			while tick() - startedAt < 8 do
@@ -1117,15 +1112,12 @@ function clickFlingTargetPlayer(targetPlayer)
 
 				targetCharacter = targetPlayer and targetPlayer.Character
 				targetRoot = getRootUniversal(targetCharacter)
-				if not targetRoot or not targetRoot.Parent or not myRoot.Parent or not isValidAttackTpTarget(targetCharacter) then
+				if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
 					break
 				end
 
-				local now = tick()
-				local dt = now - lastTick
-				lastTick = now
+				local dt = RunService.Heartbeat:Wait()
 				applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
-				RunService.Heartbeat:Wait()
 			end
 
 			myRoot.AssemblyAngularVelocity = Vector3.zero
@@ -1213,7 +1205,7 @@ function setFlingAllEnabled(enabled)
 			for _, otherPlayer in ipairs(getOtherPlayers()) do
 				local targetModel = otherPlayer.Character
 				local targetRoot = getRootUniversal(targetModel)
-				if targetRoot and isValidAttackTpTarget(targetModel) then
+				if targetRoot then
 					targetRoots[#targetRoots + 1] = targetRoot
 				end
 			end
@@ -1799,7 +1791,7 @@ runGetTrash = function()
 				break
 			end
 
-			if hasTrashcanAfterChecks(3, 0.08) then
+			if hasTrashcanAfterChecks(7, 0.05) then
 				getTrashState.returning = true
 				setGetTrashNoclipEnabled(true)
 				getTrashState.blockSetBack = true
@@ -1875,7 +1867,7 @@ runGetTrash = function()
 				end
 			end
 
-			if hasTrashcanAfterChecks(3, 0.08) then
+			if hasTrashcanAfterChecks(7, 0.05) then
 				continue
 			end
 
@@ -3584,6 +3576,8 @@ task.spawn(function()
         return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
     end
 
+    local flingSavedCFrame = nil
+    local flingTargetTime = 0
     local function stopFlingRuntime()
         flingState.taskToken += 1
         flingState.runnerActive = false
@@ -3591,6 +3585,13 @@ task.spawn(function()
             flingState.runnerConnection:Disconnect()
             flingState.runnerConnection = nil
         end
+        local myChar = flingState.localPlayer.Character
+        local myRoot = getRoot(myChar)
+        if myRoot and flingSavedCFrame and myRoot.Parent then
+            myRoot.CFrame = flingSavedCFrame
+        end
+        flingSavedCFrame = nil
+        flingTargetTime = 0
         flingState.orbitStepXZ = 0
         flingState.orbitStepY = 3
     end
@@ -3598,33 +3599,47 @@ task.spawn(function()
     local function startFlingRuntime()
         stopFlingRuntime()
         flingState.runnerActive = true
-        local taskToken = flingState.taskToken
-        local lastTick = tick()
-        flingState.runnerConnection = RunService.Heartbeat:Connect(function()
-            if not flingEnabled or flingState.taskToken ~= taskToken then
-                stopFlingRuntime()
-                return
-            end
-            local myChar = flingState.localPlayer.Character
-            local myRoot = getRoot(myChar)
-            if not myRoot then
-                return
+        local taskToken = flingState.taskToken + 1
+        flingState.taskToken = taskToken
+        task.spawn(function()
+            while flingEnabled and flingState.taskToken == taskToken do
+                local myChar = flingState.localPlayer.Character
+                local targetModel = getDisplayedTargetModel()
+                if not (myChar and targetModel) then
+                    break
+                end
+
+                local myRoot = getRoot(myChar)
+                local targetRoot = getRoot(targetModel)
+                if not (myRoot and targetRoot) then
+                    break
+                end
+
+                if not flingSavedCFrame then
+                    flingSavedCFrame = myRoot.CFrame
+                end
+
+                local dt = RunService.Heartbeat:Wait()
+                flingTargetTime = flingTargetTime + (dt * flingOrbitSpeed)
+                local orbitDistanceXZ = flingOrbitStepXZ
+                local orbitDistanceY = flingOrbitStepY
+                flingOrbitStepXZ = flingOrbitStepXZ + flingOrbitIncrement
+                flingOrbitStepY = flingOrbitStepY + flingOrbitIncrement
+                if flingOrbitStepXZ > flingOrbitMax then flingOrbitStepXZ = 0 end
+                if flingOrbitStepY > flingOrbitMax then flingOrbitStepY = 0 end
+
+                local offset = Vector3.new(
+                    math.cos(flingTargetTime) * orbitDistanceXZ,
+                    orbitDistanceY,
+                    math.sin(flingTargetTime) * orbitDistanceXZ
+                )
+
+                myRoot.CFrame = targetRoot.CFrame + offset
+                myRoot.AssemblyAngularVelocity = Vector3.new(flingPower, flingPower, flingPower)
+                myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0)
             end
 
-            local targetModel = getDisplayedTargetModel()
-            if not isValidAttackTpTarget(targetModel) then
-                return
-            end
-
-            local targetRoot = getRoot(targetModel)
-            if not targetRoot then
-                return
-            end
-
-            local now = tick()
-            local dt = now - lastTick
-            lastTick = now
-            applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+            flingState.runnerActive = false
         end)
     end
 
