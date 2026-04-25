@@ -1898,6 +1898,24 @@ function getUprightSetBackCFrame(position, sourceCFrame)
 	return CFrame.lookAt(position, position + flatLook, Vector3.new(0, 1, 0))
 end
 
+local function canSaveSetBackPosition(character, rootPart, humanoid)
+	if not character or not rootPart or not humanoid then
+		return false
+	end
+
+	if humanoid.FloorMaterial ~= Enum.Material.Air then
+		return true
+	end
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { character }
+	rayParams.IgnoreWater = false
+
+	local hit = Workspace:Raycast(rootPart.Position, Vector3.new(0, -8, 0), rayParams)
+	return hit ~= nil
+end
+
 function saveSetBackPosition()
 	local currentCharacter = player.Character
 	local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
@@ -1906,7 +1924,7 @@ function saveSetBackPosition()
 		return false
 	end
 
-	if currentHumanoid.FloorMaterial == Enum.Material.Air then
+	if not canSaveSetBackPosition(currentCharacter, currentRoot, currentHumanoid) then
 		return false
 	end
 
@@ -2020,6 +2038,9 @@ function startSetBackTravel()
 
 	stopSetBackTravel()
 	setSetBackNoclipEnabled(true)
+	zeroLocalPlayerRoot()
+	local lastDistance = nil
+	local stalledFor = 0
 	setBackTravelConn = RunService.Heartbeat:Connect(function(dt)
 		local liveCharacter = player.Character
 		local liveRoot = liveCharacter and liveCharacter:FindFirstChild("HumanoidRootPart")
@@ -2032,7 +2053,27 @@ function startSetBackTravel()
 		local delta = destination.Position - liveRoot.Position
 		local distance = delta.Magnitude
 		local liveHumanoid = liveCharacter and liveCharacter:FindFirstChildOfClass("Humanoid")
+		if lastDistance and distance >= (lastDistance - 0.15) then
+			stalledFor += dt
+		else
+			stalledFor = 0
+		end
+		lastDistance = distance
+
 		if distance <= 2 then
+			liveRoot.CFrame = getUprightSetBackCFrame(destination.Position, destination)
+			liveRoot.AssemblyLinearVelocity = Vector3.zero
+			liveRoot.AssemblyAngularVelocity = Vector3.zero
+			if liveHumanoid then
+				liveHumanoid.PlatformStand = false
+				liveHumanoid.Sit = false
+				liveHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+			stopSetBackTravel()
+			return
+		end
+
+		if stalledFor >= 0.6 then
 			liveRoot.CFrame = getUprightSetBackCFrame(destination.Position, destination)
 			liveRoot.AssemblyLinearVelocity = Vector3.zero
 			liveRoot.AssemblyAngularVelocity = Vector3.zero
@@ -6420,14 +6461,9 @@ task.spawn(function()
 		return billboard
 	end
 
-	local function ensureHighlight(model, forceRecreate, startEnabled)
+	local function ensureHighlight(model, startEnabled)
 		local highlight = model and model:FindFirstChild(ESP_HIGHLIGHT_NAME)
 		if highlight and not highlight:IsA("Highlight") then
-			highlight:Destroy()
-			highlight = nil
-		end
-
-		if forceRecreate and highlight then
 			highlight:Destroy()
 			highlight = nil
 		end
@@ -6578,8 +6614,7 @@ task.spawn(function()
 		local state = espOverlayState[targetPlayer] or {}
 		local canUseHighlight = espOverlayConfig.showEsp and not isBald
 		if canUseHighlight then
-			local forceRecreate = ultedAttr and state.lastUlted ~= true
-			local highlight = ensureHighlight(model, forceRecreate, ultedAttr)
+			local highlight = ensureHighlight(model, ultedAttr)
 			highlight.Enabled = ultedAttr
 			highlight.FillColor = Color3.fromRGB(255, 0, 0)
 			highlight.FillTransparency = 0.6
