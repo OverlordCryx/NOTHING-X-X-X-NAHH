@@ -2546,6 +2546,28 @@ function isValidAttackTpTarget(model)
 	return modelRoot ~= nil and not modelRoot.Anchored
 end
 
+local function isDeadTargetModel(model)
+	if not model or model == char or model.Parent == nil then
+		return true
+	end
+
+	local targetPlayer = Players:GetPlayerFromCharacter(model)
+	if targetPlayer == player then
+		return true
+	end
+
+	local modelHumanoid = model:FindFirstChildOfClass("Humanoid")
+	if modelHumanoid then
+		return modelHumanoid.Health <= 0
+	end
+
+	return false
+end
+
+local function hasLiveStoredTarget(model)
+	return model ~= nil and not isDeadTargetModel(model)
+end
+
 _G.lastValidTrashTime = 0
 
 function isTpBlocked()
@@ -2615,7 +2637,10 @@ end
 
 local function resolveManualAttackTpTargetModel()
 	if manualAttackTpPlayer then
-		manualAttackTpTarget = getTrackedPlayerTargetModel(manualAttackTpPlayer)
+		local trackedTarget = getTrackedPlayerTargetModel(manualAttackTpPlayer)
+		if trackedTarget then
+			manualAttackTpTarget = trackedTarget
+		end
 	end
 
 	return manualAttackTpTarget
@@ -2626,7 +2651,7 @@ function hasTrackedSelectedPlayer()
 end
 
 function isWaitingForSelectedPlayerRespawn()
-	return hasTrackedSelectedPlayer() and not isValidAttackTpTarget(resolveManualAttackTpTargetModel())
+	return hasTrackedSelectedPlayer() and isDeadTargetModel(resolveManualAttackTpTargetModel())
 end
 
 local function hasManualAttackTpSelection()
@@ -2634,16 +2659,16 @@ local function hasManualAttackTpSelection()
 		return hasTrackedSelectedPlayer()
 	end
 
-	return isValidAttackTpTarget(manualAttackTpTarget)
+	return hasLiveStoredTarget(manualAttackTpTarget)
 end
 
 local function hasActiveSelectedTarget()
-	if isValidAttackTpTarget(camLockTarget) then
+	if hasLiveStoredTarget(camLockTarget) then
 		return true
 	end
 
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
-	return isValidAttackTpTarget(resolvedManualTarget)
+	return hasLiveStoredTarget(resolvedManualTarget)
 end
 
 function hasSelectedTargetOrPendingPlayer()
@@ -2672,12 +2697,12 @@ syncFlingModeControls = function()
 end
 
 local function getDisplayedTargetModel()
-	if isValidAttackTpTarget(camLockTarget) then
+	if hasLiveStoredTarget(camLockTarget) then
 		return camLockTarget
 	end
 
 	local currentTarget = resolveManualAttackTpTargetModel()
-	if isValidAttackTpTarget(currentTarget) then
+	if hasLiveStoredTarget(currentTarget) then
 		return currentTarget
 	end
 
@@ -2699,7 +2724,7 @@ local function updateTargetDisplay()
 		else
 			resolveManualAttackTpTargetModel()
 		end
-	elseif manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
+	elseif manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
 		manualAttackTpTarget = nil
 		pendingTeleportToSelectedPlayer = false
 		if syncModelDropdownSelectionToManualTarget then
@@ -2708,7 +2733,7 @@ local function updateTargetDisplay()
 		targetStateChanged = true
 	end
 
-	if not camLockEnabled and camLockTarget and not isValidCamLockTarget(camLockTarget) then
+	if not camLockEnabled and camLockTarget and isDeadTargetModel(camLockTarget) then
 		camLockTarget = nil
 		targetStateChanged = true
 	end
@@ -2770,12 +2795,12 @@ local function getClosestAliveTarget()
 end
 
 local function getPreferredAttackTpTarget()
-	if isValidAttackTpTarget(camLockTarget) then
+	if hasLiveStoredTarget(camLockTarget) then
 		return camLockTarget
 	end
 
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
-	if isValidAttackTpTarget(resolvedManualTarget) then
+	if hasLiveStoredTarget(resolvedManualTarget) then
 		return resolvedManualTarget
 	end
 
@@ -2783,16 +2808,16 @@ local function getPreferredAttackTpTarget()
 end
 
 resolveAttackTpTarget = function()
-	if isValidAttackTpTarget(camLockTarget) then
+	if hasLiveStoredTarget(camLockTarget) then
 		return camLockTarget
 	end
 
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
-	if isValidAttackTpTarget(resolvedManualTarget) then
+	if hasLiveStoredTarget(resolvedManualTarget) then
 		return resolvedManualTarget
 	end
 
-	if isValidAttackTpTarget(attackTpTarget) then
+	if hasLiveStoredTarget(attackTpTarget) then
 		return attackTpTarget
 	end
 
@@ -5130,7 +5155,7 @@ startView = function()
 		end
 
 		local activeTarget = currentViewTarget
-		if not isValidCamLockTarget(activeTarget) then
+		if isDeadTargetModel(activeTarget) then
 			if currentViewPlayer and currentViewPlayer.Parent == Players then
 				local newTarget = getTrackedPlayerTargetModel(currentViewPlayer)
 				if isValidCamLockTarget(newTarget) then
@@ -5146,7 +5171,7 @@ startView = function()
 			return
 		end
 
-		local activeHumanoid = activeTarget:FindFirstChildOfClass("Humanoid")
+		local activeHumanoid = activeTarget and activeTarget:FindFirstChildOfClass("Humanoid")
 		if activeHumanoid and cam.CameraSubject ~= activeHumanoid then
 			cam.CameraSubject = activeHumanoid
 		end
@@ -7129,12 +7154,12 @@ do
 			local previousWaiting = camLockWaiting
 			local nextTarget = camLockTarget
 
-			if not isValidCamLockTarget(nextTarget) then
+			if isDeadTargetModel(nextTarget) then
 				nextTarget = getCamLockTarget()
 			end
 
-			camLockTarget = isValidCamLockTarget(nextTarget) and nextTarget or nil
-			camLockWaiting = camLockTarget == nil
+			camLockTarget = hasLiveStoredTarget(nextTarget) and nextTarget or nil
+			camLockWaiting = camLockTarget == nil or not isValidCamLockTarget(camLockTarget)
 
 			if camLockTarget then
 				local targetRoot = camLockTarget:FindFirstChild("HumanoidRootPart")
@@ -7183,7 +7208,7 @@ do
 			if desiredHumanoid and cam then
 				cam.CameraSubject = desiredHumanoid
 			end
-		elseif not isValidCamLockTarget(currentViewTarget) then
+		elseif isDeadTargetModel(currentViewTarget) then
 			if currentViewPlayer and currentViewPlayer.Parent == Players then
 				local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
 				if isValidCamLockTarget(newViewTarget) then
@@ -7201,6 +7226,11 @@ do
 				currentViewPlayer = manualAttackTpPlayer
 			else
 				stopView()
+			end
+		elseif currentViewTarget then
+			local currentViewHumanoid = currentViewTarget:FindFirstChildOfClass("Humanoid")
+			if currentViewHumanoid and cam and cam.CameraSubject ~= currentViewHumanoid then
+				cam.CameraSubject = currentViewHumanoid
 			end
 		end
 	end
@@ -7241,7 +7271,7 @@ do
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
-			if not manualAttackTpPlayer and manualAttackTpTarget and not isValidAttackTpTarget(manualAttackTpTarget) then
+			if not manualAttackTpPlayer and manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
 				manualAttackTpTarget = nil
 				if syncModelDropdownSelectionToManualTarget then
 					syncModelDropdownSelectionToManualTarget()
@@ -7250,7 +7280,7 @@ do
 				updateTargetDisplay()
 			end
 
-			if not isValidAttackTpTarget(attackTpTarget) then
+			if isDeadTargetModel(attackTpTarget) then
 				attackTpTarget = nil
 			end
 
@@ -7268,8 +7298,6 @@ do
 						bv.Position = characterRoot.Position
 						bg.CFrame = getRotationOnlyCFrame(targetCFrame)
 					end
-				else
-					attackTpTarget = nil
 				end
 			end
 		end
