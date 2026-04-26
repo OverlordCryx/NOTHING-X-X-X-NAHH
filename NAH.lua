@@ -54,6 +54,59 @@ local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 
+local function nextFrame()
+	return RunService.Heartbeat:Wait()
+end
+
+local function overpowerRootState(rootPart, targetCFrame, linearVelocity, angularVelocity)
+	if not rootPart or not rootPart.Parent or not targetCFrame then
+		return
+	end
+
+	local resolvedLinearVelocity = linearVelocity or Vector3.zero
+	local resolvedAngularVelocity = angularVelocity or Vector3.zero
+
+	local function apply()
+		if not rootPart or not rootPart.Parent then
+			return
+		end
+
+		rootPart.CFrame = targetCFrame
+		rootPart.AssemblyLinearVelocity = resolvedLinearVelocity
+		rootPart.AssemblyAngularVelocity = resolvedAngularVelocity
+	end
+
+	apply()
+	task.defer(apply)
+	task.defer(function()
+		task.defer(apply)
+	end)
+	task.spawn(function()
+		if not rootPart or not rootPart.Parent then
+			return
+		end
+
+		RunService.Stepped:Wait()
+		apply()
+
+		if not rootPart or not rootPart.Parent then
+			return
+		end
+
+		RunService.RenderStepped:Wait()
+		apply()
+
+		for _ = 1, 2 do
+			if not rootPart or not rootPart.Parent then
+				return
+			end
+
+			nextFrame()
+			apply()
+		end
+	end)
+end
+
 local player = Players.LocalPlayer
 if not player then
 	return
@@ -479,9 +532,9 @@ local getTrashState = {
 	savedCFrame = nil,
 	holdCFrame = nil,
 	stepDistance = 150,
-	stepDelay = 0.001,
+	stepDelay = 0,
 	returnStepDistance = 10,
-	returnStepDelay = 0.046,
+	returnStepDelay = 0,
 	lastToggleAt = 0,
 	toggleCooldown = 0.35,
 	token = 0,
@@ -970,9 +1023,10 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 		math.sin(flingOrbitTime) * flingOrbitStepXZ
 	)
 
-	myRoot.CFrame = targetRoot.CFrame + offset
-	myRoot.AssemblyAngularVelocity = Vector3.new(power, power, power)
-	myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * power + Vector3.new(0, power * 0.5, 0)
+	local targetCFrame = targetRoot.CFrame + offset
+	local targetAngularVelocity = Vector3.new(power, power, power)
+	local targetLinearVelocity = targetRoot.CFrame.LookVector * power + Vector3.new(0, power * 0.5, 0)
+	overpowerRootState(myRoot, targetCFrame, targetLinearVelocity, targetAngularVelocity)
 end
 
 function setWalkFlingEnabled(enabled)
@@ -1055,27 +1109,27 @@ function setAuraFlingEnabled(enabled)
 						local targetRoot = getRootUniversal(targetModel)
 						if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
 							touchedAny = true
-							myRoot.AssemblyLinearVelocity = Vector3.zero
-							myRoot.AssemblyAngularVelocity = Vector3.zero
-							myCharacter:PivotTo(targetRoot.CFrame)
-							task.wait()
+							overpowerRootState(myRoot, targetRoot.CFrame, Vector3.zero, Vector3.zero)
+							nextFrame()
 							if not auraFlingEnabled or not myRoot.Parent then
 								break
 							end
-							myRoot.AssemblyAngularVelocity = Vector3.new(flingPower, flingPower, flingPower)
-							myRoot.AssemblyLinearVelocity = myRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+							overpowerRootState(
+								myRoot,
+								myRoot.CFrame,
+								myRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0),
+								Vector3.new(flingPower, flingPower, flingPower)
+							)
 						end
 					end
 
 					if touchedAny and myRoot.Parent then
-						task.wait()
-						myRoot.AssemblyAngularVelocity = Vector3.zero
-						myRoot.AssemblyLinearVelocity = Vector3.zero
-						myCharacter:PivotTo(savedCFrame)
+						nextFrame()
+						overpowerRootState(myRoot, savedCFrame, Vector3.zero, Vector3.zero)
 					end
 				end
 
-				task.wait()
+				nextFrame()
 			end
 		end)
 	end
@@ -1518,7 +1572,7 @@ end
 local function startGetTrashHoldLoop(runToken)
 	task.spawn(function()
 		while getTrashState.running and getTrashState.token == runToken do
-			task.wait()
+			nextFrame()
 			local currentCharacter = player.Character
 			local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 			if rootPart and rootPart.Parent and getTrashState.holdCFrame then
@@ -1604,7 +1658,11 @@ local function hasTrashcanAfterChecks(attempts, delayTime)
 			return true
 		end
 		if index < checkCount then
-			task.wait(waitTime)
+			if waitTime and waitTime > 0 then
+				nextFrame()
+			else
+				nextFrame()
+			end
 		end
 	end
 	return false
@@ -1659,7 +1717,7 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 		else
 			getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, destination)
 		end
-		task.wait(getTrashState.returnStepDelay)
+		nextFrame()
 	end
 
 	return true
@@ -1719,7 +1777,7 @@ local function stopGetTrashImmediate()
 				break
 			end
 			setGetTrashNoclipEnabled(false)
-			task.wait(0.05)
+			nextFrame()
 		end
 	end)
 	syncGetTrashKeybindDisplay()
@@ -1802,7 +1860,7 @@ runGetTrash = function()
 				while getTrashState.running and getTrashState.token == runToken and hasLocalTrashcan() do
 					setGetTrashNoclipEnabled(false)
 					getTrashState.blockSetBack = false
-					task.wait(0.2)
+					nextFrame()
 				end
 
 				setGetTrashNoclipEnabled(true)
@@ -1815,11 +1873,11 @@ runGetTrash = function()
 			if switchedTargets >= 40 then
 				ignoredModels = {}
 				switchedTargets = 0
-				task.wait()
+				nextFrame()
 				continue
 			end
 
-			task.wait()
+			nextFrame()
 			if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken then
 				break
 			end
@@ -1834,7 +1892,7 @@ runGetTrash = function()
 			if not isValidTrashTarget(targetEntry) then
 				ignoredModels = {}
 				switchedTargets = 0
-				task.wait()
+				nextFrame()
 				continue
 			end
 
@@ -1862,7 +1920,7 @@ runGetTrash = function()
 					rootPart.CFrame = closeCFrame
 					clickTrashcan()
 					clickAttempts += 1
-					task.wait()
+					nextFrame()
 				end
 			end
 
@@ -1872,7 +1930,7 @@ runGetTrash = function()
 
 			ignoredModels[targetEntry.model] = tick() + 1.5
 			switchedTargets += 1
-			task.wait()
+			nextFrame()
 		end
 
 		if getTrashState.token == runToken and getTrashState.running then
@@ -3590,7 +3648,7 @@ end
 
     local createMovementPanel = _G["2tog_on_one_button"]
     while type(createMovementPanel) ~= "function" do
-        task.wait()
+        nextFrame()
         createMovementPanel = _G["2tog_on_one_button"]
     end
 
@@ -3678,7 +3736,7 @@ task.spawn(function()
         task.spawn(function()
             while flingEnabled and flingState.taskToken == taskToken do
                 local myChar = flingState.localPlayer.Character
-                local targetModel = getDisplayedTargetModel()
+                local targetModel = resolveAttackTpTarget and resolveAttackTpTarget() or nil
                 if not (myChar and targetModel) then
                     break
                 end
@@ -3842,11 +3900,11 @@ function initProtectionRuntime()
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.AssemblyAngularVelocity = Vector3.zero
 			char:PivotTo(target)
-			task.wait()
+			nextFrame()
 		end
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
-		task.wait(0.03)
+		nextFrame()
 		_G.SafeTeleportLock = false
 	end
 
@@ -3858,7 +3916,7 @@ function initProtectionRuntime()
 
 	task.spawn(function()
 		while true do
-			task.wait()
+			nextFrame()
 			if not protection.Enabled then
 				continue
 			end
@@ -6962,7 +7020,7 @@ end)
 
 task.spawn(function()
 	while true do
-		local dt = task.wait()
+		local dt = nextFrame()
 
 		if flying and bv and bg and root and root.Parent then
 			local attackTpControlling = attackTpEnabled and attackTpHolding
@@ -7164,7 +7222,7 @@ end
 
 task.spawn(function()
 	while true do
-		task.wait()
+		nextFrame()
 
 		if safeZone.enabled then
 			local character = player.Character
