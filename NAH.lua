@@ -3242,6 +3242,8 @@ end
 local function initSeriousModeTracker()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local SHARED_HIGHLIGHT_NAME = "NOTHING-X"
+local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
 local strongSkills = {
     ["Omni Directional Punch"] = true,
     ["Death Counter"] = true,
@@ -3264,26 +3266,35 @@ local function callInfo(title, text, duration)
         end)
     end
 end
-local function addHighlight(model, color, enabled)
-    if not model or not model:FindFirstChild("HumanoidRootPart") then return end
-    local oldHl = model:FindFirstChild("NOTHING-X")
-    if oldHl then
-        oldHl:Destroy()
+local function ensureSharedHighlight(model)
+    if not model or not model:FindFirstChild("HumanoidRootPart") then return nil end
+    local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
+    if hl and not hl:IsA("Highlight") then
+        hl:Destroy()
+        hl = nil
     end
-    local hl = Instance.new("Highlight")
-    hl.Name = "NOTHING-X"
+    if hl then
+        return hl
+    end
+    hl = Instance.new("Highlight")
+    hl.Name = SHARED_HIGHLIGHT_NAME
     hl.Adornee = model
     hl.Parent = model
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.FillTransparency = 0.8
     hl.OutlineTransparency = 0
-    hl.OutlineColor = Color3.fromRGB(0, 0, 0)
-    hl.FillColor = color
+    return hl
+end
+local function addHighlight(model, fillColor, enabled, outlineColor)
+    local hl = ensureSharedHighlight(model)
+    if not hl then return end
+    hl.OutlineColor = outlineColor or Color3.fromRGB(0, 0, 0)
+    hl.FillColor = fillColor
     hl.Enabled = enabled
 end
 local function removeHighlight(model)
     if model then
-        local hl = model:FindFirstChild("NOTHING-X")
+        local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
         if hl then
             hl:Destroy()
         end
@@ -3304,25 +3315,27 @@ local function updatePlayer(plr)
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then
         playerState[plr] = nil
-        removeHighlight(char)
+        char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
         return
     end
     local skill = getSkillType(backpack)
     local currentState = playerState[plr]
     if skill == "strong" and currentState ~= "strong" then
         playerState[plr] = "strong"
-        addHighlight(char, Color3.fromRGB(255, 255, 255), true) 
+        char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "strong")
         callInfo("SERIOUS MODE", plr.Name .. " - ACTIVE", 5)
     elseif skill == "weak" and currentState == "strong" then
         playerState[plr] = "weak"
-        addHighlight(char, Color3.fromRGB(255, 0, 0), true) 
+        char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "weak")
         callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 5)
         local timerId = tick()
         activeTimers[plr] = timerId
         task.delay(9.4, function()
             if activeTimers[plr] == timerId and playerState[plr] == "weak" then
                 playerState[plr] = nil
-                removeHighlight(char)
+                if char and char.Parent then
+                    char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+                end
                 callInfo("SERIOUS MODE", plr.Name .. " - END", 5)
             end
         end)
@@ -3335,19 +3348,10 @@ local function startGlobalChecker()
             local char = plr.Character
             if not char then continue end
             local shouldHaveState = playerState[plr]
-            local hl = char:FindFirstChild("NOTHING-X")
             if shouldHaveState then
-                if not hl then
-                    if shouldHaveState == "strong" then
-                        addHighlight(char, Color3.fromRGB(255, 255, 255), true)
-                    else
-                        addHighlight(char, Color3.fromRGB(255, 0, 0), true)
-                    end
-                end
+                char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, shouldHaveState)
             else
-                if hl then
-                    removeHighlight(char)
-                end
+                char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
             end
         end
     end)
@@ -3367,12 +3371,14 @@ local function setupPlayer(plr)
     local function onCharacterAdded(char)
         task.wait(0.4)
         playerState[plr] = nil
+        if char and char.Parent then
+            char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+        end
         char = char or plr.Character
         if not char or char ~= plr.Character then
             return
         end
         disconnectTrackedConnections()
-        removeHighlight(char)
         local backpack = plr:WaitForChild("Backpack", 6)
         if not backpack then
             return
@@ -3395,7 +3401,9 @@ local function setupPlayer(plr)
         if hum and char == plr.Character then
             table.insert(playerConnections[plr], hum.Died:Connect(function()
                 playerState[plr] = nil
-                removeHighlight(char)
+                if char and char.Parent then
+                    char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+                end
             end))
             updatePlayer(plr)
         end
@@ -3408,6 +3416,9 @@ local function setupPlayer(plr)
         if parent == nil then
             disconnectTrackedConnections()
             playerState[plr] = nil
+            if plr.Character then
+                plr.Character:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+            end
         end
     end)
 end
@@ -6417,7 +6428,7 @@ task.spawn(function()
 	}
 	local espOverlayState = {}
 	local ESP_BILLBOARD_NAME = "NOTHING_X_OverlayBillboard"
-	local ESP_HIGHLIGHT_NAME = "NOTHING_X_UltDetect"
+	local ESP_HIGHLIGHT_NAME = "NOTHING-X"
 	local TextService = game:GetService("TextService")
 	local BILLBOARD_MIN_WIDTH = 72
 	local BILLBOARD_PADDING_TOP = 5
@@ -6557,6 +6568,32 @@ task.spawn(function()
 		return billboard
 	end
 
+	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
+		local seriousModeState = model and model:GetAttribute("NX_SeriousModeState") or nil
+		if seriousModeState == "weak" then
+			return {
+				fill = Color3.fromRGB(0, 0, 0),
+				outline = Color3.fromRGB(255, 0, 0),
+				enabled = true,
+			}
+		end
+		if canUseUltedHighlight and ultedAttr == true then
+			return {
+				fill = Color3.fromRGB(0, 0, 0),
+				outline = Color3.fromRGB(255, 255, 0),
+				enabled = true,
+			}
+		end
+		if seriousModeState == "strong" then
+			return {
+				fill = Color3.fromRGB(0, 0, 0),
+				outline = Color3.fromRGB(255, 255, 255),
+				enabled = true,
+			}
+		end
+		return nil
+	end
+
 	local function ensureHighlight(model, startEnabled)
 		local highlight = model and model:FindFirstChild(ESP_HIGHLIGHT_NAME)
 		if highlight and not highlight:IsA("Highlight") then
@@ -6572,10 +6609,10 @@ task.spawn(function()
 		highlight.Name = ESP_HIGHLIGHT_NAME
 		highlight.Adornee = model
 		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		highlight.FillColor = Color3.fromRGB(255, 0, 0)
+		highlight.FillColor = Color3.fromRGB(0, 0, 0)
 		highlight.FillTransparency = 0.6
 		highlight.OutlineTransparency = 0
-		highlight.OutlineColor = startEnabled and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(128, 128, 128)
+		highlight.OutlineColor = startEnabled and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(128, 128, 128)
 		highlight.Enabled = startEnabled == true
 		highlight.Parent = model
 		return highlight
@@ -6709,13 +6746,14 @@ task.spawn(function()
 
 		local state = espOverlayState[targetPlayer] or {}
 		local canUseHighlight = espOverlayConfig.showEsp and not isBald
-		if canUseHighlight then
-			local highlight = ensureHighlight(model, ultedAttr)
-			highlight.Enabled = ultedAttr
-			highlight.FillColor = Color3.fromRGB(255, 0, 0)
+		local highlightSpec = getSharedHighlightColors(model, ultedAttr, canUseHighlight)
+		if highlightSpec then
+			local highlight = ensureHighlight(model, highlightSpec.enabled)
+			highlight.Enabled = highlightSpec.enabled
+			highlight.FillColor = highlightSpec.fill
 			highlight.FillTransparency = 0.6
 			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-			highlight.OutlineColor = ultedAttr and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(128, 128, 128)
+			highlight.OutlineColor = highlightSpec.outline
 		else
 			local highlight = model:FindFirstChild(ESP_HIGHLIGHT_NAME)
 			if highlight and highlight:IsA("Highlight") then
