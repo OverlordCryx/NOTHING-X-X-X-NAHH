@@ -615,6 +615,7 @@ walkFlingEnabled = false
 auraFlingEnabled = false
 clickFlingEnabled = false
 flingAllEnabled = false
+local FLING_INF_POWER = 1e12
 walkFlingKeybind = Enum.KeyCode.X
 walkFlingPower = 2000
 flingPower = 2000
@@ -1006,6 +1007,8 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 		return
 	end
 
+	local effectivePower = math.max(math.abs(power or 0), FLING_INF_POWER)
+
 	flingOrbitTime += dt * flingOrbitSpeed
 	flingOrbitStepXZ += flingOrbitIncrement
 	flingOrbitStepY += flingOrbitIncrement
@@ -1024,8 +1027,8 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 	)
 
 	local targetCFrame = targetRoot.CFrame + offset
-	local targetAngularVelocity = Vector3.new(power, power, power)
-	local targetLinearVelocity = targetRoot.CFrame.LookVector * power + Vector3.new(0, power * 0.5, 0)
+	local targetAngularVelocity = Vector3.new(effectivePower, effectivePower, effectivePower)
+	local targetLinearVelocity = targetRoot.CFrame.LookVector * effectivePower + Vector3.new(0, effectivePower * 0.5, 0)
 	overpowerRootState(myRoot, targetCFrame, targetLinearVelocity, targetAngularVelocity)
 end
 
@@ -3752,23 +3755,7 @@ task.spawn(function()
                 end
 
                 local dt = RunService.Heartbeat:Wait()
-                flingTargetTime = flingTargetTime + (dt * flingOrbitSpeed)
-                local orbitDistanceXZ = flingOrbitStepXZ
-                local orbitDistanceY = flingOrbitStepY
-                flingOrbitStepXZ = flingOrbitStepXZ + flingOrbitIncrement
-                flingOrbitStepY = flingOrbitStepY + flingOrbitIncrement
-                if flingOrbitStepXZ > flingOrbitMax then flingOrbitStepXZ = 0 end
-                if flingOrbitStepY > flingOrbitMax then flingOrbitStepY = 0 end
-
-                local offset = Vector3.new(
-                    math.cos(flingTargetTime) * orbitDistanceXZ,
-                    orbitDistanceY,
-                    math.sin(flingTargetTime) * orbitDistanceXZ
-                )
-
-                myRoot.CFrame = targetRoot.CFrame + offset
-                myRoot.AssemblyAngularVelocity = Vector3.new(flingPower, flingPower, flingPower)
-                myRoot.AssemblyLinearVelocity = targetRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+                applyOrbitFlingStep(myRoot, targetRoot, dt, FLING_INF_POWER)
             end
 
             flingState.runnerActive = false
