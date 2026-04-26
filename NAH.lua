@@ -2448,6 +2448,7 @@ local function handleCharacterDeath()
 	syncTargetPickKeybindDisplay()
 	syncSetBackKeybindDisplay()
 	targetValueText.Text = ""
+	targetFrame.Visible = false
 	syncTargetActionControls()
 end
 
@@ -2719,6 +2720,7 @@ local function updateTargetDisplay()
 	local displayedTarget = getDisplayedTargetModel()
 	local displayName = displayedTarget and displayedTarget.Name or (manualAttackTpPlayer and manualAttackTpPlayer.Name or "")
 	targetValueText.Text = displayName
+	targetFrame.Visible = displayName ~= ""
 
 	if not hasSelectedTargetOrPendingPlayer() then
 		if autoTpEnabled then
@@ -7424,7 +7426,7 @@ function startIntroUi()
 			introFinished = true
 
 			keybindFrame.Visible = true
-			targetFrame.Visible = true
+			targetFrame.Visible = false
 			updateTargetDisplay()
 
 			TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
