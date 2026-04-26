@@ -2804,6 +2804,10 @@ local function getPreferredAttackTpTarget()
 		return resolvedManualTarget
 	end
 
+	if manualAttackTpPlayer or manualAttackTpTarget then
+		return nil
+	end
+
 	return getClosestAliveTarget()
 end
 
@@ -2819,6 +2823,10 @@ resolveAttackTpTarget = function()
 
 	if hasLiveStoredTarget(attackTpTarget) then
 		return attackTpTarget
+	end
+
+	if manualAttackTpPlayer or manualAttackTpTarget then
+		return nil
 	end
 
 	return getClosestAliveTarget()
@@ -6621,6 +6629,50 @@ task.spawn(function()
 		return nil
 	end
 
+	local HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE = "NOTHING_X_X_X"
+	local HIGHLIGHT_DESTROY_TOKEN_VALUE = 500
+
+	local function cancelHighlightDestroy(highlight)
+		if not highlight or not highlight:IsA("Highlight") then
+			return
+		end
+		highlight:SetAttribute(HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE, nil)
+	end
+
+	local function scheduleHighlightDestroy(model)
+		local highlight = model and model:FindFirstChild(ESP_HIGHLIGHT_NAME)
+		if not highlight or not highlight:IsA("Highlight") then
+			return
+		end
+
+		local destroyCounter = highlight:GetAttribute(HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE)
+		if type(destroyCounter) ~= "number" then
+			highlight:SetAttribute(HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE, 0)
+			task.spawn(function()
+				while highlight.Parent do
+					if highlight.Enabled then
+						highlight:SetAttribute(HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE, nil)
+						return
+					end
+
+					local currentValue = highlight:GetAttribute(HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE)
+					if type(currentValue) ~= "number" then
+						return
+					end
+
+					currentValue = currentValue + 1
+					highlight:SetAttribute(HIGHLIGHT_DESTROY_TOKEN_ATTRIBUTE, currentValue)
+					if currentValue >= HIGHLIGHT_DESTROY_TOKEN_VALUE then
+						highlight:Destroy()
+						return
+					end
+
+					nextFrame()
+				end
+			end)
+		end
+	end
+
 	local function ensureHighlight(model, startEnabled)
 		local highlight = model and model:FindFirstChild(ESP_HIGHLIGHT_NAME)
 		if highlight and not highlight:IsA("Highlight") then
@@ -6629,6 +6681,7 @@ task.spawn(function()
 		end
 
 		if highlight then
+			cancelHighlightDestroy(highlight)
 			return highlight
 		end
 
@@ -6642,6 +6695,7 @@ task.spawn(function()
 		highlight.OutlineColor = startEnabled and Color3.fromRGB(255, 255, 0) or Color3.fromRGB(128, 128, 128)
 		highlight.Enabled = startEnabled == true
 		highlight.Parent = model
+		cancelHighlightDestroy(highlight)
 		return highlight
 	end
 
@@ -6776,6 +6830,7 @@ task.spawn(function()
 		local highlightSpec = getSharedHighlightColors(model, ultedAttr, canUseHighlight)
 		if highlightSpec then
 			local highlight = ensureHighlight(model, highlightSpec.enabled)
+			cancelHighlightDestroy(highlight)
 			highlight.Enabled = highlightSpec.enabled
 			highlight.FillColor = highlightSpec.fill
 			highlight.FillTransparency = 0.6
@@ -6786,6 +6841,7 @@ task.spawn(function()
 			if highlight and highlight:IsA("Highlight") then
 				highlight.Enabled = false
 				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
+				scheduleHighlightDestroy(model)
 			end
 		end
 
@@ -6802,6 +6858,7 @@ task.spawn(function()
 			if highlight and highlight:IsA("Highlight") then
 				highlight.Enabled = false
 				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
+				scheduleHighlightDestroy(model)
 			end
 		end
 		espOverlayState[targetPlayer] = nil
