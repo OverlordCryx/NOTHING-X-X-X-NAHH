@@ -1591,7 +1591,7 @@ end
 local function startGetTrashHoldLoop(runToken)
 	task.spawn(function()
 		while getTrashState.running and getTrashState.token == runToken do
-			nextFrame()
+			task.wait()
 			local currentCharacter = player.Character
 			local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 			if rootPart and rootPart.Parent and getTrashState.holdCFrame then
@@ -1677,11 +1677,7 @@ local function hasTrashcanAfterChecks(attempts, delayTime)
 			return true
 		end
 		if index < checkCount then
-			if waitTime and waitTime > 0 then
-				nextFrame()
-			else
-				nextFrame()
-			end
+			task.wait(waitTime)
 		end
 	end
 	return false
@@ -1698,9 +1694,6 @@ local function moveRootToTrashTarget(rootPart, targetPart, runToken)
 	local destination = targetPart.Position + Vector3.new(0, yOffset, 0)
 	local totalDistance = (destination - startPosition).Magnitude
 	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.stepDistance))
-	if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
-		return false
-	end
 
 	for stepIndex = 1, stepCount do
 		if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
@@ -1720,15 +1713,11 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 		return false
 	end
 
+	local startPosition = rootPart.Position
 	local destination = targetCFrame.Position
-	local riseStart = destination + Vector3.new(0, -10, 0)
-	local riseDistance = math.abs(destination.Y - riseStart.Y)
-	local stepCount = math.max(1, math.ceil(riseDistance / getTrashState.returnStepDistance))
-
-	getTrashState.holdCFrame = getTrashTravelCFrame(riseStart, destination)
-	rootPart.AssemblyLinearVelocity = Vector3.zero
-	rootPart.AssemblyAngularVelocity = Vector3.zero
-	rootPart.CFrame = getTrashState.holdCFrame
+	local totalDistance = (destination - startPosition).Magnitude
+	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.returnStepDistance))
+	local travelDestination = destination + Vector3.new(0, -10, 0)
 
 	for stepIndex = 1, stepCount do
 		if not getTrashState.running or getTrashState.token ~= runToken or not rootPart.Parent then
@@ -1736,7 +1725,7 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 		end
 
 		local alpha = stepIndex / stepCount
-		local nextPosition = riseStart:Lerp(destination, alpha)
+		local nextPosition = startPosition:Lerp(travelDestination, alpha)
 		if stepIndex >= stepCount then
 			getTrashState.holdCFrame = targetCFrame
 		else
@@ -1802,7 +1791,7 @@ local function stopGetTrashImmediate()
 				break
 			end
 			setGetTrashNoclipEnabled(false)
-			nextFrame()
+			task.wait(0.05)
 		end
 	end)
 	syncGetTrashKeybindDisplay()
@@ -1852,7 +1841,7 @@ runGetTrash = function()
 	getTrashState.blockSetBack = true
 	local runToken = (getTrashState.token or 0) + 1
 	getTrashState.token = runToken
-	getTrashState.savedCFrame = rootPart.CFrame
+	getTrashState.savedCFrame = nil
 	getTrashState.holdCFrame = nil
 	setGetTrashNoclipEnabled(true)
 	syncGetTrashKeybindDisplay()
@@ -1885,7 +1874,7 @@ runGetTrash = function()
 				while getTrashState.running and getTrashState.token == runToken and hasLocalTrashcan() do
 					setGetTrashNoclipEnabled(false)
 					getTrashState.blockSetBack = false
-					nextFrame()
+					task.wait(0.2)
 				end
 
 				setGetTrashNoclipEnabled(true)
@@ -1898,11 +1887,12 @@ runGetTrash = function()
 			if switchedTargets >= 40 then
 				ignoredModels = {}
 				switchedTargets = 0
-				nextFrame()
+				task.wait(0.15)
 				continue
 			end
 
-			nextFrame()
+			getTrashState.savedCFrame = rootPart.CFrame
+			task.wait(0.15)
 			if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken then
 				break
 			end
@@ -1917,7 +1907,7 @@ runGetTrash = function()
 			if not isValidTrashTarget(targetEntry) then
 				ignoredModels = {}
 				switchedTargets = 0
-				nextFrame()
+				task.wait(0.2)
 				continue
 			end
 
@@ -1938,14 +1928,13 @@ runGetTrash = function()
 					end
 				else
 					local closePosition = targetEntry.part.Position + Vector3.new(0, -1, 0)
-					local closeCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position)
-					getTrashState.holdCFrame = closeCFrame
+					getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position)
 					rootPart.AssemblyLinearVelocity = Vector3.zero
 					rootPart.AssemblyAngularVelocity = Vector3.zero
-					rootPart.CFrame = closeCFrame
+					rootPart.CFrame = getTrashState.holdCFrame
 					clickTrashcan()
 					clickAttempts += 1
-					nextFrame()
+					task.wait(0.2)
 				end
 			end
 
@@ -1955,7 +1944,7 @@ runGetTrash = function()
 
 			ignoredModels[targetEntry.model] = tick() + 1.5
 			switchedTargets += 1
-			nextFrame()
+			task.wait(0.1)
 		end
 
 		if getTrashState.token == runToken and getTrashState.running then
