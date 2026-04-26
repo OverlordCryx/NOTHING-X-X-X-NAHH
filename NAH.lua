@@ -107,6 +107,14 @@ local function overpowerRootState(rootPart, targetCFrame, linearVelocity, angula
 	end)
 end
 
+local function applyTeleportRootState(rootPart, targetCFrame, linearVelocity)
+	if not rootPart or not rootPart.Parent or not targetCFrame then
+		return
+	end
+
+	overpowerRootState(rootPart, targetCFrame, linearVelocity or Vector3.zero, Vector3.zero)
+end
+
 local player = Players.LocalPlayer
 if not player then
 	return
@@ -532,9 +540,9 @@ local getTrashState = {
 	savedCFrame = nil,
 	holdCFrame = nil,
 	stepDistance = 150,
-	stepDelay = 0,
+	stepDelay = 0.001,
 	returnStepDistance = 10,
-	returnStepDelay = 0,
+	returnStepDelay = 0.046,
 	lastToggleAt = 0,
 	toggleCooldown = 0.35,
 	token = 0,
@@ -655,7 +663,15 @@ local syncFlingModeControls
 local runGetTrash
 
 local function encodeKeybindValue(keyCode)
-	return keyCode and keyCode.Name or ""
+	if not keyCode then
+		return ""
+	end
+
+	if keyCode == Enum.KeyCode.LeftAlt then
+		return "Alt"
+	end
+
+	return keyCode.Name or ""
 end
 
 local function decodeKeybindValue(value)
@@ -1680,15 +1696,21 @@ local function moveRootToTrashTarget(rootPart, targetPart, runToken)
 	local targetDistance = (targetPart.Position - startPosition).Magnitude
 	local yOffset = targetDistance <= 21 and -1 or -15
 	local destination = targetPart.Position + Vector3.new(0, yOffset, 0)
+	local totalDistance = (destination - startPosition).Magnitude
+	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.stepDistance))
 	if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
 		return false
 	end
 
-	local targetCFrame = getTrashTravelCFrame(destination, targetPart.Position)
-	rootPart.AssemblyLinearVelocity = Vector3.zero
-	rootPart.AssemblyAngularVelocity = Vector3.zero
-	getTrashState.holdCFrame = targetCFrame
-	rootPart.CFrame = targetCFrame
+	for stepIndex = 1, stepCount do
+		if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
+			return false
+		end
+
+		local nextPosition = startPosition:Lerp(destination, stepIndex / stepCount)
+		getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, targetPart.Position)
+		task.wait(getTrashState.stepDelay)
+	end
 
 	return true
 end
@@ -1703,9 +1725,9 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 	local riseDistance = math.abs(destination.Y - riseStart.Y)
 	local stepCount = math.max(1, math.ceil(riseDistance / getTrashState.returnStepDistance))
 
+	getTrashState.holdCFrame = getTrashTravelCFrame(riseStart, destination)
 	rootPart.AssemblyLinearVelocity = Vector3.zero
 	rootPart.AssemblyAngularVelocity = Vector3.zero
-	getTrashState.holdCFrame = getTrashTravelCFrame(riseStart, destination)
 	rootPart.CFrame = getTrashState.holdCFrame
 
 	for stepIndex = 1, stepCount do
@@ -1720,7 +1742,7 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 		else
 			getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, destination)
 		end
-		nextFrame()
+		task.wait(getTrashState.returnStepDelay)
 	end
 
 	return true
@@ -5169,8 +5191,7 @@ function teleportToSelectedTarget()
 		return
 	end
 
-	characterRoot.CFrame = targetCFrame
-	characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
+	applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero)
 	if flying and bv and bg then
 		bv.Position = characterRoot.Position
 		bg.CFrame = getRotationOnlyCFrame(targetCFrame)
@@ -6856,7 +6877,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 	local key = input.KeyCode
 
-	if key == Enum.KeyCode.Comma then
+	if key == Enum.KeyCode.LeftAlt then
 		setSettingsVisible(not settingsOpen)
 		return
 	end
@@ -7146,8 +7167,7 @@ do
 			if isValidAttackTpTarget(targetModel) then
 				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
 				if targetCFrame then
-					characterRoot.CFrame = targetCFrame
-					characterRoot.AssemblyLinearVelocity = targetVelocity or Vector3.zero
+					applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero)
 					if pendingTeleportToSelectedPlayer then
 						teleportToSelectedTarget()
 					end
@@ -7191,8 +7211,7 @@ do
 			if isValidAttackTpTarget(attackTpTarget) then
 				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
 				if targetCFrame and targetVelocity then
-					characterRoot.CFrame = targetCFrame
-					characterRoot.AssemblyLinearVelocity = targetVelocity
+					applyTeleportRootState(characterRoot, targetCFrame, targetVelocity)
 
 					if flying and bv and bg then
 						bv.Position = characterRoot.Position
