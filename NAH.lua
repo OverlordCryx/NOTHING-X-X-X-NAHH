@@ -1715,23 +1715,46 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 
 	local startPosition = rootPart.Position
 	local destination = targetCFrame.Position
-	local totalDistance = (destination - startPosition).Magnitude
-	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.returnStepDistance))
-	local travelDestination = destination + Vector3.new(0, -10, 0)
+	local loweredStart = Vector3.new(startPosition.X, startPosition.Y - 10, startPosition.Z)
+	local loweredDestination = Vector3.new(destination.X, startPosition.Y - 10, destination.Z)
 
-	for stepIndex = 1, stepCount do
-		if not getTrashState.running or getTrashState.token ~= runToken or not rootPart.Parent then
-			return false
+	local function travelBetween(fromPosition, toPosition, lookTarget, finalCFrame)
+		local totalDistance = (toPosition - fromPosition).Magnitude
+		local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.returnStepDistance))
+
+		for stepIndex = 1, stepCount do
+			if not getTrashState.running or getTrashState.token ~= runToken or not rootPart.Parent then
+				return false
+			end
+
+			local alpha = stepIndex / stepCount
+			local nextPosition = fromPosition:Lerp(toPosition, alpha)
+			if finalCFrame and stepIndex >= stepCount then
+				getTrashState.holdCFrame = finalCFrame
+			else
+				getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, lookTarget)
+			end
+			task.wait(getTrashState.returnStepDelay)
 		end
 
-		local alpha = stepIndex / stepCount
-		local nextPosition = startPosition:Lerp(travelDestination, alpha)
-		if stepIndex >= stepCount then
-			getTrashState.holdCFrame = targetCFrame
-		else
-			getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, destination)
-		end
-		task.wait(getTrashState.returnStepDelay)
+		return true
+	end
+
+	rootPart.AssemblyLinearVelocity = Vector3.zero
+	rootPart.AssemblyAngularVelocity = Vector3.zero
+	rootPart.CFrame = getTrashTravelCFrame(startPosition, loweredStart)
+	getTrashState.holdCFrame = rootPart.CFrame
+
+	if not travelBetween(startPosition, loweredStart, loweredStart, nil) then
+		return false
+	end
+
+	if not travelBetween(loweredStart, loweredDestination, destination, nil) then
+		return false
+	end
+
+	if not travelBetween(loweredDestination, destination, destination, targetCFrame) then
+		return false
 	end
 
 	return true
@@ -1841,7 +1864,7 @@ runGetTrash = function()
 	getTrashState.blockSetBack = true
 	local runToken = (getTrashState.token or 0) + 1
 	getTrashState.token = runToken
-	getTrashState.savedCFrame = nil
+	getTrashState.savedCFrame = rootPart.CFrame
 	getTrashState.holdCFrame = nil
 	setGetTrashNoclipEnabled(true)
 	syncGetTrashKeybindDisplay()
@@ -1891,7 +1914,6 @@ runGetTrash = function()
 				continue
 			end
 
-			getTrashState.savedCFrame = rootPart.CFrame
 			task.wait(0.15)
 			if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken then
 				break
