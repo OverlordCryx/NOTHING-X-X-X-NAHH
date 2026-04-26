@@ -1619,18 +1619,15 @@ local function moveRootToTrashTarget(rootPart, targetPart, runToken)
 	local targetDistance = (targetPart.Position - startPosition).Magnitude
 	local yOffset = targetDistance <= 21 and -1 or -15
 	local destination = targetPart.Position + Vector3.new(0, yOffset, 0)
-	local totalDistance = (destination - startPosition).Magnitude
-	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.stepDistance))
-
-	for stepIndex = 1, stepCount do
-		if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
-			return false
-		end
-
-		local nextPosition = startPosition:Lerp(destination, stepIndex / stepCount)
-		getTrashState.holdCFrame = getTrashTravelCFrame(nextPosition, targetPart.Position)
-		task.wait(getTrashState.stepDelay)
+	if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken or not rootPart.Parent or not targetPart.Parent then
+		return false
 	end
+
+	local targetCFrame = getTrashTravelCFrame(destination, targetPart.Position)
+	rootPart.AssemblyLinearVelocity = Vector3.zero
+	rootPart.AssemblyAngularVelocity = Vector3.zero
+	getTrashState.holdCFrame = targetCFrame
+	rootPart.CFrame = targetCFrame
 
 	return true
 end
@@ -1640,11 +1637,15 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 		return false
 	end
 
-	local startPosition = rootPart.Position
 	local destination = targetCFrame.Position
-	local totalDistance = (destination - startPosition).Magnitude
-	local stepCount = math.max(1, math.ceil(totalDistance / getTrashState.returnStepDistance))
-	local travelDestination = destination + Vector3.new(0, -10, 0)
+	local riseStart = destination + Vector3.new(0, -10, 0)
+	local riseDistance = math.abs(destination.Y - riseStart.Y)
+	local stepCount = math.max(1, math.ceil(riseDistance / getTrashState.returnStepDistance))
+
+	rootPart.AssemblyLinearVelocity = Vector3.zero
+	rootPart.AssemblyAngularVelocity = Vector3.zero
+	getTrashState.holdCFrame = getTrashTravelCFrame(riseStart, destination)
+	rootPart.CFrame = getTrashState.holdCFrame
 
 	for stepIndex = 1, stepCount do
 		if not getTrashState.running or getTrashState.token ~= runToken or not rootPart.Parent then
@@ -1652,7 +1653,7 @@ local function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
 		end
 
 		local alpha = stepIndex / stepCount
-		local nextPosition = startPosition:Lerp(travelDestination, alpha)
+		local nextPosition = riseStart:Lerp(destination, alpha)
 		if stepIndex >= stepCount then
 			getTrashState.holdCFrame = targetCFrame
 		else
@@ -1768,7 +1769,7 @@ runGetTrash = function()
 	getTrashState.blockSetBack = true
 	local runToken = (getTrashState.token or 0) + 1
 	getTrashState.token = runToken
-	getTrashState.savedCFrame = nil
+	getTrashState.savedCFrame = rootPart.CFrame
 	getTrashState.holdCFrame = nil
 	setGetTrashNoclipEnabled(true)
 	syncGetTrashKeybindDisplay()
@@ -1814,12 +1815,11 @@ runGetTrash = function()
 			if switchedTargets >= 40 then
 				ignoredModels = {}
 				switchedTargets = 0
-				task.wait(0.15)
+				task.wait()
 				continue
 			end
 
-			getTrashState.savedCFrame = rootPart.CFrame
-			task.wait(0.15)
+			task.wait()
 			if not getTrashState.running or getTrashState.returning or getTrashState.token ~= runToken then
 				break
 			end
@@ -1834,7 +1834,7 @@ runGetTrash = function()
 			if not isValidTrashTarget(targetEntry) then
 				ignoredModels = {}
 				switchedTargets = 0
-				task.wait(0.2)
+				task.wait()
 				continue
 			end
 
@@ -1855,10 +1855,14 @@ runGetTrash = function()
 					end
 				else
 					local closePosition = targetEntry.part.Position + Vector3.new(0, -1, 0)
-					getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position)
+					local closeCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position)
+					getTrashState.holdCFrame = closeCFrame
+					rootPart.AssemblyLinearVelocity = Vector3.zero
+					rootPart.AssemblyAngularVelocity = Vector3.zero
+					rootPart.CFrame = closeCFrame
 					clickTrashcan()
 					clickAttempts += 1
-					task.wait(0.2)
+					task.wait()
 				end
 			end
 
@@ -1868,7 +1872,7 @@ runGetTrash = function()
 
 			ignoredModels[targetEntry.model] = tick() + 1.5
 			switchedTargets += 1
-			task.wait(0.1)
+			task.wait()
 		end
 
 		if getTrashState.token == runToken and getTrashState.running then
@@ -2679,10 +2683,6 @@ local function getPreferredAttackTpTarget()
 		return resolvedManualTarget
 	end
 
-	if hasManualAttackTpSelection() then
-		return nil
-	end
-
 	return getClosestAliveTarget()
 end
 
@@ -2694,10 +2694,6 @@ resolveAttackTpTarget = function()
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
 	if isValidAttackTpTarget(resolvedManualTarget) then
 		return resolvedManualTarget
-	end
-
-	if hasManualAttackTpSelection() then
-		return nil
 	end
 
 	if isValidAttackTpTarget(attackTpTarget) then
@@ -7467,4 +7463,3 @@ task.spawn(function()
 end)
 updateCurrentGui()
 end)
-
