@@ -191,10 +191,12 @@ local function showExistingGuiInfo(gui, title, text, duration)
 	return true
 end
 
-local existingGui = CoreGui:FindFirstChild("NOTHING_X-000")
-if existingGui then
-	showExistingGuiInfo(existingGui, "NOTHING X", "NOTHING_X Already Running...", 3)
-	return
+do
+	local existingGui = CoreGui:FindFirstChild("NOTHING_X-000")
+	if existingGui then
+		showExistingGuiInfo(existingGui, "NOTHING X", "NOTHING_X Already Running...", 3)
+		return
+	end
 end
 
 local screenGui = Instance.new("ScreenGui")
@@ -203,6 +205,7 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
+screenGui:SetAttribute("InfoToken", 0)
 screenGui.Parent = CoreGui
 
 local background = Instance.new("Frame")
@@ -222,9 +225,6 @@ keybindFrame.BackgroundTransparency = 1
 keybindFrame.BorderSizePixel = 0
 keybindFrame.Visible = false
 keybindFrame.Parent = screenGui
-local leftCorner = Instance.new("UICorner")
-leftCorner.CornerRadius = UDim.new(0, 18)
-leftCorner.Parent = keybindFrame
 
 local leftStroke = Instance.new("UIStroke")
 leftStroke.Color = Color3.fromRGB(255, 0, 0)
@@ -232,14 +232,20 @@ leftStroke.Thickness = 3
 leftStroke.Transparency = 1
 leftStroke.Parent = keybindFrame
 
-local leftGradient = Instance.new("UIGradient")
-leftGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-})
-leftGradient.Rotation = 90
-leftGradient.Parent = keybindFrame
+do
+	local leftCorner = Instance.new("UICorner")
+	leftCorner.CornerRadius = UDim.new(0, 18)
+	leftCorner.Parent = keybindFrame
+
+	local leftGradient = Instance.new("UIGradient")
+	leftGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+		ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+	})
+	leftGradient.Rotation = 90
+	leftGradient.Parent = keybindFrame
+end
 
 local keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
@@ -257,10 +263,12 @@ keybindText.TextYAlignment = Enum.TextYAlignment.Top
 keybindText.TextXAlignment = Enum.TextXAlignment.Center
 keybindText.Parent = keybindFrame
 
-local keybindTextConstraint = Instance.new("UITextSizeConstraint")
-keybindTextConstraint.MinTextSize = 12
-keybindTextConstraint.MaxTextSize = 24
-keybindTextConstraint.Parent = keybindText
+do
+	local keybindTextConstraint = Instance.new("UITextSizeConstraint")
+	keybindTextConstraint.MinTextSize = 12
+	keybindTextConstraint.MaxTextSize = 24
+	keybindTextConstraint.Parent = keybindText
+end
 
 local targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
@@ -273,24 +281,26 @@ targetFrame.BorderSizePixel = 0
 targetFrame.Visible = false
 targetFrame.Parent = screenGui
 
-local targetCorner = Instance.new("UICorner")
-targetCorner.CornerRadius = UDim.new(0, 18)
-targetCorner.Parent = targetFrame
+do
+	local targetCorner = Instance.new("UICorner")
+	targetCorner.CornerRadius = UDim.new(0, 18)
+	targetCorner.Parent = targetFrame
 
-local targetStroke = Instance.new("UIStroke")
-targetStroke.Color = Color3.fromRGB(255, 0, 0)
-targetStroke.Thickness = 3
-targetStroke.Transparency = 0.1
-targetStroke.Parent = targetFrame
+	local targetStroke = Instance.new("UIStroke")
+	targetStroke.Color = Color3.fromRGB(255, 0, 0)
+	targetStroke.Thickness = 3
+	targetStroke.Transparency = 0.1
+	targetStroke.Parent = targetFrame
 
-local targetGradient = Instance.new("UIGradient")
-targetGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-})
-targetGradient.Rotation = 90
-targetGradient.Parent = targetFrame
+	local targetGradient = Instance.new("UIGradient")
+	targetGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+		ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+	})
+	targetGradient.Rotation = 90
+	targetGradient.Parent = targetFrame
+end
 
 
 
@@ -311,10 +321,12 @@ targetValueText.TextXAlignment = Enum.TextXAlignment.Center
 targetValueText.TextYAlignment = Enum.TextYAlignment.Center
 targetValueText.Parent = targetFrame
 
-local targetValueConstraint = Instance.new("UITextSizeConstraint")
-targetValueConstraint.MinTextSize = 12
-targetValueConstraint.MaxTextSize = 20
-targetValueConstraint.Parent = targetValueText
+do
+	local targetValueConstraint = Instance.new("UITextSizeConstraint")
+	targetValueConstraint.MinTextSize = 12
+	targetValueConstraint.MaxTextSize = 20
+	targetValueConstraint.Parent = targetValueText
+end
 
 local infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
@@ -327,24 +339,26 @@ infoContainer.BorderSizePixel = 0
 infoContainer.Visible = false
 infoContainer.Parent = screenGui
 
-local infoCorner = Instance.new("UICorner")
-infoCorner.CornerRadius = UDim.new(0, 18)
-infoCorner.Parent = infoContainer
-
 local infoStroke = Instance.new("UIStroke")
 infoStroke.Color = Color3.fromRGB(255, 0, 0)
 infoStroke.Thickness = 3
 infoStroke.Transparency = 1
 infoStroke.Parent = infoContainer
 
-local infoGradient = Instance.new("UIGradient")
-infoGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-})
-infoGradient.Rotation = 90
-infoGradient.Parent = infoContainer
+do
+	local infoCorner = Instance.new("UICorner")
+	infoCorner.CornerRadius = UDim.new(0, 18)
+	infoCorner.Parent = infoContainer
+
+	local infoGradient = Instance.new("UIGradient")
+	infoGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+		ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+	})
+	infoGradient.Rotation = 90
+	infoGradient.Parent = infoContainer
+end
 
 local infoTitle = Instance.new("TextLabel")
 infoTitle.Name = "InfoTitle"
@@ -361,10 +375,12 @@ infoTitle.TextScaled = true
 infoTitle.TextWrapped = true
 infoTitle.Parent = infoContainer
 
-local infoTitleConstraint = Instance.new("UITextSizeConstraint")
-infoTitleConstraint.MinTextSize = 14
-infoTitleConstraint.MaxTextSize = 28
-infoTitleConstraint.Parent = infoTitle
+do
+	local infoTitleConstraint = Instance.new("UITextSizeConstraint")
+	infoTitleConstraint.MinTextSize = 14
+	infoTitleConstraint.MaxTextSize = 28
+	infoTitleConstraint.Parent = infoTitle
+end
 
 local infoText = Instance.new("TextLabel")
 infoText.Name = "InfoText"
@@ -381,10 +397,12 @@ infoText.TextScaled = true
 infoText.TextWrapped = true
 infoText.Parent = infoContainer
 
-local infoTextConstraint = Instance.new("UITextSizeConstraint")
-infoTextConstraint.MinTextSize = 12
-infoTextConstraint.MaxTextSize = 22
-infoTextConstraint.Parent = infoText
+do
+	local infoTextConstraint = Instance.new("UITextSizeConstraint")
+	infoTextConstraint.MinTextSize = 12
+	infoTextConstraint.MaxTextSize = 22
+	infoTextConstraint.Parent = infoText
+end
 
 local settingsWindow = Instance.new("Frame")
 settingsWindow.Name = "WindowUI"
@@ -411,9 +429,11 @@ windowOutline.Active = false
 windowOutline.ZIndex = 9
 windowOutline.Parent = screenGui
 
-local windowOutlineCorner = Instance.new("UICorner")
-windowOutlineCorner.CornerRadius = UDim.new(0, 18)
-windowOutlineCorner.Parent = windowOutline
+do
+	local windowOutlineCorner = Instance.new("UICorner")
+	windowOutlineCorner.CornerRadius = UDim.new(0, 18)
+	windowOutlineCorner.Parent = windowOutline
+end
 
 local windowOutlineStroke = Instance.new("UIStroke")
 windowOutlineStroke.Color = Color3.fromRGB(255, 0, 0)
@@ -422,21 +442,6 @@ windowOutlineStroke.Transparency = 1
 windowOutlineStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 windowOutlineStroke.Parent = windowOutline
 
-local inputBlocker = Instance.new("TextButton")
-inputBlocker.Name = "InputBlocker"
-inputBlocker.Size = UDim2.fromScale(1, 1)
-inputBlocker.BackgroundTransparency = 1
-inputBlocker.BorderSizePixel = 0
-inputBlocker.Text = ""
-inputBlocker.AutoButtonColor = false
-inputBlocker.Visible = true
-inputBlocker.ZIndex = 10
-inputBlocker.Parent = settingsWindow
-
-local settingsCorner = Instance.new("UICorner")
-settingsCorner.CornerRadius = UDim.new(0, 18)
-settingsCorner.Parent = settingsWindow
-
 local settingsStroke = Instance.new("UIStroke")
 settingsStroke.Color = Color3.fromRGB(255, 0, 0)
 settingsStroke.Thickness = 3
@@ -444,14 +449,31 @@ settingsStroke.Transparency = 1
 settingsStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 settingsStroke.Parent = settingsWindow
 
-local settingsGradient = Instance.new("UIGradient")
-settingsGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-	ColorSequenceKeypoint.new(0.45, Color3.fromRGB(55, 0, 0)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(155, 0, 0)),
-})
-settingsGradient.Rotation = 90
-settingsGradient.Parent = settingsWindow
+do
+	local inputBlocker = Instance.new("TextButton")
+	inputBlocker.Name = "InputBlocker"
+	inputBlocker.Size = UDim2.fromScale(1, 1)
+	inputBlocker.BackgroundTransparency = 1
+	inputBlocker.BorderSizePixel = 0
+	inputBlocker.Text = ""
+	inputBlocker.AutoButtonColor = false
+	inputBlocker.Visible = true
+	inputBlocker.ZIndex = 10
+	inputBlocker.Parent = settingsWindow
+
+	local settingsCorner = Instance.new("UICorner")
+	settingsCorner.CornerRadius = UDim.new(0, 18)
+	settingsCorner.Parent = settingsWindow
+
+	local settingsGradient = Instance.new("UIGradient")
+	settingsGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+		ColorSequenceKeypoint.new(0.45, Color3.fromRGB(55, 0, 0)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(155, 0, 0)),
+	})
+	settingsGradient.Rotation = 90
+	settingsGradient.Parent = settingsWindow
+end
 
 local headerDragArea = Instance.new("Frame")
 headerDragArea.Name = "HeaderDragArea"
@@ -461,37 +483,39 @@ headerDragArea.Active = true
 headerDragArea.ZIndex = 11
 headerDragArea.Parent = settingsWindow
 
-local uiTitle = Instance.new("TextLabel")
-uiTitle.Name = "UI-Title"
-uiTitle.AnchorPoint = Vector2.new(0, 0)
-uiTitle.Position = UDim2.fromScale(0.05, 0.06)
-uiTitle.Size = UDim2.fromScale(0.52, 0.1)
-uiTitle.BackgroundTransparency = 1
-uiTitle.Text = "NOTHING X"
-uiTitle.TextColor3 = Color3.fromRGB(255, 35, 35)
-uiTitle.TextStrokeTransparency = 0
-uiTitle.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
-uiTitle.Font = Enum.Font.GothamBlack
-uiTitle.TextScaled = true
-uiTitle.TextXAlignment = Enum.TextXAlignment.Left
-uiTitle.ZIndex = 11
-uiTitle.Parent = settingsWindow
+do
+	local uiTitle = Instance.new("TextLabel")
+	uiTitle.Name = "UI-Title"
+	uiTitle.AnchorPoint = Vector2.new(0, 0)
+	uiTitle.Position = UDim2.fromScale(0.05, 0.06)
+	uiTitle.Size = UDim2.fromScale(0.52, 0.1)
+	uiTitle.BackgroundTransparency = 1
+	uiTitle.Text = "NOTHING X"
+	uiTitle.TextColor3 = Color3.fromRGB(255, 35, 35)
+	uiTitle.TextStrokeTransparency = 0
+	uiTitle.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
+	uiTitle.Font = Enum.Font.GothamBlack
+	uiTitle.TextScaled = true
+	uiTitle.TextXAlignment = Enum.TextXAlignment.Left
+	uiTitle.ZIndex = 11
+	uiTitle.Parent = settingsWindow
 
-local uiTitleConstraint = Instance.new("UITextSizeConstraint")
-uiTitleConstraint.MinTextSize = 14
-uiTitleConstraint.MaxTextSize = 28
-uiTitleConstraint.Parent = uiTitle
+	local uiTitleConstraint = Instance.new("UITextSizeConstraint")
+	uiTitleConstraint.MinTextSize = 14
+	uiTitleConstraint.MaxTextSize = 28
+	uiTitleConstraint.Parent = uiTitle
 
-local divider = Instance.new("Frame")
-divider.Name = "Divider"
-divider.AnchorPoint = Vector2.new(0.5, 0)
-divider.Position = UDim2.fromScale(0.5, 0.18)
-divider.Size = UDim2.fromScale(0.9, 0.006)
-divider.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-divider.BackgroundTransparency = 0.15
-divider.BorderSizePixel = 0
-divider.ZIndex = 11
-divider.Parent = settingsWindow
+	local divider = Instance.new("Frame")
+	divider.Name = "Divider"
+	divider.AnchorPoint = Vector2.new(0.5, 0)
+	divider.Position = UDim2.fromScale(0.5, 0.18)
+	divider.Size = UDim2.fromScale(0.9, 0.006)
+	divider.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	divider.BackgroundTransparency = 0.15
+	divider.BorderSizePixel = 0
+	divider.ZIndex = 11
+	divider.Parent = settingsWindow
+end
 
 local uiX = Instance.new("ScrollingFrame")
 uiX.Name = "UI-x"
@@ -509,10 +533,12 @@ uiX.Active = true
 uiX.ZIndex = 11
 uiX.Parent = settingsWindow
 
-local settingsLayout = Instance.new("UIListLayout")
-settingsLayout.Padding = UDim.new(0, 10)
-settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-settingsLayout.Parent = uiX
+do
+	local settingsLayout = Instance.new("UIListLayout")
+	settingsLayout.Padding = UDim.new(0, 10)
+	settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	settingsLayout.Parent = uiX
+end
 
 local keybindEntries = {}
 local introFinished = false
@@ -3195,12 +3221,9 @@ local function makeControlFrame(heightScale)
 	return holder
 end
 
-local infoToken = 0
-
 local function showInfo(title, text, time)
-	infoToken = infoToken + 1
-
-	local currentToken = infoToken
+	local currentToken = (screenGui:GetAttribute("InfoToken") or 0) + 1
+	screenGui:SetAttribute("InfoToken", currentToken)
 	local titleValue = tostring(title or "")
 	local textValue = tostring(text or "")
 	local duration = tonumber(time) or 5
@@ -3228,7 +3251,7 @@ local function showInfo(title, text, time)
 	}):Play()
 
 	task.delay(duration, function()
-		if currentToken ~= infoToken then
+		if currentToken ~= (screenGui:GetAttribute("InfoToken") or 0) then
 			return
 		end
 
@@ -3253,7 +3276,7 @@ local function showInfo(title, text, time)
 		})
 		fadeText:Play()
 		fadeText.Completed:Connect(function()
-			if currentToken ~= infoToken then
+			if currentToken ~= (screenGui:GetAttribute("InfoToken") or 0) then
 				return
 			end
 
@@ -3862,11 +3885,35 @@ function initProtectionRuntime()
 	protection.Y_BOUNDARY_UP = 200000
 	protection.EXTREME_LOW_OFFSET = -1000
 	protection.VOID_BUFFER = 90
-	protection.SAVE_INTERVAL = 3.0
-	protection.MIN_DISTANCE_TO_SAVE = 7
+	protection.MAX_SAFE_POSITIONS = 10
+	protection.SAVE_INTERVAL = 0.12
+	protection.MIN_DISTANCE_TO_SAVE = 6
+	protection.MAX_SAVE_HEIGHT_FROM_GROUND = 5.5
+	protection.MAX_AIR_SAVE_VERTICAL_SPEED = 4
+	protection.MIN_GROUND_NORMAL_Y = 0.35
+	protection.GROUND_CHECK_UP = 6
+	protection.GROUND_CHECK_DOWN = 45
+	protection.RESCUE_HEIGHT = 6
+	protection.RESCUE_PROBE_HEIGHT = 12
+	protection.FALLBACK_CAST_HEIGHT = 1500
+	protection.FALLBACK_CAST_DEPTH = 4000
+	protection.SEARCH_OFFSETS = {
+		Vector3.new(0, 0, 0),
+		Vector3.new(6, 0, 0),
+		Vector3.new(-6, 0, 0),
+		Vector3.new(0, 0, 6),
+		Vector3.new(0, 0, -6),
+		Vector3.new(6, 0, 6),
+		Vector3.new(6, 0, -6),
+		Vector3.new(-6, 0, 6),
+		Vector3.new(-6, 0, -6),
+	}
 	protection.safePositionHistory = protection.safePositionHistory or {}
+	protection.safePositionEntries = protection.safePositionEntries or {}
 	protection.lastSafePosition = protection.lastSafePosition or nil
+	protection.lastSafeEntry = protection.lastSafeEntry or nil
 	protection.lastSaveTime = protection.lastSaveTime or 0
+	protection.rescueInProgress = false
 
 	protection.detectVoidY = function()
 		local official = Workspace.FallenPartsDestroyHeight
@@ -3905,7 +3952,7 @@ function initProtectionRuntime()
 		if hrp then
 			return CFrame.new(hrp.Position.X, 200, hrp.Position.Z)
 		end
-		return protection.defaultCFrame
+		return protection.defaultCFrame or CFrame.new(0, 200, 0)
 	end
 
 	protection.isOutsideBoundary = function(pos)
@@ -3927,51 +3974,228 @@ function initProtectionRuntime()
 		return Workspace:Raycast(hrp.Position + Vector3.new(0, 6, 0), Vector3.new(0, -35, 0), params) ~= nil
 	end
 
-	protection.saveSafePosition = function(hrp)
-		if not hrp or protection.isOutsideBoundary(hrp.Position) or not protection.isAnyObjectBelow(hrp) then
+	protection.makeGroundParams = function(character)
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = character and { character } or {}
+		params.IgnoreWater = false
+		return params
+	end
+
+	protection.getGroundHitAt = function(position, character, castUp, castDown)
+		local up = castUp or protection.GROUND_CHECK_UP
+		local down = castDown or protection.GROUND_CHECK_DOWN
+		local origin = position + Vector3.new(0, up, 0)
+		local direction = Vector3.new(0, -(up + down), 0)
+		return Workspace:Raycast(origin, direction, protection.makeGroundParams(character))
+	end
+
+	protection.getGroundHitAround = function(position, character, castUp, castDown)
+		for _, offset in ipairs(protection.SEARCH_OFFSETS) do
+			local samplePosition = position + offset
+			local hit = protection.getGroundHitAt(samplePosition, character, castUp, castDown)
+			if hit and hit.Normal.Y >= protection.MIN_GROUND_NORMAL_Y and not protection.isOutsideBoundary(hit.Position) then
+				return hit, samplePosition
+			end
+		end
+		return nil
+	end
+
+	protection.buildRescueCFrame = function(hitPosition, hitNormal, referenceCFrame)
+		local lookVector = referenceCFrame and referenceCFrame.LookVector or Vector3.new(0, 0, -1)
+		local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
+		if flatLook.Magnitude < 0.001 then
+			flatLook = Vector3.new(0, 0, -1)
+		else
+			flatLook = flatLook.Unit
+		end
+		local rescuePosition = hitPosition + hitNormal * protection.RESCUE_HEIGHT
+		return CFrame.lookAt(rescuePosition, rescuePosition + flatLook)
+	end
+
+	protection.createSafeEntry = function(char, hrp, humanoid)
+		if not char or not hrp or protection.isOutsideBoundary(hrp.Position) then
+			return nil
+		end
+
+		local hit = protection.getGroundHitAt(hrp.Position, char)
+		if not hit or hit.Normal.Y < protection.MIN_GROUND_NORMAL_Y then
+			return nil
+		end
+
+		local heightFromGround = hrp.Position.Y - hit.Position.Y
+		local grounded = humanoid and humanoid.FloorMaterial ~= Enum.Material.Air
+		if not grounded then
+			local verticalSpeed = math.abs(hrp.AssemblyLinearVelocity.Y)
+			if heightFromGround > protection.MAX_SAVE_HEIGHT_FROM_GROUND or verticalSpeed > protection.MAX_AIR_SAVE_VERTICAL_SPEED then
+				return nil
+			end
+		end
+
+		return {
+			cframe = hrp.CFrame,
+			position = hrp.Position,
+			groundPosition = hit.Position,
+			groundNormal = hit.Normal,
+			part = hit.Instance,
+			savedAt = tick(),
+		}
+	end
+
+	protection.pushSafeEntry = function(entry)
+		if not entry or not entry.cframe then
 			return
 		end
-		local now = tick()
-		if now - (protection.lastSaveTime or 0) < protection.SAVE_INTERVAL then
-			return
+
+		protection.lastSafeEntry = entry
+		protection.lastSafePosition = entry.cframe
+		table.insert(protection.safePositionEntries, 1, entry)
+		table.insert(protection.safePositionHistory, 1, entry.cframe)
+		if #protection.safePositionEntries > protection.MAX_SAFE_POSITIONS then
+			table.remove(protection.safePositionEntries)
 		end
-		local lastPos = protection.lastSafePosition
-		if lastPos and (lastPos.Position - hrp.Position).Magnitude < protection.MIN_DISTANCE_TO_SAVE then
-			return
-		end
-		protection.lastSafePosition = hrp.CFrame
-		protection.lastSaveTime = now
-		table.insert(protection.safePositionHistory, 1, hrp.CFrame)
-		if #protection.safePositionHistory > 10 then
+		if #protection.safePositionHistory > protection.MAX_SAFE_POSITIONS then
 			table.remove(protection.safePositionHistory)
 		end
 	end
 
-	protection.getRescueCFrame = function()
-		if protection.lastSafePosition then
-			return protection.lastSafePosition + Vector3.new(0, 8, 0)
+	protection.saveSafePosition = function(char, hrp, humanoid)
+		local entry = protection.createSafeEntry(char, hrp, humanoid)
+		if not entry then
+			return
 		end
-		for _, cf in ipairs(protection.safePositionHistory) do
-			if cf then
-				return cf + Vector3.new(0, 8, 0)
+
+		local now = tick()
+		if now - (protection.lastSaveTime or 0) < protection.SAVE_INTERVAL then
+			return
+		end
+
+		local lastEntry = protection.lastSafeEntry
+		if lastEntry and (lastEntry.position - entry.position).Magnitude < protection.MIN_DISTANCE_TO_SAVE then
+			return
+		end
+		protection.lastSaveTime = now
+		protection.pushSafeEntry(entry)
+	end
+
+	protection.resolveEntryRescueCFrame = function(entry, character)
+		if not entry or not entry.cframe then
+			return nil
+		end
+
+		local entryPosition = entry.position or entry.cframe.Position
+		local hit = protection.getGroundHitAround(
+			entryPosition,
+			character,
+			protection.RESCUE_PROBE_HEIGHT,
+			protection.GROUND_CHECK_DOWN + protection.RESCUE_PROBE_HEIGHT
+		)
+		if not hit then
+			return nil
+		end
+
+		return protection.buildRescueCFrame(hit.Position, hit.Normal, entry.cframe)
+	end
+
+	protection.getFallbackRescueCFrame = function(character)
+		local referenceCFrame = protection.getReferenceCFrame()
+		for _, offset in ipairs(protection.SEARCH_OFFSETS) do
+			local samplePosition = referenceCFrame.Position + offset
+			local origin = samplePosition + Vector3.new(0, protection.FALLBACK_CAST_HEIGHT, 0)
+			local direction = Vector3.new(0, -protection.FALLBACK_CAST_DEPTH, 0)
+			local hit = Workspace:Raycast(origin, direction, protection.makeGroundParams(character))
+			if hit and hit.Normal.Y >= protection.MIN_GROUND_NORMAL_Y and not protection.isOutsideBoundary(hit.Position) then
+				return protection.buildRescueCFrame(hit.Position, hit.Normal, referenceCFrame)
 			end
 		end
-		return protection.getReferenceCFrame() + Vector3.new(0, 180, 0)
+		return referenceCFrame + Vector3.new(0, 180, 0)
+	end
+
+	protection.getRescueCFrame = function(character, skippedEntries)
+		for index, entry in ipairs(protection.safePositionEntries) do
+			if not (skippedEntries and skippedEntries[index]) then
+				local target = protection.resolveEntryRescueCFrame(entry, character)
+				if target then
+					return target, index
+				end
+			end
+		end
+
+		for index, cf in ipairs(protection.safePositionHistory) do
+			local fallbackIndex = -index
+			if cf and not (skippedEntries and skippedEntries[fallbackIndex]) then
+				local target = protection.resolveEntryRescueCFrame({
+					cframe = cf,
+					position = cf.Position,
+				}, character)
+				if target then
+					return target, fallbackIndex
+				end
+			end
+		end
+
+		return protection.getFallbackRescueCFrame(character), "fallback"
+	end
+
+	protection.isCurrentSpotSafe = function(char, hrp, humanoid)
+		if not char or not hrp or protection.isOutsideBoundary(hrp.Position) then
+			return false
+		end
+
+		if humanoid and humanoid.FloorMaterial ~= Enum.Material.Air then
+			return true
+		end
+
+		local hit = protection.getGroundHitAt(hrp.Position, char, 4, 18)
+		return hit ~= nil and hit.Normal.Y >= protection.MIN_GROUND_NORMAL_Y
 	end
 
 	protection.tpBack = function(char, hrp)
-		_G.SafeTeleportLock = true
-		local target = protection.getRescueCFrame()
-		for _ = 1, 222 do
-			hrp.AssemblyLinearVelocity = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-			char:PivotTo(target)
-			nextFrame()
+		if protection.rescueInProgress or not char or not hrp then
+			return
 		end
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
+
+		protection.rescueInProgress = true
+		_G.SafeTeleportLock = true
+
+		local skippedEntries = {}
+		for _ = 1, protection.MAX_SAFE_POSITIONS + 2 do
+			local liveChar = player.Character
+			local liveRoot = liveChar and liveChar:FindFirstChild("HumanoidRootPart")
+			local liveHumanoid = liveChar and liveChar:FindFirstChildOfClass("Humanoid")
+			if not liveChar or not liveRoot then
+				break
+			end
+
+			local target, entryIndex = protection.getRescueCFrame(liveChar, skippedEntries)
+			if not target then
+				break
+			end
+
+			skippedEntries[entryIndex] = true
+			for _ = 1, 6 do
+				liveRoot.AssemblyLinearVelocity = Vector3.zero
+				liveRoot.AssemblyAngularVelocity = Vector3.zero
+				liveChar:PivotTo(target)
+				applyTeleportRootState(liveRoot, target)
+				nextFrame()
+			end
+
+			if protection.isCurrentSpotSafe(liveChar, liveRoot, liveHumanoid) then
+				protection.saveSafePosition(liveChar, liveRoot, liveHumanoid)
+				break
+			end
+		end
+
+		local liveChar = player.Character
+		local liveRoot = liveChar and liveChar:FindFirstChild("HumanoidRootPart")
+		if liveRoot then
+			liveRoot.AssemblyLinearVelocity = Vector3.zero
+			liveRoot.AssemblyAngularVelocity = Vector3.zero
+		end
 		nextFrame()
 		_G.SafeTeleportLock = false
+		protection.rescueInProgress = false
 	end
 
 	protection.detectVoidY()
@@ -3988,10 +4212,11 @@ function initProtectionRuntime()
 			end
 			local char = player.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 			if not hrp then
 				continue
 			end
-			protection.saveSafePosition(hrp)
+			protection.saveSafePosition(char, hrp, humanoid)
 			if _G.NOTHINGX_FlyActive == true then
 				continue
 			end
