@@ -964,41 +964,13 @@ end
 
 function parseWalkFlingDirectionSelection(value)
 	local parsed = {}
-	local function canonicalizeDirectionName(directionName)
-		local normalized = string.lower(tostring(directionName or ""))
-		if normalized == "forward" then
-			return "Forward"
-		end
-		if normalized == "backward" or normalized == "backword" or normalized == "back" then
-			return "Backward"
-		end
-		if normalized == "right" then
-			return "Right"
-		end
-		if normalized == "left" then
-			return "Left"
-		end
-		if normalized == "up" or normalized == "upward" then
-			return "Up"
-		end
-		if normalized == "down" or normalized == "downward" then
-			return "Down"
-		end
-		return nil
-	end
 
 	if type(value) == "table" then
 		for _, directionName in ipairs(value) do
-			local canonicalName = canonicalizeDirectionName(directionName)
-			if canonicalName then
-				parsed[canonicalName] = true
-			end
+			parsed[tostring(directionName)] = true
 		end
 	elseif value ~= nil then
-		local canonicalName = canonicalizeDirectionName(value)
-		if canonicalName then
-			parsed[canonicalName] = true
-		end
+		parsed[tostring(value)] = true
 	end
 
 	if next(parsed) == nil then
@@ -1027,10 +999,10 @@ function getWalkFlingDirectionVector(rootPart)
 	if walkFlingDirections.Left then
 		direction -= rootPart.CFrame.RightVector
 	end
-	if walkFlingDirections.Up then
+	if walkFlingDirections.Upward then
 		direction += Vector3.yAxis
 	end
-	if walkFlingDirections.Down then
+	if walkFlingDirections.Downward then
 		direction -= Vector3.yAxis
 	end
 
@@ -1442,71 +1414,6 @@ function WalkFlingDirection_set(value)
 	parseWalkFlingDirectionSelection(value)
 	setSavedControlValue("WalkFlingDirection", type(value) == "table" and value or { tostring(value) })
 	return walkFlingDirections
-end
-
-local function setWalkFlingDirectionState(directionName, enabled)
-	local normalizedState = enabled
-	if normalizedState == nil then
-		normalizedState = not (walkFlingDirections[directionName] == true)
-	else
-		normalizedState = parseEnabledValue(enabled)
-	end
-
-	local nextDirections = {}
-	for name, state in pairs(walkFlingDirections) do
-		if state == true then
-			nextDirections[name] = true
-		end
-	end
-
-	if normalizedState then
-		nextDirections[directionName] = true
-	else
-		nextDirections[directionName] = nil
-	end
-
-	if next(nextDirections) == nil then
-		nextDirections.Forward = true
-	end
-
-	local savedDirections = {}
-	for _, direction in ipairs({ "Forward", "Backward", "Down", "Up", "Left", "Right" }) do
-		if nextDirections[direction] then
-			savedDirections[#savedDirections + 1] = direction
-		end
-	end
-
-	parseWalkFlingDirectionSelection(savedDirections)
-	setSavedControlValue("WalkFlingDirection", savedDirections)
-	return walkFlingDirections[directionName] == true and "ON" or "OFF"
-end
-
-function WalkFlingDirection_Forward(value)
-	return setWalkFlingDirectionState("Forward", value)
-end
-
-function WalkFlingDirection_Backward(value)
-	return setWalkFlingDirectionState("Backward", value)
-end
-
-function WalkFlingDirection_Backword(value)
-	return WalkFlingDirection_Backward(value)
-end
-
-function WalkFlingDirection_Down(value)
-	return setWalkFlingDirectionState("Down", value)
-end
-
-function WalkFlingDirection_Up(value)
-	return setWalkFlingDirectionState("Up", value)
-end
-
-function WalkFlingDirection_Left(value)
-	return setWalkFlingDirectionState("Left", value)
-end
-
-function WalkFlingDirection_Right(value)
-	return setWalkFlingDirectionState("Right", value)
 end
 
 local function updateMovement()
@@ -6654,7 +6561,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 Dropdown({
 	namedropdown = "Direction",
 	saveKey = "WalkFlingDirection",
-	inside = { "Forward", "Backward", "Up", "Down", "Left", "Right" },
+	inside = { "Forward", "Backward", "Upward", "Downward", "Right", "Left" },
 	multi = true,
 	deffultin = { "Forward" },
 	fun = function(value)
