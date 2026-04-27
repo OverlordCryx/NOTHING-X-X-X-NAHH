@@ -1,49 +1,27 @@
-do
-    local antiFlingPlayers = game:GetService("Players")
-    local antiFlingLocalPlayer = antiFlingPlayers.LocalPlayer
-    local tracked = {}
-    local antiFlingCharacterConnections = {}
-
-    local function applyAntiFling(character)
-        for _, v in ipairs(character:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = false
-            end
-        end
-        character.DescendantAdded:Connect(function(v)
-            if v:IsA("BasePart") then
-                v.CanCollide = false
-            end
-        end)
-    end
-
-    local function trackPlayer(player)
-        if player == antiFlingLocalPlayer or tracked[player] then return end
-        tracked[player] = true
-        local function onCharacter(char)
-            applyAntiFling(char)
-        end
-        if player.Character then
-            onCharacter(player.Character)
-        end
-        antiFlingCharacterConnections[player] = player.CharacterAdded:Connect(onCharacter)
-    end
-
-    local function untrackPlayer(player)
-        tracked[player] = nil
-        local connection = antiFlingCharacterConnections[player]
-        if connection then
-            connection:Disconnect()
-            antiFlingCharacterConnections[player] = nil
-        end
-    end
-
-    for _, player in ipairs(antiFlingPlayers:GetPlayers()) do
-        trackPlayer(player)
-    end
-    antiFlingPlayers.PlayerAdded:Connect(trackPlayer)
-    antiFlingPlayers.PlayerRemoving:Connect(untrackPlayer)
+task.spawn(function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local connection = nil
+local function disableOtherPlayersCollisions()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			for _, part in ipairs(player.Character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = false
+				end
+			end
+		end
+	end
 end
+connection = RunService.Stepped:Connect(disableOtherPlayersCollisions)
+LocalPlayer.CharacterAdded:Connect(function()
+	task.wait()  
+	if connection then
+		disableOtherPlayersCollisions()
+	end
+end)
+end)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
