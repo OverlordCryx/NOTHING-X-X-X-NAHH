@@ -545,7 +545,8 @@ local normalizeSafeZonePositive
 local camLockEnabled = false
 local camLockTarget = nil
 local camLockWaiting = false
-local camLockAcquireRadius = 160
+local camLockAcquireRadius = 120
+local manualTargetAcquireRadius = 130
 local attackTpEnabled = false
 local attackTpTarget = nil
 local manualAttackTpTarget = nil
@@ -2630,7 +2631,7 @@ local function getClosestMouseTarget()
 			end
 		end
 	end
-	if bestDistance > camLockAcquireRadius then
+	if bestDistance > manualTargetAcquireRadius then
 		return nil
 	end
 	return bestModel
@@ -6583,13 +6584,24 @@ do
 		if cam then
 			local previousTarget = camLockTarget
 			local previousWaiting = camLockWaiting
+			
+			if not isValidCamLockTarget(camLockTarget) then
+				local currentTarget = resolveManualAttackTpTargetModel()
+				if isValidCamLockTarget(currentTarget) then
+					camLockTarget = currentTarget
+				else
+					camLockTarget = getCamLockTarget()
+				end
+			end
+			
 			local nextTarget = camLockTarget
 			if nextTarget and isDeadTargetModel(nextTarget) then
-				clearCamLockTarget(true)
+				clearCamLockTarget(false)
 				shouldRefreshTargetDisplay = true
-				return
+				camLockTarget = nil
 			end
-			camLockTarget = hasLiveStoredTarget(nextTarget) and nextTarget or nil
+			
+			camLockTarget = isValidCamLockTarget(camLockTarget) and camLockTarget or nil
 			camLockWaiting = camLockTarget == nil or not isValidCamLockTarget(camLockTarget)
 			if camLockTarget then
 				local targetRoot = camLockTarget:FindFirstChild("HumanoidRootPart")
