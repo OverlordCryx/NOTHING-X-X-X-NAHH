@@ -2710,6 +2710,13 @@ local function getDisplayedTargetModel()
 		return currentTarget
 	end
 
+	if attackTpEnabled or autoTpEnabled or flingEnabled or viewing then
+		local actionTarget = getCurrentActionTargetModel(attackTpEnabled == true)
+		if hasLiveStoredTarget(actionTarget) then
+			return actionTarget
+		end
+	end
+
 	return nil
 end
 
@@ -2798,6 +2805,45 @@ local function getClosestAliveTarget()
 	return bestModel
 end
 
+local function getSelectablePlayerModels()
+	local models = {}
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		if otherPlayer ~= player then
+			local model = otherPlayer.Character
+			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
+			local modelHumanoid = model and model:FindFirstChildOfClass("Humanoid")
+			if model and model ~= char and modelRoot and modelHumanoid and modelHumanoid.Health > 0 and not modelRoot.Anchored and isTargetSafe(model) then
+				models[#models + 1] = model
+			end
+		end
+	end
+	return models
+end
+
+local function getClosestAlivePlayerTarget()
+	local currentCharacter = player.Character
+	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+	if not currentRoot then
+		return nil
+	end
+
+	local bestModel = nil
+	local bestDistance = math.huge
+
+	for _, model in ipairs(getSelectablePlayerModels()) do
+		local modelRoot = model:FindFirstChild("HumanoidRootPart")
+		if modelRoot and model ~= currentCharacter then
+			local distance = (modelRoot.Position - currentRoot.Position).Magnitude
+			if distance < bestDistance then
+				bestDistance = distance
+				bestModel = model
+			end
+		end
+	end
+
+	return bestModel
+end
+
 local function getPreferredAttackTpTarget()
 	if hasLiveStoredTarget(camLockTarget) then
 		return camLockTarget
@@ -2812,10 +2858,10 @@ local function getPreferredAttackTpTarget()
 		return nil
 	end
 
-	return getClosestAliveTarget()
+	return getClosestAlivePlayerTarget()
 end
 
-resolveAttackTpTarget = function()
+local function getCurrentActionTargetModel(allowClosestFallback)
 	if hasLiveStoredTarget(camLockTarget) then
 		return camLockTarget
 	end
@@ -2825,15 +2871,26 @@ resolveAttackTpTarget = function()
 		return resolvedManualTarget
 	end
 
-	if hasLiveStoredTarget(attackTpTarget) then
-		return attackTpTarget
-	end
-
 	if manualAttackTpPlayer or manualAttackTpTarget then
 		return nil
 	end
 
-	return getClosestAliveTarget()
+	if allowClosestFallback == true then
+		local closestTarget = getClosestAlivePlayerTarget()
+		if hasLiveStoredTarget(closestTarget) then
+			return closestTarget
+		end
+	end
+
+	if hasLiveStoredTarget(attackTpTarget) then
+		return attackTpTarget
+	end
+
+	return nil
+end
+
+resolveAttackTpTarget = function()
+	return getCurrentActionTargetModel(attackTpEnabled == true)
 end
 
 local function getHorizontalUnit(vector)
@@ -2941,21 +2998,18 @@ local function getCamLockTarget()
 	local bestModel = nil
 	local bestDistance = math.huge
 
-	for _, instance in ipairs(Workspace:GetDescendants()) do
-		if instance:IsA("Humanoid") and instance.Health > 0 then
-			local model = instance.Parent
-			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
-			if model and model ~= char and modelRoot then
-				local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
-				if visible then
-					local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
-					local centerDistance = (screenVector - viewportCenter).Magnitude
-					local mouseDistance = (screenVector - mousePosition).Magnitude
-					local distance = math.min(centerDistance, mouseDistance)
-					if distance < bestDistance then
-						bestDistance = distance
-						bestModel = model
-					end
+	for _, model in ipairs(getSelectablePlayerModels()) do
+		local modelRoot = model:FindFirstChild("HumanoidRootPart")
+		if modelRoot then
+			local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
+			if visible then
+				local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
+				local centerDistance = (screenVector - viewportCenter).Magnitude
+				local mouseDistance = (screenVector - mousePosition).Magnitude
+				local distance = math.min(centerDistance, mouseDistance)
+				if distance < bestDistance then
+					bestDistance = distance
+					bestModel = model
 				end
 			end
 		end
@@ -2978,19 +3032,16 @@ local function getClosestMouseTarget()
 	local bestModel = nil
 	local bestDistance = math.huge
 
-	for _, instance in ipairs(Workspace:GetDescendants()) do
-		if instance:IsA("Humanoid") and instance.Health > 0 then
-			local model = instance.Parent
-			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
-			if model and model ~= char and modelRoot and not modelRoot.Anchored then
-				local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
-				if visible then
-					local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
-					local mouseDistance = (screenVector - mousePosition).Magnitude
-					if mouseDistance < bestDistance then
-						bestDistance = mouseDistance
-						bestModel = model
-					end
+	for _, model in ipairs(getSelectablePlayerModels()) do
+		local modelRoot = model:FindFirstChild("HumanoidRootPart")
+		if modelRoot then
+			local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
+			if visible then
+				local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
+				local mouseDistance = (screenVector - mousePosition).Magnitude
+				if mouseDistance < bestDistance then
+					bestDistance = mouseDistance
+					bestModel = model
 				end
 			end
 		end
@@ -5177,34 +5228,17 @@ do
 	end
 
 	buildPlayerModelDropdownItems = function()
-		local discoveredModels = {}
 		local namedEntries = {}
 
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
 			if isSelectablePlayerDropdownTarget(targetPlayer) then
 				local targetModel = getTrackedPlayerTargetModel(targetPlayer)
-				if targetModel then
-					discoveredModels[targetModel] = true
-				end
-
-				namedEntries[#namedEntries + 1] = {
-					baseName = tostring(targetPlayer.Name ~= "" and targetPlayer.Name or "Player"),
-					fullName = targetPlayer:GetFullName(),
-					player = targetPlayer,
-					model = targetModel,
-				}
-			end
-		end
-
-		for _, instance in ipairs(Workspace:GetDescendants()) do
-			if instance:IsA("Humanoid") and instance.Health > 0 then
-				local model = instance.Parent
-				if model and model:IsA("Model") and not discoveredModels[model] and isSelectableModelDropdownTarget(model) then
-					discoveredModels[model] = true
+				if targetModel and isSelectableModelDropdownTarget(targetModel) then
 					namedEntries[#namedEntries + 1] = {
-						baseName = tostring(model.Name ~= "" and model.Name or "Model"),
-						fullName = model:GetFullName(),
-						model = model,
+						baseName = tostring(targetPlayer.Name ~= "" and targetPlayer.Name or "Player"),
+						fullName = targetPlayer:GetFullName(),
+						player = targetPlayer,
+						model = targetModel,
 					}
 				end
 			end
@@ -7436,6 +7470,15 @@ do
 				syncTargetPickKeybindDisplay()
 				shouldRefreshTargetDisplay = true
 			end
+		end
+	end
+
+	if attackTpEnabled and not camLockEnabled and not manualAttackTpPlayer and not manualAttackTpTarget then
+		local previousAttackTarget = attackTpTarget
+		local nextAttackTarget = getClosestAlivePlayerTarget()
+		attackTpTarget = hasLiveStoredTarget(nextAttackTarget) and nextAttackTarget or nil
+		if previousAttackTarget ~= attackTpTarget then
+			shouldRefreshTargetDisplay = true
 		end
 	end
 
