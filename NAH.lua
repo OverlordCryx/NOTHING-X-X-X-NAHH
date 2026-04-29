@@ -481,7 +481,7 @@ local flyKeybind = Enum.KeyCode.R
 local camLockKeybind = Enum.KeyCode.Z
 local attackTpKeybind = Enum.KeyCode.T
 local targetSelectKeybind = Enum.KeyCode.C
-setBackKeybind = Enum.KeyCode.V
+setBackKeybind = Enum.KeyCode.N
 local getTrashState = {
 	keybind = Enum.KeyCode.LeftControl,
 	running = false,
@@ -2379,7 +2379,7 @@ local function updateTargetDisplay()
 	local displayName = displayedTarget and displayedTarget.Name or (manualAttackTpPlayer and manualAttackTpPlayer.Name or "")
 	targetValueText.Text = displayName
 	targetFrame.Visible = displayName ~= ""
-	if not hasSelectedTargetOrPendingPlayer() then
+	if targetStateChanged and not hasSelectedTargetOrPendingPlayer() then
 		if attackTpEnabled then
 			attackTpEnabled = false
 			attackTpTarget = nil
@@ -2474,9 +2474,6 @@ local function getPreferredAttackTpTarget()
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
 	if hasLiveStoredTarget(resolvedManualTarget) then
 		return resolvedManualTarget
-	end
-	if manualAttackTpPlayer or manualAttackTpTarget then
-		return nil
 	end
 	return getClosestAlivePlayerTarget()
 end
