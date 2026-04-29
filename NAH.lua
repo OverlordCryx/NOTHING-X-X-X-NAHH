@@ -481,7 +481,7 @@ local flyKeybind = Enum.KeyCode.R
 local camLockKeybind = Enum.KeyCode.Z
 local attackTpKeybind = Enum.KeyCode.T
 local targetSelectKeybind = Enum.KeyCode.C
-setBackKeybind = Enum.KeyCode.N
+setBackKeybind = Enum.KeyCode.V
 local getTrashState = {
 	keybind = Enum.KeyCode.LeftControl,
 	running = false,
@@ -5851,7 +5851,7 @@ Slider({
 	nameSilder = "Aura Range",
 	nameshow = "",
 	max = 500,
-	min = 10,
+	min = 1,
 	default = auraRange,
 	saveKey = "AuraRange",
 	fun = function(value)
