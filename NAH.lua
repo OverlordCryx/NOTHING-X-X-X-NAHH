@@ -3758,6 +3758,89 @@ function initProtectionRuntime()
 	print("(-) " .. tostring(protection.VOID_Y) .. " (-)")
 end
 initProtectionRuntime()
+local function initFastAntiVoid()
+	local localSafeCFrame   = nil
+	local lastFrameY        = nil
+	local fastRescuing      = false
+	local RESCUE_BUFFER             = 175
+	local SUDDEN_DROP_THRESHOLD     = 350
+	local SUDDEN_DROP_VOID_MARGIN   = 700
+	local MAX_DOWN_VELOCITY         = -500
+	local DANGER_ZONE_ABOVE_VOID    = 500
+	local SAFE_SAVE_MIN_ABOVE_VOID  = 280
+	RunService.Heartbeat:Connect(function()
+		if fastRescuing or _G.SafeTeleportLock then
+			return
+		end
+		local char     = player.Character
+		local hrp      = char and char:FindFirstChild("HumanoidRootPart")
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		if not hrp or not humanoid or humanoid.Health <= 0 then
+			lastFrameY = nil
+			return
+		end
+		local voidY = (protection and type(protection.VOID_Y) == "number")
+			and protection.VOID_Y
+			or -500
+		local pos = hrp.Position
+		local y   = pos.Y
+		if humanoid.FloorMaterial ~= Enum.Material.Air
+			and y > voidY + SAFE_SAVE_MIN_ABOVE_VOID
+		then
+			localSafeCFrame = hrp.CFrame
+		end
+		local needsRescue = false
+		if y < voidY + RESCUE_BUFFER then
+			needsRescue = true
+		end
+		if not needsRescue and lastFrameY and not flying then
+			local drop = lastFrameY - y
+			if drop >= SUDDEN_DROP_THRESHOLD and y < voidY + SUDDEN_DROP_VOID_MARGIN then
+				needsRescue = true
+			end
+		end
+		if not needsRescue and not flying then
+			local velY = hrp.AssemblyLinearVelocity.Y
+			if velY < MAX_DOWN_VELOCITY and y < voidY + DANGER_ZONE_ABOVE_VOID then
+				needsRescue = true
+			end
+		end
+		lastFrameY = y
+		if not needsRescue then
+			return
+		end
+		local rescueCFrame = localSafeCFrame
+		if not rescueCFrame and protection and protection.lastSafePosition then
+			rescueCFrame = protection.lastSafePosition
+		end
+		if not rescueCFrame then
+			return
+		end
+		fastRescuing       = true
+		_G.SafeTeleportLock = true
+		lastFrameY         = rescueCFrame.Position.Y
+		hrp.AssemblyLinearVelocity  = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+		hrp.CFrame = rescueCFrame
+		task.defer(function()
+			if hrp and hrp.Parent then
+				hrp.AssemblyLinearVelocity  = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+				hrp.CFrame = rescueCFrame
+			end
+		end)
+		task.delay(0.18, function()
+			if hrp and hrp.Parent then
+				hrp.AssemblyLinearVelocity  = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+				hrp.CFrame = rescueCFrame
+			end
+			_G.SafeTeleportLock = false
+			fastRescuing = false
+		end)
+	end)
+end
+initFastAntiVoid()
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
