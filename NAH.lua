@@ -3,24 +3,39 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local connection = nil
-local function disableOtherPlayersCollisions()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			for _, part in ipairs(player.Character:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = false
-				end
-			end
-		end
-	end
+local function startAntiFling()
+    if connection then
+        connection:Disconnect()
+    end
+    connection = RunService.Heartbeat:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local character = player.Character
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        if part.CustomPhysicalProperties then
+                            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0.3, 0.5, 0, 0)
+                        end
+                    end
+                end
+            end
+        end
+    end)
 end
-connection = RunService.Stepped:Connect(disableOtherPlayersCollisions)
+startAntiFling()
 LocalPlayer.CharacterAdded:Connect(function()
-	task.wait()  
-	if connection then
-		disableOtherPlayersCollisions()
-	end
+    task.wait(0.6)           
+    startAntiFling()
 end)
+task.spawn(function()
+    while task.wait(5) do
+        if not connection or connection.Connected == false then
+            startAntiFling()
+        end
+    end
+end)
+print("✅")
 end)
 
 local Players = game:GetService("Players")
