@@ -2652,6 +2652,7 @@ local function clearCamLockTarget(disableCamLock)
 	camLockWaiting = false
 	if disableCamLock == true then
 		camLockEnabled = false
+		clearManualAttackTpTarget()
 	end
 	syncCamLockKeybindDisplay()
 	syncTargetPickKeybindDisplay()
@@ -2721,6 +2722,7 @@ local function toggleCamLock(nextState)
 	else
 		camLockTarget = nil
 		camLockWaiting = false
+		clearManualAttackTpTarget()
 	end
 	syncCamLockKeybindDisplay()
 	syncTargetPickKeybindDisplay()
@@ -6589,19 +6591,21 @@ do
 				local currentTarget = resolveManualAttackTpTargetModel()
 				if isValidCamLockTarget(currentTarget) then
 					camLockTarget = currentTarget
-				else
+				elseif not manualAttackTpPlayer then
 					camLockTarget = getCamLockTarget()
 				end
 			end
 			
 			local nextTarget = camLockTarget
-			if nextTarget and isDeadTargetModel(nextTarget) then
+			if nextTarget and isDeadTargetModel(nextTarget) and not manualAttackTpPlayer then
 				clearCamLockTarget(false)
 				shouldRefreshTargetDisplay = true
 				camLockTarget = nil
 			end
 			
-			camLockTarget = isValidCamLockTarget(camLockTarget) and camLockTarget or nil
+			if not isValidCamLockTarget(camLockTarget) and not manualAttackTpPlayer then
+				camLockTarget = nil
+			end
 			camLockWaiting = camLockTarget == nil or not isValidCamLockTarget(camLockTarget)
 			if camLockTarget then
 				local targetRoot = camLockTarget:FindFirstChild("HumanoidRootPart")
@@ -6724,13 +6728,13 @@ do
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if characterRoot and isAliveHumanoid(characterHumanoid) then
-			if manualAttackTpPlayer and not isValidAttackTpTarget(resolveManualAttackTpTargetModel()) then
+			if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 				clearManualAttackTpTarget()
 			end
 			if not manualAttackTpPlayer and manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
 				clearManualAttackTpTarget()
 			end
-			if isDeadTargetModel(attackTpTarget) then
+			if isDeadTargetModel(attackTpTarget) and not manualAttackTpPlayer then
 				attackTpTarget = nil
 			end
 			local preferredTarget = resolveAttackTpTarget()
