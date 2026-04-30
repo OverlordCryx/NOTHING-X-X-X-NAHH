@@ -857,11 +857,15 @@ end
 function parseWalkFlingDirectionSelection(value)
 	local parsed = {}
 	if type(value) == "table" then
-		for _, directionName in ipairs(value) do
-			parsed[tostring(directionName)] = true
+		for key, enabled in pairs(value) do
+			if type(key) == "number" then
+				parsed[tostring(enabled)] = true
+			elseif enabled == true then
+				parsed[tostring(key)] = true
+			end
 		end
-	elseif value ~= nil then
-		parsed[tostring(value)] = true
+	elseif type(value) == "string" and value ~= "" then
+		parsed[value] = true
 	end
 	if next(parsed) == nil then
 		parsed.Forward = true
@@ -872,23 +876,18 @@ function getWalkFlingDirectionVector(rootPart)
 	if not rootPart then
 		return nil
 	end
-	local cam = Workspace.CurrentCamera
-	local camCF = cam and cam.CFrame or rootPart.CFrame
-	local look = camCF.LookVector
-	local right = camCF.RightVector
-	
 	local direction = Vector3.zero
 	if walkFlingDirections.Forward then
-		direction += look
+		direction += rootPart.CFrame.LookVector
 	end
 	if walkFlingDirections.Backward then
-		direction -= look
+		direction -= rootPart.CFrame.LookVector
 	end
 	if walkFlingDirections.Right then
-		direction += right
+		direction += rootPart.CFrame.RightVector
 	end
 	if walkFlingDirections.Left then
-		direction -= right
+		direction -= rootPart.CFrame.RightVector
 	end
 	if walkFlingDirections.Upward then
 		direction += Vector3.yAxis
@@ -951,26 +950,26 @@ function setWalkFlingEnabled(enabled)
 				local rootPart = getRootUniversal(currentCharacter)
 				if currentCharacter and rootPart then
 					if not walkFlingUseNormal then
-						local originalVelocity = rootPart.Velocity
+						local vel = rootPart.Velocity
 						local direction = getWalkFlingDirectionVector(rootPart)
 						if direction then
 							rootPart.Velocity = direction * walkFlingPower
 						end
 						RunService.RenderStepped:Wait()
 						if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
-							rootPart.Velocity = originalVelocity
+							rootPart.Velocity = vel
 						end
 					else
-						local originalVelocity = rootPart.Velocity
-						rootPart.Velocity = originalVelocity * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
+						local vel = rootPart.Velocity
+						rootPart.Velocity = vel * walkFlingPower + Vector3.new(0, walkFlingPower, 0)
 						RunService.RenderStepped:Wait()
 						if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
-							rootPart.Velocity = originalVelocity
+							rootPart.Velocity = vel
 						end
 						RunService.Stepped:Wait()
 						if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
-							rootPart.Velocity = originalVelocity + Vector3.new(0, moveOffset, 0)
-							moveOffset *= -1
+							rootPart.Velocity = vel + Vector3.new(0, moveOffset, 0)
+							moveOffset = moveOffset * -1
 						end
 					end
 				end
