@@ -872,18 +872,23 @@ function getWalkFlingDirectionVector(rootPart)
 	if not rootPart then
 		return nil
 	end
+	local cam = Workspace.CurrentCamera
+	local camCF = cam and cam.CFrame or rootPart.CFrame
+	local look = camCF.LookVector
+	local right = camCF.RightVector
+	
 	local direction = Vector3.zero
 	if walkFlingDirections.Forward then
-		direction += rootPart.CFrame.LookVector
+		direction += look
 	end
 	if walkFlingDirections.Backward then
-		direction -= rootPart.CFrame.LookVector
+		direction -= look
 	end
 	if walkFlingDirections.Right then
-		direction += rootPart.CFrame.RightVector
+		direction += right
 	end
 	if walkFlingDirections.Left then
-		direction -= rootPart.CFrame.RightVector
+		direction -= right
 	end
 	if walkFlingDirections.Upward then
 		direction += Vector3.yAxis
@@ -2347,7 +2352,7 @@ local function updateTargetDisplay()
 	local targetStateChanged = false
 	if manualAttackTpPlayer then
 		local trackedTarget = getTrackedPlayerTargetModel(manualAttackTpPlayer)
-		if manualAttackTpPlayer == player or manualAttackTpPlayer.Parent ~= Players or not isValidAttackTpTarget(trackedTarget) then
+		if manualAttackTpPlayer == player or manualAttackTpPlayer.Parent ~= Players then
 			manualAttackTpPlayer = nil
 			manualAttackTpTarget = nil
 			pendingTeleportToSelectedPlayer = false
@@ -2366,7 +2371,7 @@ local function updateTargetDisplay()
 		end
 		targetStateChanged = true
 	end
-	if camLockTarget and isDeadTargetModel(camLockTarget) then
+	if camLockTarget and isDeadTargetModel(camLockTarget) and not manualAttackTpPlayer then
 		camLockTarget = nil
 		camLockWaiting = false
 		camLockEnabled = false
@@ -6812,100 +6817,94 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 function startIntroUi()
-	local topLabel = Instance.new("TextLabel")
-	topLabel.Name = "MainTitle"
-	topLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	topLabel.Position = UDim2.fromScale(0.5, 0.47)
-	topLabel.Size = UDim2.fromScale(0.82, 0.16)
-	topLabel.BackgroundTransparency = 1
-	topLabel.Text = "NOTHING X"
-	topLabel.TextColor3 = Color3.fromRGB(255, 30, 30)
-	topLabel.TextStrokeTransparency = 0
-	topLabel.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
-	topLabel.Font = Enum.Font.GothamBlack
-	topLabel.TextScaled = true
-	topLabel.Parent = background
-	local topConstraint = Instance.new("UITextSizeConstraint")
-	topConstraint.MinTextSize = 28
-	topConstraint.MaxTextSize = 96
-	topConstraint.Parent = topLabel
-	local subtitleLabel = Instance.new("TextLabel")
-	subtitleLabel.Name = "SubTitle"
-	subtitleLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	subtitleLabel.Position = UDim2.fromScale(0.5, 0.58)
-	subtitleLabel.Size = UDim2.fromScale(0.3, 0.06)
-	subtitleLabel.BackgroundTransparency = 1
-	subtitleLabel.Text = "_X"
-	subtitleLabel.TextColor3 = Color3.fromRGB(255, 70, 70)
-	subtitleLabel.TextStrokeTransparency = 0.15
-	subtitleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	subtitleLabel.Font = Enum.Font.GothamSemibold
-	subtitleLabel.TextScaled = true
-	subtitleLabel.Parent = background
-	local subtitleConstraint = Instance.new("UITextSizeConstraint")
-	subtitleConstraint.MinTextSize = 16
-	subtitleConstraint.MaxTextSize = 40
-	subtitleConstraint.Parent = subtitleLabel
-	local titlePulse = TweenService:Create(
-		topLabel,
-		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{
-			TextColor3 = Color3.fromRGB(255, 90, 90),
-		}
-	)
-	local subtitlePulse = TweenService:Create(
-		subtitleLabel,
-		TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{
-			TextColor3 = Color3.fromRGB(255, 90, 90),
-		}
-	)
-	titlePulse:Play()
-	subtitlePulse:Play()
-	task.delay(3, function()
-		titlePulse:Cancel()
-		subtitlePulse:Cancel()
-		local fadeInfo = TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local introContent = Instance.new("Frame")
+	introContent.Name = "IntroContent"
+	introContent.AnchorPoint = Vector2.new(0.5, 0.5)
+	introContent.Position = UDim2.fromScale(0.5, 0.5)
+	introContent.Size = UDim2.fromScale(0.8, 0.4)
+	introContent.BackgroundTransparency = 1
+	introContent.Parent = background
+
+	local nothingX = Instance.new("TextLabel")
+	nothingX.Name = "NothingX"
+	nothingX.AnchorPoint = Vector2.new(0.5, 0.5)
+	nothingX.Position = UDim2.fromScale(0.5, 0.45)
+	nothingX.Size = UDim2.fromScale(1, 0.3)
+	nothingX.BackgroundTransparency = 1
+	nothingX.Text = "NOTHING X"
+	nothingX.TextColor3 = Color3.fromRGB(0, 0, 0)
+	nothingX.Font = Enum.Font.GothamBlack
+	nothingX.TextScaled = true
+	nothingX.Parent = introContent
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "SubTitle"
+	subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
+	subtitle.Position = UDim2.fromScale(0.5, 0.6)
+	subtitle.Size = UDim2.fromScale(0.4, 0.1)
+	subtitle.BackgroundTransparency = 1
+	subtitle.Text = "_X"
+	subtitle.TextColor3 = Color3.fromRGB(0, 0, 0)
+	subtitle.Font = Enum.Font.GothamBold
+	subtitle.TextScaled = true
+	subtitle.Parent = introContent
+
+	task.spawn(function()
+		task.wait(0.5)
+		local colorTweenInfo = TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		TweenService:Create(nothingX, colorTweenInfo, { TextColor3 = Color3.fromRGB(255, 0, 0) }):Play()
+		TweenService:Create(subtitle, colorTweenInfo, { TextColor3 = Color3.fromRGB(255, 30, 30) }):Play()
+		
+		for _ = 1, 6 do
+			task.wait(math.random(1, 5) * 0.1)
+			nothingX.TextTransparency = 0.3
+			subtitle.TextTransparency = 0.3
+			task.wait(0.05)
+			nothingX.TextTransparency = 0
+			subtitle.TextTransparency = 0
+		end
+	end)
+
+	task.delay(4, function()
+		local fadeInfo = TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		TweenService:Create(background, fadeInfo, {
 			BackgroundTransparency = 1,
 		}):Play()
-		TweenService:Create(subtitleLabel, fadeInfo, {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		}):Play()
-		local fadeTitle = TweenService:Create(topLabel, fadeInfo, {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		})
-		fadeTitle:Play()
-		fadeTitle.Completed:Connect(function()
-			topLabel:Destroy()
-			subtitleLabel:Destroy()
-			background:Destroy()
-			introFinished = true
-			keybindFrame.Visible = true
-			targetFrame.Visible = false
-			updateTargetDisplay()
-			TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				BackgroundTransparency = 0.5,
-			}):Play()
-			TweenService:Create(leftStroke, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Transparency = 0.1,
-			}):Play()
-			TweenService:Create(
-				leftStroke,
-				TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-				{
-					Thickness = 5,
-					Transparency = 0.35,
-				}
-			):Play()
-			if pendingInfoCall then
-				local queuedInfo = pendingInfoCall
-				pendingInfoCall = nil
-				showInfo(queuedInfo.title, queuedInfo.text, queuedInfo.time)
+		
+		for _, child in ipairs(introContent:GetDescendants()) do
+			if child:IsA("TextLabel") then
+				TweenService:Create(child, fadeInfo, { TextTransparency = 1 }):Play()
+			elseif child:IsA("Frame") then
+				TweenService:Create(child, fadeInfo, { BackgroundTransparency = 1 }):Play()
 			end
-		end)
+		end
+
+		task.wait(1.5)
+		introContent:Destroy()
+		background:Destroy()
+		introFinished = true
+		keybindFrame.Visible = true
+		targetFrame.Visible = false
+		updateTargetDisplay()
+		TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 0.5,
+		}):Play()
+		TweenService:Create(leftStroke, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 0.1,
+		}):Play()
+		TweenService:Create(
+			leftStroke,
+			TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{
+				Thickness = 5,
+				Transparency = 0.35,
+			}
+		):Play()
+		if pendingInfoCall then
+			local queuedInfo = pendingInfoCall
+			pendingInfoCall = nil
+			showInfo(queuedInfo.title, queuedInfo.text, queuedInfo.time)
+		end
 	end)
 end
 startIntroUi()
