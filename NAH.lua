@@ -552,6 +552,7 @@ local attackTpTarget = nil
 local manualAttackTpTarget = nil
 local manualAttackTpPlayer = nil
 local attackTpHolding = false
+local attackTpMode = "Above"
 local isSelectablePlayerDropdownTarget
 local syncModelDropdownSelectionToManualTarget
 local stopView
@@ -702,6 +703,9 @@ if type(controlSaveData.WalkFlingUseNormal) == "boolean" then
 end
 if type(controlSaveData.AutoSafeZone) == "boolean" then
 	safeZone.enabled = controlSaveData.AutoSafeZone
+end
+if type(controlSaveData.AttackTpMode) == "string" then
+	attackTpMode = controlSaveData.AttackTpMode
 end
 do
 	local savedWalkFlingKeybind = decodeKeybindValue(controlSaveData.WalkFlingKeybind)
@@ -2581,10 +2585,39 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
 	
 	local isRagdoll = targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll")
-	local aboveDistance = isRagdoll and 4.2 or 6.8
-	local abovePosition = predictedTargetPosition + Vector3.new(0, aboveDistance, 0)
+	local mode = attackTpMode or "Above"
+	local finalCFrame = nil
 	
-	return CFrame.lookAt(abovePosition, predictedTargetPosition, worldUpVector), targetVelocity
+	if mode == "Above" then
+		local dist = isRagdoll and 4.2 or 6.8
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, dist, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Under" then
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, -6.5, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Behind" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+			or Vector3.new(0, 0, -1)
+		local dist = isRagdoll and 1.2 or 1.85
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist), predictedTargetPosition, worldUpVector)
+	elseif mode == "Aggressive" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or Vector3.new(0, 0, -1)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * 0.8) + Vector3.new(0, 1.2, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Ultra" then
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 7.5, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Ultra+" then
+		local angle = tick() * 8
+		local offset = Vector3.new(math.cos(angle) * 1.5, 8.2, math.sin(angle) * 1.5)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + offset, predictedTargetPosition, worldUpVector)
+	end
+	
+	if not finalCFrame then
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 6.8, 0), predictedTargetPosition, worldUpVector)
+	end
+	
+	return finalCFrame, targetVelocity
 end
 local function getCamLockTarget()
 	cam = Workspace.CurrentCamera or cam
@@ -6026,6 +6059,16 @@ safeZone.toggleControl = tog({
 	end,
 })
 safeZone.toggleControl.Frame.LayoutOrder = 10000
+Dropdown({
+	namedropdown = "TP Modes",
+	saveKey = "AttackTpMode",
+	inside = { "Above", "Under", "Behind", "Aggressive", "Ultra", "Ultra+" },
+	multi = false,
+	deffultin = attackTpMode or "Above",
+	fun = function(value)
+		attackTpMode = value
+	end,
+})
 task.spawn(function()
 	if game.GameId ~= 3808081382 then
 		return
