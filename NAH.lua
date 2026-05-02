@@ -6862,7 +6862,7 @@ do
 		updateTargetDisplay()
 	end
 	local safeZoneBlocked = isSafeZoneBlocking()
-	if (viewing or autoTpEnabled or flingEnabled) and not hasSelectedTargetOrPendingPlayer() then
+	if (viewing or autoTpEnabled or flingEnabled) and not manualAttackTpPlayer and not hasSelectedTargetOrPendingPlayer() then
 		if viewing then
 			stopView()
 		end
@@ -6946,6 +6946,7 @@ do
 			if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 				clearManualAttackTpTarget()
 			end
+			-- Don't clear manualAttackTpTarget on death if it's a player, we wait for respawn
 			if not manualAttackTpPlayer and manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
 				clearManualAttackTpTarget()
 			end
