@@ -549,6 +549,7 @@ local camLockAcquireRadius = 120
 local manualTargetAcquireRadius = 130
 local attackTpEnabled = false
 local attackTpTarget = nil
+local lastTargetDeathTime = 0
 local manualAttackTpTarget = nil
 local manualAttackTpPlayer = nil
 local attackTpHolding = false
@@ -576,8 +577,8 @@ clickFlingEnabled = false
 flingAllEnabled = false
 local FLING_INF_POWER = 1e12
 walkFlingKeybind = Enum.KeyCode.X
-walkFlingPower = 2000
-flingPower = 2000
+walkFlingPower = 20000
+flingPower = 20000
 auraRange = 20
 walkFlingUseNormal = false
 walkFlingDirections = {
@@ -1017,8 +1018,8 @@ function setAuraFlingEnabled(enabled)
 							end
 							overpowerRootState(
 								myRoot,
-								myRoot.CFrame,
-								myRoot.CFrame.LookVector * flingPower + Vector3.new(0, flingPower * 0.5, 0),
+								targetRoot.CFrame,
+								(targetRoot.CFrame.Position - myPosition).Unit * flingPower + Vector3.new(0, flingPower * 0.5, 0),
 								Vector3.new(flingPower, flingPower, flingPower)
 							)
 						end
@@ -1042,30 +1043,35 @@ function clickFlingTargetPlayer(targetPlayer)
 	clickFlingBusy = true
 	task.spawn(function()
 		local myCharacter = player.Character
-		local targetCharacter = targetPlayer and targetPlayer.Character
 		local myRoot = getRootUniversal(myCharacter)
-		local targetRoot = getRootUniversal(targetCharacter)
-		if myRoot and targetRoot then
-			local savedCFrame = myRoot.CFrame
-			local startedAt = tick()
-			resetGlobalFlingMotion()
-			while tick() - startedAt < 8 do
-				if not clickFlingEnabled then
-					break
-				end
-				targetCharacter = targetPlayer and targetPlayer.Character
-				targetRoot = getRootUniversal(targetCharacter)
-				if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
-					break
-				end
-				local dt = RunService.Heartbeat:Wait()
-				applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+		if not myRoot then
+			clickFlingBusy = false
+			return
+		end
+		
+		local savedCFrame = myRoot.CFrame
+		local startedAt = tick()
+		resetGlobalFlingMotion()
+		
+		while tick() - startedAt < 5 do
+			if not clickFlingEnabled then
+				break
 			end
+			local targetCharacter = targetPlayer and targetPlayer.Character
+			local targetRoot = getRootUniversal(targetCharacter)
+			if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
+				break
+			end
+			local dt = RunService.Heartbeat:Wait()
+			applyOrbitFlingStep(myRoot, targetRoot, dt, flingPower)
+		end
+		
+		if myRoot and myRoot.Parent then
 			myRoot.AssemblyAngularVelocity = Vector3.zero
 			myRoot.AssemblyLinearVelocity = Vector3.zero
-			if myRoot.Parent then
-				myRoot.CFrame = savedCFrame
-			end
+			myRoot.CFrame = savedCFrame
+			task.wait(0.1)
+			myRoot.CFrame = savedCFrame
 		end
 		clickFlingBusy = false
 	end)
@@ -2440,26 +2446,71 @@ local function getClosestAliveTarget()
 	end
 	return bestModel
 end
+local lastSelectableModelsUpdate = 0
+local lastWorkspaceScan = 0
+local cachedSelectableModels = {}
+
 local function getSelectableTargetModels()
+	local now = tick()
+	if now - lastSelectableModelsUpdate < 0.2 then
+		return cachedSelectableModels
+	end
+	lastSelectableModelsUpdate = now
+	
 	local currentCharacter = player.Character
 	local models = {}
 	local seenModels = {}
-	for _, instance in ipairs(Workspace:GetDescendants()) do
-		if instance:IsA("Humanoid") and instance.Health > 0 then
-			local model = instance.Parent
-			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
-			if model
-				and model ~= char
-				and model ~= currentCharacter
-				and not seenModels[model]
-				and modelRoot
-				and not modelRoot.Anchored
-				and isTargetSafe(model) then
+	
+	-- Prioritize Players (Always updated every 0.2s)
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local model = p.Character
+			local modelRoot = model:FindFirstChild("HumanoidRootPart")
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			if modelRoot and hum and hum.Health > 0 and isTargetSafe(model) then
 				seenModels[model] = true
 				models[#models + 1] = model
 			end
 		end
 	end
+	
+	-- Throttled Workspace search for NPCs (every 2.0s)
+	-- This allows selecting [M] models while keeping performance high
+	if now - lastWorkspaceScan > 2.0 then
+		lastWorkspaceScan = now
+		task.spawn(function()
+			local newModels = {}
+			for _, instance in ipairs(Workspace:GetDescendants()) do
+				if instance:IsA("Humanoid") and instance.Health > 0 then
+					local model = instance.Parent
+					if model and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
+						local modelRoot = model:FindFirstChild("HumanoidRootPart")
+						if modelRoot and not modelRoot.Anchored and isTargetSafe(model) then
+							newModels[#newModels + 1] = model
+						end
+					end
+				end
+			end
+			-- Update cache with new NPC models
+			for _, m in ipairs(newModels) do
+				if not seenModels[m] then
+					seenModels[m] = true
+					models[#models + 1] = m
+				end
+			end
+			cachedSelectableModels = models
+		end)
+	else
+		-- Merge current players with cached NPC models
+		for _, m in ipairs(cachedSelectableModels) do
+			if not seenModels[m] and m.Parent and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0 then
+				seenModels[m] = true
+				models[#models + 1] = m
+			end
+		end
+		cachedSelectableModels = models
+	end
+	
 	return models
 end
 local function getClosestAlivePlayerTarget()
@@ -4819,15 +4870,15 @@ do
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
 			if isSelectablePlayerDropdownTarget(targetPlayer) then
 				local targetModel = getTrackedPlayerTargetModel(targetPlayer)
-				if targetModel and isSelectableModelDropdownTarget(targetModel) then
+				if targetModel then
 					seenModels[targetModel] = true
-					playerEntries[#playerEntries + 1] = {
-						baseName = tostring(targetPlayer.Name ~= "" and targetPlayer.Name or "Player"),
-						fullName = targetPlayer:GetFullName(),
-						player = targetPlayer,
-						model = targetModel,
-					}
 				end
+				playerEntries[#playerEntries + 1] = {
+					baseName = tostring(targetPlayer.Name ~= "" and targetPlayer.Name or "Player"),
+					fullName = targetPlayer:GetFullName(),
+					player = targetPlayer,
+					model = targetModel,
+				}
 			end
 		end
 		for _, targetModel in ipairs(getSelectableTargetModels()) do
@@ -4892,7 +4943,7 @@ do
 		end
 		if isSelectablePlayerDropdownTarget(selectedEntry.player) then
 			setManualAttackTpTarget(selectedEntry.model, selectedEntry.player)
-		elseif isSelectableModelDropdownTarget(selectedEntry.model) then
+		elseif selectedEntry.model then
 			setManualAttackTpTarget(selectedEntry.model)
 		else
 			setManualAttackTpTarget(nil)
@@ -5939,7 +5990,7 @@ modelDropdownControl = Dropdown({
 	end,
 })
 targetActionControls = _G["3tog_on_one_one_button"]({
-	title = "Target",
+	title = "Function",
 	name1 = "View",
 	name2 = "Auto TP",
 	name3 = "Fling",
@@ -5948,14 +5999,14 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 	default2 = autoTpEnabled,
 	default3 = flingEnabled,
 	fun1 = function(enabled)
-		if enabled and not hasSelectedTargetOrPendingPlayer() then
+		if enabled and not (manualAttackTpPlayer or manualAttackTpTarget) then
 			targetActionControls.First.SetValue(false, true)
 			return
 		end
 		toggleView(enabled)
 	end,
 	fun2 = function(enabled)
-		if enabled and not hasSelectedTargetOrPendingPlayer() then
+		if enabled and not (manualAttackTpPlayer or manualAttackTpTarget) then
 			targetActionControls.Second.SetValue(false, true)
 			return
 		end
@@ -5967,7 +6018,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 		syncTargetActionControls()
 	end,
 	fun3 = function(enabled)
-		if enabled and not hasSelectedTargetOrPendingPlayer() then
+		if enabled and not (manualAttackTpPlayer or manualAttackTpTarget) then
 			targetActionControls.Third.SetValue(false, true)
 			return
 		end
@@ -5979,7 +6030,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 		syncTargetActionControls()
 	end,
 	buttonfun = function()
-		if not hasSelectedTargetOrPendingPlayer() then
+		if not (manualAttackTpPlayer or manualAttackTpTarget) then
 			return
 		end
 		teleportToSelectedTarget()
@@ -6070,7 +6121,7 @@ safeZone.toggleControl.Frame.LayoutOrder = 10000
 Dropdown({
 	namedropdown = "TP Modes",
 	saveKey = "AttackTpMode",
-	inside = { "Above", "Under", "Behind", "Aggressive", "Ultra", "Ultra+" },
+	inside = { "Above", "Under", "Behind", "Aggressive", "Ultra" },
 	multi = false,
 	deffultin = attackTpMode or "Above",
 	fun = function(value)
@@ -6758,10 +6809,10 @@ do
 			local previousWaiting = camLockWaiting
 			
 			if not isValidCamLockTarget(camLockTarget) then
-				local currentTarget = resolveManualAttackTpTargetModel()
-				if isValidCamLockTarget(currentTarget) then
-					camLockTarget = currentTarget
-				elseif not manualAttackTpPlayer then
+				local manualTarget = resolveManualAttackTpTargetModel()
+				if isValidCamLockTarget(manualTarget) then
+					camLockTarget = manualTarget
+				elseif not manualAttackTpPlayer and tick() - lastTargetDeathTime > 0.5 then
 					camLockTarget = getCamLockTarget()
 				end
 			end
@@ -6771,10 +6822,7 @@ do
 				clearCamLockTarget(false)
 				shouldRefreshTargetDisplay = true
 				camLockTarget = nil
-			end
-			
-			if not isValidCamLockTarget(camLockTarget) and not manualAttackTpPlayer then
-				camLockTarget = nil
+				lastTargetDeathTime = tick()
 			end
 			camLockWaiting = camLockTarget == nil or not isValidCamLockTarget(camLockTarget)
 			if camLockTarget then
@@ -6787,16 +6835,6 @@ do
 				end
 			end
 			if previousTarget ~= camLockTarget or previousWaiting ~= camLockWaiting then
-				if camLockTarget and camLockTarget ~= previousTarget then
-					local camLockPlayer = Players:GetPlayerFromCharacter(camLockTarget)
-					if isSelectablePlayerDropdownTarget(camLockPlayer) then
-						manualAttackTpPlayer = camLockPlayer
-						manualAttackTpTarget = camLockTarget
-						if syncModelDropdownSelectionToManualTarget then
-							syncModelDropdownSelectionToManualTarget()
-						end
-					end
-				end
 				syncCamLockKeybindDisplay()
 				syncTargetPickKeybindDisplay()
 				shouldRefreshTargetDisplay = true
@@ -6805,8 +6843,15 @@ do
 	end
 	if attackTpEnabled and not camLockEnabled and not manualAttackTpPlayer and not manualAttackTpTarget then
 		local previousAttackTarget = attackTpTarget
-		local nextAttackTarget = getClosestAlivePlayerTarget()
-		attackTpTarget = hasLiveStoredTarget(nextAttackTarget) and nextAttackTarget or nil
+		if not isValidAttackTpTarget(attackTpTarget) then
+			attackTpTarget = nil
+		end
+		
+		if not attackTpTarget and tick() - lastTargetDeathTime > 0.5 then
+			local nextAttackTarget = getClosestAlivePlayerTarget()
+			attackTpTarget = hasLiveStoredTarget(nextAttackTarget) and nextAttackTarget or nil
+		end
+		
 		if previousAttackTarget ~= attackTpTarget then
 			shouldRefreshTargetDisplay = true
 		end
