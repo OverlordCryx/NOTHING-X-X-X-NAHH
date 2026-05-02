@@ -3342,7 +3342,7 @@ end
     local panel = createMovementPanel({
         title = "Movement",
         name1 = "Stay",
-        name2 = supportsDashBlock and "Dash Block FE" or nil,
+        name2 = supportsDashBlock and "Dash Block" or nil,
         buttonName = "Fix Camera",
         buttonName2 = "Lay",
         buttonName3 = hasDummyMainPart and "Dummy" or nil,
@@ -3370,6 +3370,118 @@ end
         setupCharacter(player.Character)
     end
     player.CharacterAdded:Connect(setupCharacter)
+    if game.GameId == 3808081382 then
+        local VIM = game:GetService("VirtualInputManager")
+        local WhirlwindDunkID = "rbxassetid://12296113986"
+        local WallComboIDs = {
+            ["rbxassetid://17325537719"]=true,["rbxassetid://10469643643"]=true,
+            ["rbxassetid://13294471966"]=true,["rbxassetid://13295936866"]=true,
+            ["rbxassetid://13378708199"]=true,["rbxassetid://14136436157"]=true,
+            ["rbxassetid://15162694192"]=true,["rbxassetid://16552234590"]=true,
+            ["rbxassetid://17889290569"]=true,
+        }
+        local WhirlwindEnabled = false
+        local WallComboEnabled = false
+        local function SpamQ()
+            VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+            task.wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+        end
+        local function HandleWallComboTilt(track, combatChar)
+            if not WallComboEnabled or not track.Animation then return end
+            if WallComboIDs[track.Animation.AnimationId] then
+                local hrp = combatChar:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local startCFrame = hrp.CFrame
+                    local startTime = tick()
+                    local conn
+                    conn = RunService.Heartbeat:Connect(function()
+                        if not WallComboEnabled or tick() - startTime >= 0.3 then
+                            if hrp and hrp.Parent then hrp.CFrame = startCFrame end
+                            conn:Disconnect()
+                        elseif hrp and hrp.Parent then
+                            hrp.CFrame = startCFrame * CFrame.Angles(math.rad(-25), 0, 0)
+                        end
+                    end)
+                end
+            end
+        end
+        local function SetupCombatCharacter(combatChar)
+            local combatHumanoid = combatChar:WaitForChild("Humanoid")
+            local combatAnimator = combatHumanoid:WaitForChild("Animator")
+            combatAnimator.AnimationPlayed:Connect(function(track)
+                if WhirlwindEnabled and track.Animation and track.Animation.AnimationId == WhirlwindDunkID then
+                    task.wait(1.2)
+                    local hrp = combatChar:FindFirstChild("HumanoidRootPart")
+                    if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(0, 100, 0) end
+                end
+                HandleWallComboTilt(track, combatChar)
+            end)
+            combatChar.DescendantAdded:Connect(function(desc)
+                if desc:IsA("ObjectValue") and desc.Name:lower() == "wallcombo" and WallComboEnabled then
+                    local startTime = tick()
+                    local duration = desc:GetAttribute("DeleteMe") or 0.6
+                    repeat SpamQ(); task.wait()
+                    until not desc.Parent or desc.Parent ~= combatChar or tick() - startTime >= duration
+                end
+            end)
+        end
+        if player.Character then task.spawn(SetupCombatCharacter, player.Character) end
+        player.CharacterAdded:Connect(function(c) task.spawn(SetupCombatCharacter, c) end)
+        local combatHolder = panel.Frame
+        combatHolder.Size = UDim2.new(1, -4, 0, 108)
+        local combatRow = Instance.new("Frame")
+        combatRow.BackgroundTransparency = 1
+        combatRow.Position = UDim2.new(0, 10, 0, 70)
+        combatRow.Size = UDim2.new(1, -20, 0, 28)
+        combatRow.Parent = combatHolder
+        local combatLayout = Instance.new("UIListLayout")
+        combatLayout.FillDirection = Enum.FillDirection.Horizontal
+        combatLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        combatLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        combatLayout.Padding = UDim.new(0, 6)
+        combatLayout.Parent = combatRow
+        local function makeCombatToggle(text, callback)
+            local btn = Instance.new("TextButton")
+            btn.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
+            btn.BackgroundTransparency = 0.06
+            btn.BorderSizePixel = 0
+            btn.Size = UDim2.new(1/3, -5, 1, 0)
+            btn.AutoButtonColor = false
+            btn.Font = Enum.Font.GothamBold
+            btn.Text = text
+            btn.TextColor3 = Color3.fromRGB(255, 175, 175)
+            btn.TextStrokeTransparency = 0.15
+            btn.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+            btn.TextScaled = true
+            btn.TextWrapped = true
+            btn.Parent = combatRow
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 10)
+            corner.Parent = btn
+            local constraint = Instance.new("UITextSizeConstraint")
+            constraint.MinTextSize = 10
+            constraint.MaxTextSize = 14
+            constraint.Parent = btn
+            local enabled = false
+            local function render()
+                btn.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
+                btn.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+            end
+            btn.MouseButton1Click:Connect(function()
+                enabled = not enabled
+                render()
+                if callback then callback(enabled) end
+            end)
+            render()
+        end
+        makeCombatToggle("Auto Whirlwind Dunk", function(val) WhirlwindEnabled = val end)
+        makeCombatToggle("Auto Combo", function(val) WallComboEnabled = val end)
+        makeCombatToggle("No Dash CD", function(val)
+            workspace:SetAttribute("EffectAffects", val and 1 or 0)
+            workspace:SetAttribute("NoDashCooldown", val)
+        end)
+    end
 end)
 task.spawn(function()
     local flingState = {
