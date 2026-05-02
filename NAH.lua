@@ -3471,7 +3471,7 @@ end
         combatLayout.VerticalAlignment = Enum.VerticalAlignment.Center
         combatLayout.Padding = UDim.new(0, 6)
         combatLayout.Parent = combatRow
-        local function makeCombatToggle(text, callback)
+        local function makeCombatToggle(text, callback, saveKey)
             local btn = Instance.new("TextButton")
             btn.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
             btn.BackgroundTransparency = 0.06
@@ -3494,6 +3494,9 @@ end
             constraint.MaxTextSize = 14
             constraint.Parent = btn
             local enabled = false
+            if saveKey and controlSaveData[saveKey] ~= nil then
+                enabled = controlSaveData[saveKey]
+            end
             local function render()
                 btn.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
                 btn.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
@@ -3501,16 +3504,21 @@ end
             btn.MouseButton1Click:Connect(function()
                 enabled = not enabled
                 render()
+                if saveKey then
+                    controlSaveData[saveKey] = enabled
+                    saveSliderSaveData()
+                end
                 if callback then callback(enabled) end
             end)
+            if enabled and callback then callback(enabled) end
             render()
         end
-        makeCombatToggle("Auto Whirlwind Dunk", function(val) WhirlwindEnabled = val end)
-        makeCombatToggle("Auto Combo", function(val) WallComboEnabled = val end)
+        makeCombatToggle("Auto Whirlwind Dunk", function(val) WhirlwindEnabled = val end, "AutoWhirlwind")
+        makeCombatToggle("Auto Combo", function(val) WallComboEnabled = val end, "AutoCombo")
         makeCombatToggle("No Dash CD", function(val)
             workspace:SetAttribute("EffectAffects", val and 1 or 0)
             workspace:SetAttribute("NoDashCooldown", val)
-        end)
+        end, "NoDashCD")
     end
 end)
 task.spawn(function()
