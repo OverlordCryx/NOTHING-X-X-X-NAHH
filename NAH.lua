@@ -2579,15 +2579,12 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	end
 	local verticalLead = math.clamp((targetVelocity.Y * leadTime) + attackTpVerticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
 	local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
-	local followDirection = getHorizontalUnit(targetVelocity)
-		or getHorizontalUnit(targetRoot.CFrame.LookVector)
-		or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
-		or Vector3.new(0, 0, -1)
-	local behindDistance = useAirTracking and attackTpAirBehindDistance or attackTpBehindDistance
-	local verticalOffset = useAirTracking and attackTpAirVerticalOffset or attackTpGroundVerticalOffset
-	local behindPosition = predictedTargetPosition - (followDirection * behindDistance) + Vector3.new(0, verticalOffset, 0)
-	local lookPosition = behindPosition + followDirection + Vector3.new(0, math.clamp(verticalLead * 0.12, -0.35, 0.35), 0)
-	return CFrame.lookAt(behindPosition, lookPosition, worldUpVector), targetVelocity
+	
+	local isRagdoll = targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll")
+	local aboveDistance = isRagdoll and 4.2 or 6.8
+	local abovePosition = predictedTargetPosition + Vector3.new(0, aboveDistance, 0)
+	
+	return CFrame.lookAt(abovePosition, predictedTargetPosition, worldUpVector), targetVelocity
 end
 local function getCamLockTarget()
 	cam = Workspace.CurrentCamera or cam
