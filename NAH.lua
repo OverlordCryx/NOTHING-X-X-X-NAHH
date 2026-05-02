@@ -2332,12 +2332,16 @@ syncFlingModeControls = function()
 	flingModeControls.Fourth.SetValue(flingAllEnabled, true)
 end
 local function getDisplayedTargetModel()
-	if hasLiveStoredTarget(camLockTarget) then
-		return camLockTarget
+	if camLockTarget then
+		if not isDeadTargetModel(camLockTarget) or Players:GetPlayerFromCharacter(camLockTarget) then
+			return camLockTarget
+		end
 	end
 	local currentTarget = resolveManualAttackTpTargetModel()
-	if hasLiveStoredTarget(currentTarget) then
-		return currentTarget
+	if currentTarget then
+		if not isDeadTargetModel(currentTarget) or Players:GetPlayerFromCharacter(currentTarget) then
+			return currentTarget
+		end
 	end
 	if (autoTpEnabled or flingEnabled or viewing) and not manualAttackTpPlayer and not manualAttackTpTarget then
 		local actionTarget = getCurrentActionTargetModel(false)
@@ -2363,12 +2367,14 @@ local function updateTargetDisplay()
 			manualAttackTpTarget = trackedTarget
 		end
 	elseif manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
-		manualAttackTpTarget = nil
-		pendingTeleportToSelectedPlayer = false
-		if syncModelDropdownSelectionToManualTarget then
-			syncModelDropdownSelectionToManualTarget()
+		if not Players:GetPlayerFromCharacter(manualAttackTpTarget) then
+			manualAttackTpTarget = nil
+			pendingTeleportToSelectedPlayer = false
+			if syncModelDropdownSelectionToManualTarget then
+				syncModelDropdownSelectionToManualTarget()
+			end
+			targetStateChanged = true
 		end
-		targetStateChanged = true
 	end
 	if camLockTarget and isDeadTargetModel(camLockTarget) and not manualAttackTpPlayer then
 		camLockTarget = nil
@@ -4884,7 +4890,7 @@ function teleportToSelectedTarget()
 	local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 	local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local targetModel = resolveAttackTpTarget()
-	if not characterRoot or not isAliveHumanoid(characterHumanoid) then
+	if not characterRoot or not isAliveHumanoid(characterHumanoid) or isTpBlocked() then
 		return
 	end
 	if not isValidAttackTpTarget(targetModel) then
@@ -6706,7 +6712,7 @@ do
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if characterRoot and isAliveHumanoid(characterHumanoid) then
+		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
 			local targetModel = resolveAttackTpTarget()
 			if isValidAttackTpTarget(targetModel) then
 				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
@@ -6731,7 +6737,7 @@ do
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if characterRoot and isAliveHumanoid(characterHumanoid) then
+		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
 			if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 				clearManualAttackTpTarget()
 			end
