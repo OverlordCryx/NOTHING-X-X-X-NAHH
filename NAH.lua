@@ -1,42 +1,7 @@
-task.spawn(function()
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local connection = nil
-local function startAntiFling()
-    if connection then
-        connection:Disconnect()
-    end
-    connection = RunService.Heartbeat:Connect(function()
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local character = player.Character
-                for _, part in ipairs(character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                        if part.CustomPhysicalProperties then
-                            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0.3, 0.5, 0, 0)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end
-startAntiFling()
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.6)           
-    startAntiFling()
-end)
-task.spawn(function()
-    while task.wait(5) do
-        if not connection or connection.Connected == false then
-            startAntiFling()
-        end
-    end
-end)
-print("✅")
-end)
+repeat
+    task.wait();
+until game:IsLoaded();
+
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -464,6 +429,45 @@ do
 	settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	settingsLayout.Parent = uiX
 end
+task.spawn(function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local connection = nil
+local function startAntiFling()
+    if connection then
+        connection:Disconnect()
+    end
+    connection = RunService.Heartbeat:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local character = player.Character
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        if part.CustomPhysicalProperties then
+                            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0.3, 0.5, 0, 0)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+startAntiFling()
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.6)           
+    startAntiFling()
+end)
+task.spawn(function()
+    while task.wait(5) do
+        if not connection or connection.Connected == false then
+            startAntiFling()
+        end
+    end
+end)
+print("✅")
+end)
 local keybindEntries = {}
 local introFinished = false
 local pendingInfoCall = nil
@@ -7154,7 +7158,7 @@ local oneTimeDestroy = {
     playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):WaitForChild("Bulk"),
     playerGui:WaitForChild("Gifting", 5),
 }
-task.wait(0.2)
+task.wait(1.2)
 for _, obj in ipairs(oneTimeDestroy) do
     if obj then destroyOnce(obj) end
 end
