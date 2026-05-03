@@ -7124,43 +7124,103 @@ function startIntroUi()
 end
 startIntroUi()
 task.spawn(function()
-local GAME_ID = 3808081382
-if game.GameId ~= GAME_ID then
-    return  
+if game.GameId ~= 3808081382 then
+    return
 end
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local alreadyDestroyed = {}
-local isWaitingForNewGui = false
 local function destroyOnce(obj)
     if not obj or alreadyDestroyed[obj] then return end
     pcall(function()
         if obj and obj.Parent then
-            obj:Destroy()
             alreadyDestroyed[obj] = true
+            obj:Destroy()
         end
     end)
 end
-local oneTimeDestroy = {
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("LocalScript"):WaitForChild("Preview"),
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("fake"),
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):GetChildren()[9],
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("GamepassTwo"),
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Switch"),
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Gamepass"),
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Limited"),
-    playerGui:WaitForChild("Emotes", 5):WaitForChild("ImageLabel"):WaitForChild("Bulk"),
-    playerGui:WaitForChild("Version", 5),
-    playerGui:WaitForChild("TopbarPlus", 5):WaitForChild("TopbarContainer"):GetChildren()[10],
-    playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):WaitForChild("fake"),
-    playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):GetChildren()[11],
-    playerGui:WaitForChild("Cosmetics", 5):WaitForChild("Frame"):WaitForChild("Bulk"),
-    playerGui:WaitForChild("Gifting", 5),
+local function findPath(timeout, ...)
+    local path = {...}
+    local start = tick()
+    while tick() - start < timeout do
+        local obj = path[1]
+        local failed = false
+        for i = 2, #path do
+            obj = obj and obj:FindFirstChild(path[i])
+            if not obj then
+                failed = true
+                break
+            end
+        end
+        if not failed and obj then
+            return obj
+        end
+        task.wait(0.25)
+    end
+    return nil
+end
+local function destroyAllByName(parent, name)
+    if not parent then return end
+    for _, v in ipairs(parent:GetDescendants()) do
+        if v.Name == name then
+            destroyOnce(v)
+        end
+    end
+end
+local toDestroy = {
+    function()
+        local emotes = findPath(20, playerGui, "Emotes", "ImageLabel")
+        if emotes then
+            destroyAllByName(emotes, "fake")
+        end
+    end,
+    function()
+        local emotes = findPath(20, playerGui, "Emotes", "ImageLabel")
+        if emotes then
+            destroyAllByName(emotes, "GamepassTwo")
+        end
+    end,
+    function()
+        return findPath(20, playerGui, "Emotes", "ImageLabel", "Switch")
+    end,
+    function()
+        return findPath(20, playerGui, "Emotes", "ImageLabel", "Gamepass")
+    end,
+    function()
+        return findPath(20, playerGui, "Emotes", "ImageLabel", "Limited")
+    end,
+    function()
+        return findPath(20, playerGui, "Emotes", "ImageLabel", "Bulk")
+    end,
+    function()
+        return findPath(20, playerGui, "Version")
+    end,
+    function()
+        local topbar = findPath(20, playerGui, "TopbarPlus", "TopbarContainer")
+        if topbar then
+            return topbar:GetChildren()[10]
+        end
+    end,
+    function()
+        local cosmetics = findPath(20, playerGui, "Cosmetics", "Frame")
+        if cosmetics then
+            destroyAllByName(cosmetics, "fake")
+        end
+    end,
+    function()
+        return findPath(20, playerGui, "Cosmetics", "Frame", "Bulk")
+    end,
+    function()
+        return findPath(20, playerGui, "Gifting")
+    end,
 }
-task.wait(1.2)
-for _, obj in ipairs(oneTimeDestroy) do
-    if obj then destroyOnce(obj) end
+for _, getObj in ipairs(toDestroy) do
+    local obj = getObj()
+    if not obj then
+    else
+        destroyOnce(obj)
+    end
 end
 local currentHotbar = playerGui:WaitForChild("Hotbar", 5)
 local currentBar = playerGui:WaitForChild("Bar", 5)
