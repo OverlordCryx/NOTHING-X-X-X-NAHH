@@ -694,7 +694,8 @@ local placesOrder = {
 	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
 	"Atomic Slash", "Atomic Slash Up"
 }
-local selectedPlace = placesOrder[1]
+local placesDropdown = nil
+local selectedPlace = nil
 local autoTpEnabled = false
 local flingEnabled = false
 walkFlingEnabled = false
@@ -904,8 +905,48 @@ local function updateKeybindText()
 	end
 	keybindText.Text = table.concat(lines, "\n")
 end
+local function hasMapMainPart()
+	local map = Workspace:FindFirstChild("Map")
+	return map and map:FindFirstChild("MainPart") ~= nil
+end
+local lastHasMainState = nil
 local function syncPlacesKeybindDisplay()
 	if game.GameId ~= 3808081382 then return end
+	local hasMain = hasMapMainPart()
+	if hasMain ~= lastHasMainState then
+		lastHasMainState = hasMain
+		local mapPlaces = { "Middle Of Map", "Prison", "Montain 1", "Montain 2" }
+		local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
+		local currentItems = {}
+		if hasMain then
+			for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
+		end
+		for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
+		if placesDropdown then
+			placesDropdown.SetItems(currentItems)
+		end
+	end
+	if placesDropdown then
+		if selectedPlace then
+			local found = false
+			local items = placesDropdown.GetItems and placesDropdown.GetItems() or {}
+			for _, item in ipairs(items) do
+				if item == selectedPlace then
+					found = true
+					break
+				end
+			end
+			if not found then
+				selectedPlace = nil
+				placesDropdown.SetValue(nil, true)
+			end
+		end
+	end
+	if not selectedPlace then
+		keybindEntries.Places = nil
+		updateKeybindText()
+		return
+	end
 	keybindEntries.Places = {
 		name = "Places TP",
 		keybind = "`",
@@ -970,12 +1011,8 @@ function syncWalkFlingKeybindDisplay()
 	}
 	updateKeybindText()
 end
-local function hasTrashMainPart()
-	local map = Workspace:FindFirstChild("Map")
-	return map and map:FindFirstChild("MainPart") ~= nil
-end
 local function syncGetTrashKeybindDisplay()
-	if not hasTrashMainPart() then
+	if not hasMapMainPart() then
 		keybindEntries.GetTrash = nil
 		updateKeybindText()
 		return
@@ -1750,7 +1787,7 @@ local function finishGetTrashRun()
 	syncGetTrashKeybindDisplay()
 end
 runGetTrash = function()
-	if not hasTrashMainPart() then
+	if not hasMapMainPart() then
 		return "OFF"
 	end
 	local now = tick()
@@ -2054,7 +2091,7 @@ function startSetBackTravel()
 			stopSetBackTravel()
 			return
 		end
-		local step = math.min(1000 * dt, distance)
+		local step = math.min(6000 * dt, distance)
 		local nextPosition = getSetBackTravelPosition(liveRoot, destination, step)
 		liveRoot.CFrame = getUprightSetBackCFrame(nextPosition, destination)
 		liveRoot.AssemblyLinearVelocity = Vector3.zero
@@ -4553,13 +4590,8 @@ function Dropdown(data)
 	data = data or {}
 	local dropdownName = tostring(data.namedropdown or data.nameDropdown or data.name or "Dropdown")
 	local rawItems = data.inside or data.items or data.values or {}
-	local defaultValue = data.deffultin
-	if defaultValue == nil then
-		defaultValue = data.defaultin
-	end
-	if defaultValue == nil then
-		defaultValue = data.default
-	end
+	local defaultValue = data.deffultin or data.defaultin or data.default
+	local initialDefault = defaultValue
 	local multi = data.multi == true
 	local callback = data.fun
 	local saveKey = tostring(data.saveKey or data.namedropdown or data.nameDropdown or data.name or "")
@@ -4699,6 +4731,17 @@ function Dropdown(data)
 			setSelectedValue(normalizedDefaults[1], true)
 		end
 	end
+	if not next(selected) then
+		if initialDefault ~= nil then
+			local normalized = normalizeDefaultValues(initialDefault)
+			if normalized[1] ~= nil then
+				setSelectedValue(normalized[1], true)
+			end
+		end
+		if not next(selected) and #items > 0 then
+			setSelectedValue(items[1], true)
+		end
+	end
 	local holder = makeControlFrame(collapsedHeight)
 	holder.Parent = uiX
 	local nameLabel = Instance.new("TextLabel")
@@ -4755,8 +4798,8 @@ function Dropdown(data)
 	choiceFrame.AnchorPoint = Vector2.new(0.5, 0)
 	choiceFrame.Position = UDim2.fromScale(0.5, 0)
 	choiceFrame.Size = UDim2.new(0.94, 0, 0, 0)
-	choiceFrame.CanvasSize = UDim2.fromOffset(0, 0)
-	choiceFrame.AutomaticCanvasSize = Enum.AutomaticSize.None
+	choiceFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+	choiceFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	choiceFrame.ElasticBehavior = Enum.ElasticBehavior.Never
 	choiceFrame.ScrollBarThickness = 0
 	choiceFrame.ScrollBarImageTransparency = 1
@@ -4863,14 +4906,10 @@ function Dropdown(data)
 		end
 		optionsFrame.Size = UDim2.new(1, 0, 0, visibleOptionsHeight)
 		choiceFrame.Size = UDim2.new(0.94, 0, 0, visibleOptionsHeight)
-		choiceFrame.CanvasSize = UDim2.new(0, 0, 0, optionsHeight)
 		if expanded and not wasExpanded then
 			choiceFrame.CanvasPosition = Vector2.new(0, 0)
 		elseif not expanded then
 			choiceFrame.CanvasPosition = Vector2.new(0, 0)
-		else
-			local maxCanvasY = math.max(optionsHeight - visibleOptionsHeight, 0)
-			choiceFrame.CanvasPosition = Vector2.new(0, math.clamp(choiceFrame.CanvasPosition.Y, 0, maxCanvasY))
 		end
 		holder.Size = UDim2.new(1, -4, 0, expanded and (expandedTopOffset + visibleOptionsHeight + 8) or collapsedHeight)
 		if expanded then
@@ -4896,6 +4935,9 @@ function Dropdown(data)
 	local dropdownControl = {
 		Frame = holder,
 	}
+	function dropdownControl.GetItems()
+		return items
+	end
 	function dropdownControl.SetItems(newItems, preferredValue, suppressCallback)
 		local previousSelectedList = getSelectedList()
 		local normalizedItems = normalizeValues(newItems)
@@ -4918,16 +4960,9 @@ function Dropdown(data)
 		end
 		if itemsChanged then
 			rebuildOptionButtons()
+			setExpanded(expanded)
 		else
 			refreshLabels()
-		end
-		setExpanded(expanded)
-		if expanded then
-			local visibleCount = math.min(#items, maxVisibleOptions)
-			local visibleOptionsHeight = (visibleCount * optionHeight) + math.max(visibleCount - 1, 0) * optionPadding
-			local optionsHeight = (#items * optionHeight) + math.max(#items - 1, 0) * optionPadding
-			local maxCanvasY = math.max(optionsHeight - visibleOptionsHeight, 0)
-			choiceFrame.CanvasPosition = Vector2.new(0, math.clamp(previousCanvasPosition.Y, 0, maxCanvasY))
 		end
 		saveDropdownSelection()
 		if not suppressCallback then
@@ -6248,17 +6283,18 @@ flingModeControls = _G["4tog_on_one_frame"]({
 	end,
 })
 if game.GameId == 3808081382 then
-	Dropdown({
+	placesDropdown = Dropdown({
 		namedropdown = "Places",
 		inside = placesOrder,
 		multi = false,
-		deffultin = "Middle Of Map",
+		deffultin = nil,
 		fun = function(value)
 			selectedPlace = value
+			syncPlacesKeybindDisplay()
 		end,
-	}).Frame.LayoutOrder = 999998
+	})
+	placesDropdown.Frame.LayoutOrder = 999998
 end
-
 safeZone.toggleControl = tog({
 	name = "Safe Zone",
 	default = safeZone.enabled,
@@ -6889,6 +6925,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local key = input.KeyCode
 	local isBacktick = (key.Name == "BackQuote" or key.Name == "Backquote" or key == Enum.KeyCode.Tilde or key.Value == 96 or key.Value == 126)
 	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick then
+		if not selectedPlace or selectedPlace == "" then
+			return
+		end
 		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2"
 		if isMapLocation then
 			local xmap = Workspace:FindFirstChild("Map")
@@ -6901,6 +6940,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			local character = player.Character
 			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 			if characterRoot then
+				local startCF = characterRoot.CFrame
+				applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.33))
+				task.wait(0.05)
+				applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.66))
+				task.wait(0.05)
 				applyTeleportRootState(characterRoot, cf)
 			end
 		end
@@ -7557,6 +7601,13 @@ playerGui.ChildRemoved:Connect(function(child)
 end)
 player.CharacterAdded:Connect(function()
     updateCurrentGui()
+end)
+task.spawn(function()
+    while true do
+        syncPlacesKeybindDisplay()
+        syncGetTrashKeybindDisplay()
+        task.wait(1)
+    end
 end)
 task.spawn(function()
     while true do
