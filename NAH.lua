@@ -132,8 +132,22 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
-screenGui:SetAttribute("InfoToken", 0)
 screenGui.Parent = CoreGui
+local mainScale = Instance.new("UIScale")
+mainScale.Name = "MainScale"
+mainScale.Parent = screenGui
+local function updateGlobalScale()
+	local viewportSize = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+	local baseResolution = Vector2.new(1920, 1080)
+	local scaleX = viewportSize.X / baseResolution.X
+	local scaleY = viewportSize.Y / baseResolution.Y
+	local finalScale = math.min(scaleX, scaleY)
+	mainScale.Scale = math.clamp(finalScale, 0.6, 1.4)
+end
+task.spawn(function()
+	updateGlobalScale()
+	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateGlobalScale)
+end)
 local background = Instance.new("Frame")
 background.Name = "Background"
 background.Size = UDim2.fromScale(1, 1)
@@ -144,11 +158,24 @@ local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
 keybindFrame.Position = UDim2.fromScale(0.03, 0.5)
-keybindFrame.Size = UDim2.fromScale(0.1, 0.2)
-keybindFrame.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
-keybindFrame.BackgroundTransparency = 1
+keybindFrame.Size = UDim2.fromScale(0.1, 0.14)
+keybindFrame.BackgroundColor3 = Color3.fromRGB(15, 0, 0)
+keybindFrame.BackgroundTransparency = 0.4
 keybindFrame.BorderSizePixel = 0
 keybindFrame.Visible = false
+keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
+do
+	local keybindSizeConstraint = Instance.new("UISizeConstraint")
+	keybindSizeConstraint.MinSize = Vector2.new(120, 40)
+	keybindSizeConstraint.MaxSize = Vector2.new(280, 500)
+	keybindSizeConstraint.Parent = keybindFrame
+end
+local keybindPadding = Instance.new("UIPadding")
+keybindPadding.PaddingTop = UDim.new(0, 8)
+keybindPadding.PaddingBottom = UDim.new(0, 8)
+keybindPadding.PaddingLeft = UDim.new(0, 10)
+keybindPadding.PaddingRight = UDim.new(0, 10)
+keybindPadding.Parent = keybindFrame
 keybindFrame.Parent = screenGui
 local leftStroke = Instance.new("UIStroke")
 leftStroke.Color = Color3.fromRGB(255, 0, 0)
@@ -170,9 +197,10 @@ do
 end
 local keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
-keybindText.AnchorPoint = Vector2.new(0.5, 0)
-keybindText.Position = UDim2.fromScale(0.5, 0.08)
-keybindText.Size = UDim2.fromScale(0.92, 0.72)
+keybindText.AnchorPoint = Vector2.new(0, 0)
+keybindText.Position = UDim2.fromScale(0, 0)
+keybindText.Size = UDim2.new(1, 0, 0, 0)
+keybindText.AutomaticSize = Enum.AutomaticSize.Y
 keybindText.BackgroundTransparency = 1
 keybindText.TextColor3 = Color3.fromRGB(255, 110, 110)
 keybindText.TextStrokeTransparency = 0.2
@@ -198,6 +226,16 @@ targetFrame.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
 targetFrame.BackgroundTransparency = 0.5
 targetFrame.BorderSizePixel = 0
 targetFrame.Visible = false
+targetFrame.AutomaticSize = Enum.AutomaticSize.XY
+do
+	local targetSizeConstraint = Instance.new("UISizeConstraint")
+	targetSizeConstraint.MinSize = Vector2.new(100, 30)
+	targetSizeConstraint.Parent = targetFrame
+end
+local targetPadding = Instance.new("UIPadding")
+targetPadding.PaddingLeft = UDim.new(0, 12)
+targetPadding.PaddingRight = UDim.new(0, 12)
+targetPadding.Parent = targetFrame
 targetFrame.Parent = screenGui
 do
 	local targetCorner = Instance.new("UICorner")
@@ -219,9 +257,10 @@ do
 end
 local targetValueText = Instance.new("TextLabel")
 targetValueText.Name = "TargetValue"
-targetValueText.AnchorPoint = Vector2.new(0.5, 0.5)
-targetValueText.Position = UDim2.fromScale(0.5, 0.5)
-targetValueText.Size = UDim2.fromScale(0.88, 0.68)
+targetValueText.AnchorPoint = Vector2.new(0, 0)
+targetValueText.Position = UDim2.fromScale(0, 0)
+targetValueText.Size = UDim2.new(1, 0, 1, 0)
+targetValueText.AutomaticSize = Enum.AutomaticSize.XY
 targetValueText.BackgroundTransparency = 1
 targetValueText.Text = ""
 targetValueText.TextColor3 = Color3.fromRGB(255, 110, 110)
@@ -242,12 +281,29 @@ end
 local infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
-infoContainer.Position = UDim2.fromScale(0.5, 0.12)
-infoContainer.Size = UDim2.fromScale(0.2, 0.1)
-infoContainer.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
+infoContainer.Position = UDim2.fromScale(0.5, 0.08)
+infoContainer.Size = UDim2.fromScale(0.25, 0)
+infoContainer.AutomaticSize = Enum.AutomaticSize.Y
+infoContainer.BackgroundColor3 = Color3.fromRGB(15, 0, 0)
 infoContainer.BackgroundTransparency = 1
-infoContainer.BorderSizePixel = 0
 infoContainer.Visible = false
+do
+	local infoSizeConstraint = Instance.new("UISizeConstraint")
+	infoSizeConstraint.MinSize = Vector2.new(220, 0)
+	infoSizeConstraint.MaxSize = Vector2.new(450, 250)
+	infoSizeConstraint.Parent = infoContainer
+end
+local infoPadding = Instance.new("UIPadding")
+infoPadding.PaddingTop = UDim.new(0, 10)
+infoPadding.PaddingBottom = UDim.new(0, 10)
+infoPadding.PaddingLeft = UDim.new(0, 15)
+infoPadding.PaddingRight = UDim.new(0, 15)
+infoPadding.Parent = infoContainer
+local infoListLayout = Instance.new("UIListLayout")
+infoListLayout.Padding = UDim.new(0, 5)
+infoListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+infoListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+infoListLayout.Parent = infoContainer
 infoContainer.Parent = screenGui
 local infoStroke = Instance.new("UIStroke")
 infoStroke.Color = Color3.fromRGB(255, 0, 0)
@@ -269,9 +325,10 @@ do
 end
 local infoTitle = Instance.new("TextLabel")
 infoTitle.Name = "InfoTitle"
-infoTitle.AnchorPoint = Vector2.new(0.5, 0)
-infoTitle.Position = UDim2.fromScale(0.5, 0.08)
-infoTitle.Size = UDim2.fromScale(0.88, 0.28)
+infoTitle.AnchorPoint = Vector2.new(0, 0)
+infoTitle.Position = UDim2.fromScale(0, 0)
+infoTitle.Size = UDim2.new(1, 0, 0, 0)
+infoTitle.AutomaticSize = Enum.AutomaticSize.Y
 infoTitle.BackgroundTransparency = 1
 infoTitle.Text = ""
 infoTitle.TextColor3 = Color3.fromRGB(255, 30, 30)
@@ -280,18 +337,21 @@ infoTitle.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
 infoTitle.Font = Enum.Font.GothamBlack
 infoTitle.TextScaled = true
 infoTitle.TextWrapped = true
+infoTitle.AutomaticSize = Enum.AutomaticSize.Y
+infoTitle.LayoutOrder = 1
 infoTitle.Parent = infoContainer
 do
 	local infoTitleConstraint = Instance.new("UITextSizeConstraint")
 	infoTitleConstraint.MinTextSize = 14
-	infoTitleConstraint.MaxTextSize = 28
+	infoTitleConstraint.MaxTextSize = 22
 	infoTitleConstraint.Parent = infoTitle
 end
 local infoText = Instance.new("TextLabel")
 infoText.Name = "InfoText"
-infoText.AnchorPoint = Vector2.new(0.5, 1)
-infoText.Position = UDim2.fromScale(0.5, 0.9)
-infoText.Size = UDim2.fromScale(0.88, 0.44)
+infoText.AnchorPoint = Vector2.new(0, 0)
+infoText.Position = UDim2.fromScale(0, 0)
+infoText.Size = UDim2.new(1, 0, 0, 0)
+infoText.AutomaticSize = Enum.AutomaticSize.Y
 infoText.BackgroundTransparency = 1
 infoText.Text = ""
 infoText.TextColor3 = Color3.fromRGB(255, 110, 110)
@@ -300,18 +360,32 @@ infoText.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
 infoText.Font = Enum.Font.GothamBold
 infoText.TextScaled = true
 infoText.TextWrapped = true
+infoText.AutomaticSize = Enum.AutomaticSize.Y
+infoText.LayoutOrder = 2
 infoText.Parent = infoContainer
 do
 	local infoTextConstraint = Instance.new("UITextSizeConstraint")
 	infoTextConstraint.MinTextSize = 12
-	infoTextConstraint.MaxTextSize = 22
+	infoTextConstraint.MaxTextSize = 18
 	infoTextConstraint.Parent = infoText
 end
 local settingsWindow = Instance.new("Frame")
 settingsWindow.Name = "WindowUI"
 settingsWindow.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsWindow.Position = UDim2.fromScale(0.5, 0.57)
-settingsWindow.Size = UDim2.fromScale(0.22, 0.42)
+settingsWindow.Size = UDim2.fromScale(0.22, 0.45)
+do
+	local windowSizeConstraint = Instance.new("UISizeConstraint")
+	windowSizeConstraint.MinSize = Vector2.new(280, 350)
+	windowSizeConstraint.MaxSize = Vector2.new(450, 800)
+	windowSizeConstraint.Parent = settingsWindow
+end
+do
+	local windowAspectRatio = Instance.new("UIAspectRatioConstraint")
+	windowAspectRatio.AspectRatio = 0.72
+	windowAspectRatio.DominantAxis = Enum.DominantAxis.Height
+	windowAspectRatio.Parent = settingsWindow
+end
 settingsWindow.BackgroundColor3 = Color3.fromRGB(12, 0, 0)
 settingsWindow.BackgroundTransparency = 1
 settingsWindow.BorderSizePixel = 0
@@ -319,17 +393,21 @@ settingsWindow.Visible = false
 settingsWindow.Active = true
 settingsWindow.ZIndex = 10
 settingsWindow.Parent = screenGui
+do
+	local windowSizeConstraint = Instance.new("UISizeConstraint")
+	windowSizeConstraint.MinSize = Vector2.new(280, 350)
+	windowSizeConstraint.Parent = settingsWindow
+end
 local windowOutline = Instance.new("Frame")
 windowOutline.Name = "WindowOutline"
-windowOutline.AnchorPoint = settingsWindow.AnchorPoint
-windowOutline.Position = settingsWindow.Position
-windowOutline.Size = settingsWindow.Size
 windowOutline.BackgroundTransparency = 1
-windowOutline.BorderSizePixel = 0
-windowOutline.Visible = false
+windowOutline.Visible = true
 windowOutline.Active = false
 windowOutline.ZIndex = 9
-windowOutline.Parent = screenGui
+windowOutline.Parent = settingsWindow
+windowOutline.AnchorPoint = Vector2.new(0.5, 0.5)
+windowOutline.Position = UDim2.fromScale(0.5, 0.5)
+windowOutline.Size = UDim2.fromScale(1, 1)
 do
 	local windowOutlineCorner = Instance.new("UICorner")
 	windowOutlineCorner.CornerRadius = UDim.new(0, 18)
@@ -337,8 +415,8 @@ do
 end
 local windowOutlineStroke = Instance.new("UIStroke")
 windowOutlineStroke.Color = Color3.fromRGB(255, 0, 0)
-windowOutlineStroke.Thickness = 3
-windowOutlineStroke.Transparency = 1
+windowOutlineStroke.Thickness = 2
+windowOutlineStroke.Transparency = 0
 windowOutlineStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 windowOutlineStroke.Parent = windowOutline
 local settingsStroke = Instance.new("UIStroke")
@@ -557,7 +635,7 @@ local lastTargetDeathTime = 0
 local manualAttackTpTarget = nil
 local manualAttackTpPlayer = nil
 local attackTpHolding = false
-local attackTpMode = "Above"
+local attackTpMode = "Behind"
 local isSelectablePlayerDropdownTarget
 local syncModelDropdownSelectionToManualTarget
 local stopView
@@ -2224,8 +2302,7 @@ function isValidAttackTpTarget(model)
 	if not isValidCamLockTarget(model) then
 		return false
 	end
-	local modelRoot = model:FindFirstChild("HumanoidRootPart")
-	return modelRoot ~= nil and not modelRoot.Anchored
+	return model:FindFirstChild("HumanoidRootPart") ~= nil
 end
 local function isDeadTargetModel(model)
 	if not model or model == char or model.Parent == nil then
@@ -2242,7 +2319,7 @@ local function isDeadTargetModel(model)
 	return false
 end
 local function hasLiveStoredTarget(model)
-	return model ~= nil and not isDeadTargetModel(model)
+	return model ~= nil and model.Parent ~= nil
 end
 _G.lastValidTrashTime = 0
 function isTpBlocked()
@@ -2380,15 +2457,13 @@ local function updateTargetDisplay()
 		else
 			manualAttackTpTarget = trackedTarget
 		end
-	elseif manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
-		if not Players:GetPlayerFromCharacter(manualAttackTpTarget) then
-			manualAttackTpTarget = nil
-			pendingTeleportToSelectedPlayer = false
-			if syncModelDropdownSelectionToManualTarget then
-				syncModelDropdownSelectionToManualTarget()
-			end
-			targetStateChanged = true
+	elseif manualAttackTpTarget and (manualAttackTpTarget.Parent == nil) then
+		manualAttackTpTarget = nil
+		pendingTeleportToSelectedPlayer = false
+		if syncModelDropdownSelectionToManualTarget then
+			syncModelDropdownSelectionToManualTarget()
 		end
+		targetStateChanged = true
 	end
 	if camLockTarget and isDeadTargetModel(camLockTarget) and not manualAttackTpPlayer then
 		camLockTarget = nil
@@ -2439,7 +2514,7 @@ local function getClosestAliveTarget()
 		if instance:IsA("Humanoid") and instance.Health > 0 then
 			local model = instance.Parent
 			local modelRoot = model and model:FindFirstChild("HumanoidRootPart")
-			if model and model ~= currentCharacter and modelRoot and not modelRoot.Anchored and isTargetSafe(model) then
+			if model and model ~= currentCharacter and modelRoot and isTargetSafe(model) then
 				local distance = (modelRoot.Position - currentRoot.Position).Magnitude
 				if distance < bestDistance then
 					bestDistance = distance
@@ -2489,7 +2564,7 @@ local function getSelectableTargetModels()
 					local model = instance.Parent
 					if model and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
 						local modelRoot = model:FindFirstChild("HumanoidRootPart")
-						if modelRoot and not modelRoot.Anchored and isTargetSafe(model) then
+						if modelRoot and isTargetSafe(model) then
 							newModels[#newModels + 1] = model
 						end
 					end
@@ -2927,6 +3002,14 @@ local function makeControlFrame(heightScale)
 	return holder
 end
 local function showInfo(title, text, time)
+	if not introFinished then
+		pendingInfoCall = {
+			title = title,
+			text = text,
+			time = time,
+		}
+		return
+	end
 	local currentToken = (screenGui:GetAttribute("InfoToken") or 0) + 1
 	screenGui:SetAttribute("InfoToken", currentToken)
 	local titleValue = tostring(title or "")
@@ -6127,7 +6210,7 @@ Dropdown({
 	saveKey = "AttackTpMode",
 	inside = { "Above", "Under", "Behind", "Aggressive", "Ultra" },
 	multi = false,
-	deffultin = attackTpMode or "Above",
+	deffultin = attackTpMode or "Behind",
 	fun = function(value)
 		attackTpMode = value
 	end,
@@ -6588,7 +6671,6 @@ UserInputService.InputChanged:Connect(function(input)
 			dragStartPosition.Y.Scale,
 			dragStartPosition.Y.Offset + delta.Y
 		)
-		windowOutline.Position = settingsWindow.Position
 	end
 end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
