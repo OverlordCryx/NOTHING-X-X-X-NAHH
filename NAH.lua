@@ -662,6 +662,12 @@ local customOffsets = {
 	["Custom 9"] = { x = 0, y = 0, z = 0 },
 	["Custom 10"] = { x = 0, y = 0, z = 0 },
 }
+
+local function getCustomDisplayName(i)
+	local key = "Custom " .. tostring(i)
+	local off = customOffsets[key] or { x = 0, y = 0, z = 0 }
+	return string.format("Custom %s (%s,%s,%s)", tostring(i), tostring(off.z), tostring(off.y), tostring(off.x))
+end
 local worldUpVector = Vector3.new(0, 1, 0)
 local autoTpEnabled = false
 local flingEnabled = false
@@ -799,15 +805,20 @@ end
 if type(controlSaveData.AutoSafeZone) == "boolean" then
 	safeZone.enabled = controlSaveData.AutoSafeZone
 end
+-- Wyjaśnienie zapisu TP Mode:
+-- 1. controlSaveData.AttackTpMode przechowuje "czystą" nazwę slotu (np. "Custom 1").
+-- 2. Koordynaty są w controlSaveData.CustomOffsets pod tymi samymi kluczami.
+-- 3. Przy starcie skrypt składa to w nazwę z nawiasami (z,y,x) dla UI.
 if type(controlSaveData.AttackTpMode) == "string" then
 	attackTpMode = controlSaveData.AttackTpMode
 end
 if type(controlSaveData.CustomOffsets) == "table" then
 	for k, v in pairs(controlSaveData.CustomOffsets) do
-		if customOffsets[k] then
-			customOffsets[k].x = tonumber(v.x) or 0
-			customOffsets[k].y = tonumber(v.y) or 0
-			customOffsets[k].z = tonumber(v.z) or 0
+		local cleanKey = k:match("Custom %d+") or k
+		if customOffsets[cleanKey] then
+			customOffsets[cleanKey].x = tonumber(v.x) or 0
+			customOffsets[cleanKey].y = tonumber(v.y) or 0
+			customOffsets[cleanKey].z = tonumber(v.z) or 0
 		end
 	end
 end
@@ -2759,7 +2770,8 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	elseif mode == "Middle" then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 0.1, 0), predictedTargetPosition, worldUpVector)
 	elseif string.find(tostring(mode), "Custom") then
-		local offsets = customOffsets[mode] or { x = 0, y = 0, z = 0 }
+		local cleanMode = tostring(mode):match("Custom %d+")
+		local offsets = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
 		local offsetVec = Vector3.new(offsets.x, offsets.y, offsets.z)
 		if offsetVec.Magnitude < 0.1 then
 			offsetVec = Vector3.new(0, 0.1, 0)
@@ -4537,6 +4549,7 @@ function Dropdown(data)
 	local saveKey = tostring(data.saveKey or data.namedropdown or data.nameDropdown or data.name or "")
 	local items = {}
 	local itemLookup = {}
+	local itemDisplayNames = data.itemDisplayNames or {}
 	local selected = {}
 	local expanded = false
 	local collapsedHeight = 92
@@ -4754,12 +4767,17 @@ function Dropdown(data)
 	local dropdownState = {}
 	local function refreshLabels()
 		local selectedList = getSelectedList()
-		local displayText = #selectedList > 0 and table.concat(selectedList, ", ") or "-"
+		local displayList = {}
+		for _, val in ipairs(selectedList) do
+			table.insert(displayList, itemDisplayNames[val] or val)
+		end
+		local displayText = #displayList > 0 and table.concat(displayList, ", ") or "-"
 		toggleButton.Text = displayText
 		for item, button in pairs(optionButtons) do
 			local isOn = selected[item] == true
+			local display = itemDisplayNames[item] or item
 			button.BackgroundColor3 = isOn and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
-			button.Text = isOn and ("[x] " .. item) or ("[ ] " .. item)
+			button.Text = isOn and ("[x] " .. display) or ("[ ] " .. display)
 		end
 	end
 	local function clearOptionButtons()
@@ -4902,6 +4920,10 @@ function Dropdown(data)
 			end
 		end
 		return getCallbackValue()
+	end
+	function dropdownControl.SetItemDisplayNames(newMapping)
+		itemDisplayNames = newMapping or {}
+		refreshLabels()
 	end
 	function dropdownControl.SetValue(value, suppressCallback)
 		local previousSelectedList = getSelectedList()
@@ -6232,6 +6254,28 @@ safeZone.toggleControl.Frame.LayoutOrder = 10000
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
 
+local function getTPModeItems()
+	local items = { "Above", "Under", "Behind", "Middle", "Aggressive" }
+	for i = 1, 10 do
+		table.insert(items, getCustomDisplayName(i))
+	end
+	return items
+end
+
+local tpModesDropdown = nil
+
+local function updateCustomUI()
+	local isCustom = string.find(tostring(attackTpMode), "Custom") ~= nil
+	customOffsetFrame.Visible = isCustom
+	if isCustom then
+		local cleanMode = tostring(attackTpMode):match("Custom %d+")
+		local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
+		zInput.Text = tostring(off.z)
+		yInput.Text = tostring(off.y)
+		xInput.Text = tostring(off.x)
+	end
+end
+
 local function createOffsetInput(label, axis, position)
 	local labelObj = Instance.new("TextLabel")
 	labelObj.BackgroundTransparency = 1
@@ -6273,18 +6317,23 @@ local function createOffsetInput(label, axis, position)
 
 	box.FocusLost:Connect(function()
 		local val = tonumber(box.Text)
+		local cleanMode = tostring(attackTpMode):match("Custom %d+")
+		if not cleanMode then return end
+		
 		if val == nil then
-			if customOffsets[attackTpMode] then
-				box.Text = tostring(customOffsets[attackTpMode][axis])
-			else
-				box.Text = "0"
-			end
+			box.Text = tostring(customOffsets[cleanMode][axis])
 		else
 			box.Text = tostring(val)
-			if customOffsets[attackTpMode] then
-				customOffsets[attackTpMode][axis] = val
-				controlSaveData.CustomOffsets = customOffsets
-				saveSliderSaveData()
+			customOffsets[cleanMode][axis] = val
+			controlSaveData.CustomOffsets = customOffsets
+			saveSliderSaveData()
+			
+			if tpModesDropdown then
+				local displayNames = {}
+				for i = 1, 10 do
+					displayNames["Custom " .. i] = getCustomDisplayName(i)
+				end
+				tpModesDropdown.SetItemDisplayNames(displayNames)
 			end
 		end
 	end)
@@ -6292,29 +6341,36 @@ local function createOffsetInput(label, axis, position)
 	return box
 end
 
-local xInput = createOffsetInput("X", "x", 0.05)
-local yInput = createOffsetInput("Y", "y", 0.375)
-local zInput = createOffsetInput("Z", "z", 0.7)
+zInput = createOffsetInput("Z", "z", 0.05)
+yInput = createOffsetInput("Y", "y", 0.375)
+xInput = createOffsetInput("X", "x", 0.7)
 
-local function updateCustomUI()
-	local isCustom = string.find(tostring(attackTpMode), "Custom") ~= nil
-	customOffsetFrame.Visible = isCustom
-	if isCustom then
-		local off = customOffsets[attackTpMode] or {x=0,y=0,z=0}
-		xInput.Text = tostring(off.x)
-		yInput.Text = tostring(off.y)
-		zInput.Text = tostring(off.z)
+local function getTPModeCleanItems()
+	local items = { "Above", "Under", "Behind", "Middle", "Aggressive" }
+	for i = 1, 10 do
+		table.insert(items, "Custom " .. i)
 	end
+	return items
 end
 
-Dropdown({
+local function getTPModeDisplayNames()
+	local names = {}
+	for i = 1, 10 do
+		names["Custom " .. i] = getCustomDisplayName(i)
+	end
+	return names
+end
+
+tpModesDropdown = Dropdown({
 	namedropdown = "TP Modes",
-	saveKey = "AttackTpMode",
-	inside = { "Above", "Under", "Behind", "Middle", "Aggressive", "Custom 1", "Custom 2", "Custom 3", "Custom 4", "Custom 5", "Custom 6", "Custom 7", "Custom 8", "Custom 9", "Custom 10" },
+	inside = getTPModeCleanItems(),
+	itemDisplayNames = getTPModeDisplayNames(),
 	multi = false,
 	deffultin = attackTpMode or "Behind",
 	fun = function(value)
 		attackTpMode = value
+		controlSaveData.AttackTpMode = value
+		saveSliderSaveData()
 		updateCustomUI()
 	end,
 })
