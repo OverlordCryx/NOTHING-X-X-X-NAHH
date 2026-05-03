@@ -650,6 +650,18 @@ local attackTpVerticalLead = 0.04
 local attackTpMaxVerticalLead = 1.35
 local attackTpGroundVerticalOffset = 0
 local attackTpAirVerticalOffset = 0.45
+local customOffsets = {
+	["Custom 1"] = { x = 0, y = 0, z = 0 },
+	["Custom 2"] = { x = 0, y = 0, z = 0 },
+	["Custom 3"] = { x = 0, y = 0, z = 0 },
+	["Custom 4"] = { x = 0, y = 0, z = 0 },
+	["Custom 5"] = { x = 0, y = 0, z = 0 },
+	["Custom 6"] = { x = 0, y = 0, z = 0 },
+	["Custom 7"] = { x = 0, y = 0, z = 0 },
+	["Custom 8"] = { x = 0, y = 0, z = 0 },
+	["Custom 9"] = { x = 0, y = 0, z = 0 },
+	["Custom 10"] = { x = 0, y = 0, z = 0 },
+}
 local worldUpVector = Vector3.new(0, 1, 0)
 local autoTpEnabled = false
 local flingEnabled = false
@@ -789,6 +801,15 @@ if type(controlSaveData.AutoSafeZone) == "boolean" then
 end
 if type(controlSaveData.AttackTpMode) == "string" then
 	attackTpMode = controlSaveData.AttackTpMode
+end
+if type(controlSaveData.CustomOffsets) == "table" then
+	for k, v in pairs(controlSaveData.CustomOffsets) do
+		if customOffsets[k] then
+			customOffsets[k].x = tonumber(v.x) or 0
+			customOffsets[k].y = tonumber(v.y) or 0
+			customOffsets[k].z = tonumber(v.z) or 0
+		end
+	end
 end
 do
 	local savedWalkFlingKeybind = decodeKeybindValue(controlSaveData.WalkFlingKeybind)
@@ -2735,12 +2756,15 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 			or getHorizontalUnit(targetRoot.CFrame.LookVector)
 			or Vector3.new(0, 0, -1)
 		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * 0.8) + Vector3.new(0, 1.2, 0), predictedTargetPosition, worldUpVector)
-	elseif mode == "Ultra" then
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 7.5, 0), predictedTargetPosition, worldUpVector)
-	elseif mode == "Ultra+" then
-		local angle = tick() * 8
-		local offset = Vector3.new(math.cos(angle) * 1.5, 8.2, math.sin(angle) * 1.5)
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + offset, predictedTargetPosition, worldUpVector)
+	elseif mode == "Middle" then
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 0.1, 0), predictedTargetPosition, worldUpVector)
+	elseif string.find(tostring(mode), "Custom") then
+		local offsets = customOffsets[mode] or { x = 0, y = 0, z = 0 }
+		local offsetVec = Vector3.new(offsets.x, offsets.y, offsets.z)
+		if offsetVec.Magnitude < 0.1 then
+			offsetVec = Vector3.new(0, 0.1, 0)
+		end
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + offsetVec, predictedTargetPosition, worldUpVector)
 	end
 	
 	if not finalCFrame then
@@ -6205,16 +6229,98 @@ safeZone.toggleControl = tog({
 	end,
 })
 safeZone.toggleControl.Frame.LayoutOrder = 10000
+local customOffsetFrame = makeControlFrame(75)
+customOffsetFrame.Visible = false
+
+local function createOffsetInput(label, axis, position)
+	local labelObj = Instance.new("TextLabel")
+	labelObj.BackgroundTransparency = 1
+	labelObj.Position = UDim2.fromScale(position, 0.2)
+	labelObj.Size = UDim2.fromScale(0.1, 0.3)
+	labelObj.Font = Enum.Font.GothamBold
+	labelObj.Text = label
+	labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
+	labelObj.TextScaled = true
+	labelObj.Parent = customOffsetFrame
+
+	local box = Instance.new("TextBox")
+	box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+	box.BorderSizePixel = 0
+	box.Position = UDim2.fromScale(position, 0.5)
+	box.Size = UDim2.fromScale(0.25, 0.4)
+	box.Font = Enum.Font.GothamMedium
+	box.TextColor3 = Color3.fromRGB(255, 200, 200)
+	box.TextScaled = true
+	box.ClearTextOnFocus = false
+	box.Text = "0"
+	box.Parent = customOffsetFrame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = box
+
+	box.Focused:Connect(function()
+		box.Text = ""
+	end)
+
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		local text = box.Text
+		local filtered = text:gsub("[^-0-9%.]", "")
+		if filtered ~= text then
+			box.Text = filtered
+		end
+	end)
+
+	box.FocusLost:Connect(function()
+		local val = tonumber(box.Text)
+		if val == nil then
+			if customOffsets[attackTpMode] then
+				box.Text = tostring(customOffsets[attackTpMode][axis])
+			else
+				box.Text = "0"
+			end
+		else
+			box.Text = tostring(val)
+			if customOffsets[attackTpMode] then
+				customOffsets[attackTpMode][axis] = val
+				controlSaveData.CustomOffsets = customOffsets
+				saveSliderSaveData()
+			end
+		end
+	end)
+
+	return box
+end
+
+local xInput = createOffsetInput("X", "x", 0.05)
+local yInput = createOffsetInput("Y", "y", 0.375)
+local zInput = createOffsetInput("Z", "z", 0.7)
+
+local function updateCustomUI()
+	local isCustom = string.find(tostring(attackTpMode), "Custom") ~= nil
+	customOffsetFrame.Visible = isCustom
+	if isCustom then
+		local off = customOffsets[attackTpMode] or {x=0,y=0,z=0}
+		xInput.Text = tostring(off.x)
+		yInput.Text = tostring(off.y)
+		zInput.Text = tostring(off.z)
+	end
+end
+
 Dropdown({
 	namedropdown = "TP Modes",
 	saveKey = "AttackTpMode",
-	inside = { "Above", "Under", "Behind", "Aggressive", "Ultra" },
+	inside = { "Above", "Under", "Behind", "Middle", "Aggressive", "Custom 1", "Custom 2", "Custom 3", "Custom 4", "Custom 5", "Custom 6", "Custom 7", "Custom 8", "Custom 9", "Custom 10" },
 	multi = false,
 	deffultin = attackTpMode or "Behind",
 	fun = function(value)
 		attackTpMode = value
+		updateCustomUI()
 	end,
 })
+
+customOffsetFrame.Parent = uiX
+updateCustomUI()
 task.spawn(function()
 	if game.GameId ~= 3808081382 then
 		return
