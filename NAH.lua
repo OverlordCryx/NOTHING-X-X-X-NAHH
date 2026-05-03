@@ -572,7 +572,7 @@ local flyKeybind = Enum.KeyCode.R
 local camLockKeybind = Enum.KeyCode.Z
 local attackTpKeybind = Enum.KeyCode.T
 local targetSelectKeybind = Enum.KeyCode.C
-setBackKeybind = Enum.KeyCode.V
+setBackKeybind = Enum.KeyCode.N
 local getTrashState = {
 	keybind = Enum.KeyCode.LeftControl,
 	running = false,
@@ -677,6 +677,24 @@ local function getCustomDisplayName(i)
 	return string.format("Custom %s (%s,%s,%s)", tostring(i), tostring(off.z), tostring(off.y), tostring(off.x))
 end
 local worldUpVector = Vector3.new(0, 1, 0)
+local placesTPs = {
+	["Middle Of Map"] = CFrame.new(139, 440, 32),
+	["Prison"] = CFrame.new(438, 439, -376),
+	["Montain 1"] = CFrame.new(-15, 653, -388),
+	["Montain 2"] = CFrame.new(322, 671, 446),
+	["Counter"] = CFrame.new(-68, 39, 20346),
+	["Counter Up"] = CFrame.new(-78, 94, 20354),
+	["Atomic Base"] = CFrame.new(1063, 40, 23006),
+	["Atomic Base Up"] = CFrame.new(1063, 415, 23006),
+	["Atomic Slash"] = CFrame.new(1063, 141, 23006),
+	["Atomic Slash Up"] = CFrame.new(1063, 190, 23006),
+}
+local placesOrder = {
+	"Middle Of Map", "Prison", "Montain 1", "Montain 2",
+	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
+	"Atomic Slash", "Atomic Slash Up"
+}
+local selectedPlace = placesOrder[1]
 local autoTpEnabled = false
 local flingEnabled = false
 walkFlingEnabled = false
@@ -850,7 +868,7 @@ local function parseEnabledValue(value)
 end
 local function updateKeybindText()
 	local lines = {}
-	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "Custom" }
+	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "Custom", "Places" }
 	local function appendEntry(entry)
 		if not entry then
 			return
@@ -885,6 +903,15 @@ local function updateKeybindText()
 		return
 	end
 	keybindText.Text = table.concat(lines, "\n")
+end
+local function syncPlacesKeybindDisplay()
+	if game.GameId ~= 3808081382 then return end
+	keybindEntries.Places = {
+		name = "Places TP",
+		keybind = "`",
+		hideState = true,
+	}
+	updateKeybindText()
 end
 function syncSetBackKeybindDisplay()
 	keybindEntries.SetBack = {
@@ -6220,6 +6247,18 @@ flingModeControls = _G["4tog_on_one_frame"]({
 		setFlingAllEnabled(enabled)
 	end,
 })
+if game.GameId == 3808081382 then
+	Dropdown({
+		namedropdown = "Places",
+		inside = placesOrder,
+		multi = false,
+		deffultin = "Middle Of Map",
+		fun = function(value)
+			selectedPlace = value
+		end,
+	}).Frame.LayoutOrder = 999998
+end
+
 safeZone.toggleControl = tog({
 	name = "Safe Zone",
 	default = safeZone.enabled,
@@ -6240,7 +6279,8 @@ safeZone.toggleControl = tog({
 		end
 	end,
 })
-safeZone.toggleControl.Frame.LayoutOrder = 10000
+safeZone.toggleControl.Frame.LayoutOrder = 999999
+syncPlacesKeybindDisplay()
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
 local function getTPModeItems()
@@ -6846,10 +6886,29 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			end
 		end
 	end
+	local key = input.KeyCode
+	local isBacktick = (key.Name == "BackQuote" or key.Name == "Backquote" or key == Enum.KeyCode.Tilde or key.Value == 96 or key.Value == 126)
+	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick then
+		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2"
+		if isMapLocation then
+			local xmap = Workspace:FindFirstChild("Map")
+			if not (xmap and xmap:FindFirstChild("MainPart")) then
+				return
+			end
+		end
+		local cf = placesTPs[selectedPlace]
+		if cf then
+			local character = player.Character
+			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+			if characterRoot then
+				applyTeleportRootState(characterRoot, cf)
+			end
+		end
+		return
+	end
 	if gameProcessed then
 		return
 	end
-	local key = input.KeyCode
 	if key == Enum.KeyCode.LeftAlt then
 		setSettingsVisible(not settingsOpen)
 		return
