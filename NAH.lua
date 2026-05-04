@@ -592,6 +592,10 @@ local getTrashState = {
 }
 setBackSavedCFrame = nil
 setBackCollisionState = nil
+setBackPressToken = 0
+setBackLastPressAt = 0
+setBackPressCount = 0
+setBackTravelToken = 0
 local lastDeathCFrame = nil
 local active = false
 local speedLoopRunning = false
@@ -1467,6 +1471,7 @@ local function stopFly()
 	syncFlyKeybindDisplay()
 end
 function stopSetBackTravel()
+	setBackTravelToken = (setBackTravelToken or 0) + 1
 	if setBackTravelConn then
 		setBackTravelConn:Disconnect()
 		setBackTravelConn = nil
@@ -2012,65 +2017,32 @@ function startSetBackTravel()
 	if (_G.SafeTeleportLock == true) then
 		return false
 	end
-	local currentCharacter = player.Character
-	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-	if not currentRoot or not setBackSavedCFrame then
+	local character = player.Character
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if not rootPart or not setBackSavedCFrame then
 		return false
 	end
 	stopSetBackTravel()
-	setSetBackNoclipEnabled(true)
-	zeroLocalPlayerRoot()
-	local lastDistance = nil
-	local stalledFor = 0
-	setBackTravelConn = RunService.Heartbeat:Connect(function(dt)
-		local liveCharacter = player.Character
-		local liveRoot = liveCharacter and liveCharacter:FindFirstChild("HumanoidRootPart")
-		if not liveRoot or not setBackSavedCFrame then
-			stopSetBackTravel()
-			return
-		end
-		local destination = setBackSavedCFrame
-		local delta = destination.Position - liveRoot.Position
-		local distance = delta.Magnitude
-		local liveHumanoid = liveCharacter and liveCharacter:FindFirstChildOfClass("Humanoid")
-		if lastDistance and distance >= (lastDistance - 0.15) then
-			stalledFor += dt
-		else
-			stalledFor = 0
-		end
-		lastDistance = distance
-		if distance <= 2 then
-			liveRoot.CFrame = getUprightSetBackCFrame(destination.Position, destination)
-			liveRoot.AssemblyLinearVelocity = Vector3.zero
-			liveRoot.AssemblyAngularVelocity = Vector3.zero
-			if liveHumanoid then
-				liveHumanoid.PlatformStand = false
-				liveHumanoid.Sit = false
-				liveHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-			end
-			stopSetBackTravel()
-			return
-		end
-		if stalledFor >= 0.6 then
-			liveRoot.CFrame = getUprightSetBackCFrame(destination.Position, destination)
-			liveRoot.AssemblyLinearVelocity = Vector3.zero
-			liveRoot.AssemblyAngularVelocity = Vector3.zero
-			if liveHumanoid then
-				liveHumanoid.PlatformStand = false
-				liveHumanoid.Sit = false
-				liveHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-			end
-			stopSetBackTravel()
-			return
-		end
-		local step = math.min(90000 * dt, distance)
-		local nextPosition = getSetBackTravelPosition(liveRoot, destination, step)
-		liveRoot.CFrame = getUprightSetBackCFrame(nextPosition, destination)
-		liveRoot.AssemblyLinearVelocity = Vector3.zero
-		liveRoot.AssemblyAngularVelocity = Vector3.zero
-		if liveHumanoid then
-			liveHumanoid.PlatformStand = false
-			liveHumanoid.Sit = false
+	local runToken = setBackTravelToken
+	local startCF = rootPart.CFrame
+	local destCF = setBackSavedCFrame
+	task.spawn(function()
+		if setBackTravelToken ~= runToken then return end
+		applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.25))
+		task.wait(0.03)
+		if setBackTravelToken ~= runToken then return end
+		applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.5))
+		task.wait(0.03)
+		if setBackTravelToken ~= runToken then return end
+		applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.75))
+		task.wait(0.03)
+		if setBackTravelToken ~= runToken then return end
+		applyTeleportRootState(rootPart, destCF)
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.PlatformStand = false
+			humanoid.Sit = false
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 		end
 	end)
 	return true
@@ -2092,37 +2064,39 @@ function handleSetBackKeybind()
 	if (_G.SafeTeleportLock == true) then
 		return
 	end
-	if setBackTravelConn then
-		stopSetBackTravel()
-		return
-	end
 	local now = tick()
-	setBackPressToken = setBackPressToken + 1
+	local timeSinceLast = now - setBackLastPressAt
+	if timeSinceLast > 0.4 then
+		setBackPressCount = 0
+	end
+	if timeSinceLast > 0.05 then
+		setBackPressCount = math.min(setBackPressCount + 1, 4)
+	end
+	setBackLastPressAt = now
+	setBackPressToken = (setBackPressToken or 0) + 1
 	local currentToken = setBackPressToken
-	if now - setBackLastPressAt <= 0.35 then
-		setBackLastPressAt = 0
+	if setBackPressCount == 1 then
+		task.delay(0.25, function()
+			if setBackPressToken == currentToken then
+				if setBackSavedCFrame then
+					startSetBackTravel()
+				end
+				setBackPressCount = 0
+			end
+		end)
+	elseif setBackPressCount == 2 then
 		if setBackSavedCFrame then
 			clearSetBackPosition()
 		else
 			saveSetBackPosition()
 		end
-		return
-	end
-	if not setBackSavedCFrame then
-		setBackLastPressAt = 0
+	elseif setBackPressCount == 3 then
 		saveSetBackPosition()
-		return
-	end
-	setBackLastPressAt = now
-	task.delay(0.35, function()
-		if currentToken ~= setBackPressToken or setBackLastPressAt ~= now then
-			return
-		end
-		setBackLastPressAt = 0
+	elseif setBackPressCount == 4 then
 		if setBackSavedCFrame then
 			startSetBackTravel()
 		end
-	end)
+	end
 end
 local function toggleFly(nextState)
 	if (nextState == nil or nextState == true) and (_G.SafeTeleportLock == true) then
