@@ -591,10 +591,8 @@ local getTrashState = {
 	blockSetBack = false,
 }
 setBackSavedCFrame = nil
-setBackTravelConn = nil
-setBackPressToken = 0
-setBackLastPressAt = 0
 setBackCollisionState = nil
+local lastDeathCFrame = nil
 local active = false
 local speedLoopRunning = false
 local holdingW = false
@@ -613,26 +611,7 @@ local flySpeed = 1.5
 local flySpeedMultiplier = 555
 local velocity = Vector3.new()
 local currentVel = Vector3.new()
-local safeZone = {
-	enabled = false,
-	pointStart = 3e3,
-	pointAdd = 3e3,
-	pointMax = 33e33,
-	pointCurrent = 3e3,
-	lowHp = 30,
-	returnHp = 47,
-	savedCFrame = nil,
-	travelConn = nil,
-	travelMode = nil,
-	atDestination = false,
-	toggleControl = nil,
-	targetDisplayAccumulator = 0,
-}
-local function isSafeZoneBlocking()
-	return _G.SafeTeleportLock == true or (safeZone and (safeZone.travelMode ~= nil or safeZone.atDestination == true))
-end
-local normalizeSafeZoneSigned
-local normalizeSafeZonePositive
+local targetDisplayAccumulator = 0
 local camLockEnabled = false
 local camLockTarget = nil
 local camLockWaiting = false
@@ -767,24 +746,6 @@ local function decodeKeybindValue(value)
 	end
 	return nil
 end
-normalizeSafeZoneSigned = function(value)
-	local parsed = tonumber(value)
-	if parsed == nil or parsed == 0 then
-		return safeZone.step
-	end
-	local sign = parsed < 0 and -1 or 1
-	local snapped = math.floor((math.abs(parsed) / safeZone.step) + 0.5) * safeZone.step
-	snapped = math.clamp(snapped, safeZone.step, safeZone.maxValue)
-	return snapped * sign
-end
-normalizeSafeZonePositive = function(value)
-	local parsed = tonumber(value)
-	if parsed == nil or parsed <= 0 then
-		return safeZone.step
-	end
-	local snapped = math.floor((parsed / safeZone.step) + 0.5) * safeZone.step
-	return math.clamp(snapped, safeZone.step, safeZone.maxValue)
-end
 local function loadSliderSaveData()
 	if type(isfile) ~= "function" or type(readfile) ~= "function" then
 		return
@@ -831,9 +792,6 @@ if tonumber(controlSaveData.AuraRange) then
 end
 if type(controlSaveData.WalkFlingUseNormal) == "boolean" then
 	walkFlingUseNormal = controlSaveData.WalkFlingUseNormal
-end
-if type(controlSaveData.AutoSafeZone) == "boolean" then
-	safeZone.enabled = controlSaveData.AutoSafeZone
 end
 if type(controlSaveData.AttackTpMode) == "string" then
 	attackTpMode = controlSaveData.AttackTpMode
@@ -1469,7 +1427,7 @@ local function updateMovement()
 	end
 end
 local function toggleSpeed(nextState)
-	if (nextState == nil or nextState == true) and isSafeZoneBlocking() then
+	if (nextState == nil or nextState == true) and (_G.SafeTeleportLock == true) then
 		return active and "ON" or "OFF"
 	end
 	if nextState == nil then
@@ -2051,7 +2009,7 @@ function getSetBackTravelPosition(currentRoot, destination, step)
 	return currentRoot.Position + Vector3.new(0, 8, 0)
 end
 function startSetBackTravel()
-	if isSafeZoneBlocking() then
+	if (_G.SafeTeleportLock == true) then
 		return false
 	end
 	local currentCharacter = player.Character
@@ -2117,85 +2075,6 @@ function startSetBackTravel()
 	end)
 	return true
 end
-local function stopSafeZoneTravel()
-	if safeZone.travelConn then
-		if safeZone.travelConn.Disconnect then
-			safeZone.travelConn:Disconnect()
-		end
-		safeZone.travelConn = nil
-	end
-	safeZone.travelMode = nil
-	local currentCharacter = player.Character
-	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-	if currentRoot then
-		currentRoot.AssemblyLinearVelocity = Vector3.zero
-		currentRoot.AssemblyAngularVelocity = Vector3.zero
-	end
-end
-local function getFlatUnitVector(vector, fallback)
-	local flat = Vector3.new(vector.X, 0, vector.Z)
-	if flat.Magnitude <= 0.001 then
-		return fallback
-	end
-	return flat.Unit
-end
-local function getSafeZoneDestination(sourceCFrame)
-	local forward = getFlatUnitVector(sourceCFrame.LookVector, Vector3.new(0, 0, -1))
-	local right = getFlatUnitVector(sourceCFrame.RightVector, Vector3.new(1, 0, 0))
-	local point = math.clamp(safeZone.pointCurrent or safeZone.pointStart, safeZone.pointStart, safeZone.pointMax)
-	local offset = (right * point)
-		+ (forward * point)
-		+ Vector3.new(0, point, 0)
-	return getUprightSetBackCFrame(sourceCFrame.Position + offset, sourceCFrame)
-end
-local function canSaveSafeZonePosition(character, rootPart, humanoid)
-	if not character or not rootPart or not humanoid then
-		return false
-	end
-	if humanoid.FloorMaterial ~= Enum.Material.Air then
-		return true
-	end
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	rayParams.FilterDescendantsInstances = { character }
-	rayParams.IgnoreWater = false
-	local hit = Workspace:Raycast(rootPart.Position, Vector3.new(0, -8, 0), rayParams)
-	return hit ~= nil
-end
-local function setNothingXProtectionEnabled(enabled)
-	local protection = _G.NOTHINGX_Protection
-	if type(protection) == "table" then
-		protection.Enabled = enabled == true
-	end
-end
-local function startSafeZoneTravel(destination, mode, onComplete)
-	if not destination then
-		return false
-	end
-	stopSafeZoneTravel()
-	safeZone.travelMode = mode
-	local liveCharacter = player.Character
-	local liveRoot = liveCharacter and liveCharacter:FindFirstChild("HumanoidRootPart")
-	local liveHumanoid = liveCharacter and liveCharacter:FindFirstChildOfClass("Humanoid")
-	if not liveRoot then
-		stopSafeZoneTravel()
-		return false
-	end
-	zeroLocalPlayerRoot()
-	liveRoot.CFrame = getUprightSetBackCFrame(destination.Position, destination)
-	liveRoot.AssemblyLinearVelocity = Vector3.zero
-	liveRoot.AssemblyAngularVelocity = Vector3.zero
-	if liveHumanoid then
-		liveHumanoid.PlatformStand = false
-		liveHumanoid.Sit = false
-		liveHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-	end
-	stopSafeZoneTravel()
-	if onComplete then
-		onComplete()
-	end
-	return true
-end
 function handleSetBackKeybind()
 	if getTrashState.blockSetBack
 		and not getTrashState.running
@@ -2210,7 +2089,7 @@ function handleSetBackKeybind()
 	if getTrashState.blockSetBack then
 		return
 	end
-	if isSafeZoneBlocking() then
+	if (_G.SafeTeleportLock == true) then
 		return
 	end
 	if setBackTravelConn then
@@ -2246,7 +2125,7 @@ function handleSetBackKeybind()
 	end)
 end
 local function toggleFly(nextState)
-	if (nextState == nil or nextState == true) and isSafeZoneBlocking() then
+	if (nextState == nil or nextState == true) and (_G.SafeTeleportLock == true) then
 		return flying and "ON" or "OFF"
 	end
 	if nextState == nil then
@@ -2353,6 +2232,9 @@ local function bindLocalCharacter(newChar)
 	end
 	if hum then
 		localCharacterDiedConnection = hum.Died:Connect(function()
+			if root and root.Position.Y >= 0 then
+				lastDeathCFrame = root.CFrame
+			end
 			_G.NOTHINGX_PendingFlyRespawn = flying == true
 			attackTpHolding = false
 			stopSetBackTravel()
@@ -3526,7 +3408,7 @@ end
         stayPos = nil
     end
     local function setStayState(state)
-        if (state == nil or state == true) and isSafeZoneBlocking() then
+        if (state == nil or state == true) and (_G.SafeTeleportLock == true) then
             return
         end
         isActive = state == true
@@ -4158,86 +4040,200 @@ function initProtectionRuntime()
 	print("(-) " .. tostring(protection.VOID_Y) .. " (-)")
 end
 initProtectionRuntime()
-local function initFastAntiVoid()
-	local localSafeCFrame   = nil
-	local lastFrameY        = nil
-	local fastRescuing      = false
-	local RESCUE_BUFFER             = 175
-	local SUDDEN_DROP_THRESHOLD     = 350
-	local SUDDEN_DROP_VOID_MARGIN   = 700
-	local MAX_DOWN_VELOCITY         = -500
-	local DANGER_ZONE_ABOVE_VOID    = 500
-	local SAFE_SAVE_MIN_ABOVE_VOID  = 280
-	RunService.Heartbeat:Connect(function()
-		if fastRescuing or _G.SafeTeleportLock then
-			return
+local ANTI_VOID_SAVE_SLOTS = 10
+local ANTI_VOID_DUPE_RADIUS = 3            
+local antiVoidState = {
+	saveSlots           = {},               
+	saveIndex           = 0,                
+	lastFrameY          = nil,
+	rescuing            = false,
+	holdActive          = false,
+	holdCFrame          = nil,
+	VOID_BUFFER              = 200,
+	EXTREME_DROP_INSTANT     = 3000,
+	KILL_VOID_ABSOLUTE       = -2500,
+	SUDDEN_DROP_THRESHOLD    = 400,
+	SUDDEN_DROP_VOID_MARGIN  = 900,
+	MAX_DOWN_VELOCITY        = -450,
+	DANGER_ZONE_ABOVE_VOID   = 600,
+	SAFE_SAVE_MIN_ABOVE_VOID = 200,
+	HOLD_DURATION            = 3.0,
+}
+local function getVoidY()
+	local p = _G.NOTHINGX_Protection
+	if p and type(p.VOID_Y) == "number" then
+		return p.VOID_Y
+	end
+	return -500
+end
+local antiVoidRayParams = RaycastParams.new()
+antiVoidRayParams.FilterType = Enum.RaycastFilterType.Exclude
+antiVoidRayParams.IgnoreWater = true
+local function isStandingOnPart(char, hrp)
+	antiVoidRayParams.FilterDescendantsInstances = { char }
+	local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -6, 0), antiVoidRayParams)
+	return hit ~= nil and hit.Instance ~= nil
+end
+local function isDuplicatePosition(pos)
+	local s = antiVoidState
+	for _, cf in ipairs(s.saveSlots) do
+		if (cf.Position - pos).Magnitude < ANTI_VOID_DUPE_RADIUS then
+			return true
 		end
+	end
+	return false
+end
+local function pushGroundedSave(cframe)
+	local s = antiVoidState
+	s.saveIndex = (s.saveIndex % ANTI_VOID_SAVE_SLOTS) + 1
+	s.saveSlots[s.saveIndex] = cframe
+end
+local function getBestRescueCFrame()
+	local s = antiVoidState
+	for i = 0, ANTI_VOID_SAVE_SLOTS - 1 do
+		local idx = ((s.saveIndex - 1 - i) % ANTI_VOID_SAVE_SLOTS) + 1
+		local cf = s.saveSlots[idx]
+		if cf and cf.Position.Y >= 0 then
+			return cf
+		end
+	end
+	local p = _G.NOTHINGX_Protection
+	if p and p.lastSafePosition then return p.lastSafePosition end
+	local map = Workspace:FindFirstChild("Map")
+	local main = map and map:FindFirstChild("MainPart")
+	if main then return main.CFrame + Vector3.new(0, 180, 0) end
+	return CFrame.new(139, 620, 32)
+end
+RunService.Heartbeat:Connect(function()
+	local s = antiVoidState
+	if s.rescuing or s.holdActive then return end
+	local char     = player.Character
+	local hrp      = char and char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not humanoid or humanoid.Health <= 0 then return end
+	local y = hrp.Position.Y
+	if humanoid.FloorMaterial ~= Enum.Material.Air
+		and y >= 0
+		and y > getVoidY() + s.SAFE_SAVE_MIN_ABOVE_VOID
+		and isStandingOnPart(char, hrp)
+		and not isDuplicatePosition(hrp.Position)
+	then
+		pushGroundedSave(hrp.CFrame)
+	end
+end)
+local holdConnection = nil
+local function startHold(targetCFrame, duration)
+	local s = antiVoidState
+	s.holdActive = true
+	s.holdCFrame = targetCFrame
+	if holdConnection then
+		pcall(function() holdConnection:Disconnect() end)
+		holdConnection = nil
+	end
+	local elapsed = 0
+	holdConnection = RunService.Heartbeat:Connect(function(dt)
+		elapsed = elapsed + dt
+		local char = player.Character
+		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp and hrp.Parent then
+			hrp.AssemblyLinearVelocity  = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			hrp.CFrame = s.holdCFrame
+		end
+		if elapsed >= duration then
+			if holdConnection then
+				holdConnection:Disconnect()
+				holdConnection = nil
+			end
+			s.holdActive  = false
+			s.holdCFrame  = nil
+			s.rescuing    = false
+			s.lastFrameY  = nil
+		end
+	end)
+end
+local function doRescue(hrp, ignoreLock)
+	local s = antiVoidState
+	if s.rescuing then return end
+	if (not ignoreLock) and _G.SafeTeleportLock then return end
+	local target = getBestRescueCFrame()
+	if not target then return end
+	s.rescuing          = true
+	_G.SafeTeleportLock = true
+	s.lastFrameY        = target.Position.Y
+	for _ = 1, 3 do
+		if hrp and hrp.Parent then
+			hrp.AssemblyLinearVelocity  = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			hrp.CFrame = target
+		end
+	end
+	task.defer(function()
+		if hrp and hrp.Parent then
+			hrp.AssemblyLinearVelocity  = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			hrp.CFrame = target
+		end
+	end)
+	task.defer(function()
+		task.defer(function()
+			if hrp and hrp.Parent then
+				hrp.AssemblyLinearVelocity  = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+				hrp.CFrame = target
+			end
+		end)
+	end)
+	task.delay(0.4, function()
+		_G.SafeTeleportLock = false
+		s.rescuing = false
+	end)
+	startHold(target, s.HOLD_DURATION)
+end
+local function initFastAntiVoid()
+	local s = antiVoidState
+	RunService.Heartbeat:Connect(function()
+		if s.holdActive then return end
 		local char     = player.Character
 		local hrp      = char and char:FindFirstChild("HumanoidRootPart")
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 		if not hrp or not humanoid or humanoid.Health <= 0 then
-			lastFrameY = nil
+			s.lastFrameY = nil
 			return
 		end
-		local voidY = (protection and type(protection.VOID_Y) == "number")
-			and protection.VOID_Y
-			or -500
-		local pos = hrp.Position
-		local y   = pos.Y
-		if humanoid.FloorMaterial ~= Enum.Material.Air
-			and y > voidY + SAFE_SAVE_MIN_ABOVE_VOID
-		then
-			localSafeCFrame = hrp.CFrame
+		local y     = hrp.Position.Y
+		local voidY = getVoidY()
+		local extremeDrop = s.lastFrameY and (s.lastFrameY - y) >= s.EXTREME_DROP_INSTANT
+		local absoluteKill = y < s.KILL_VOID_ABSOLUTE
+		if (extremeDrop or absoluteKill) and not s.rescuing then
+			s.lastFrameY = y
+			doRescue(hrp, true)
+			return
+		end
+		if s.rescuing or _G.SafeTeleportLock then
+			s.lastFrameY = y
+			return
 		end
 		local needsRescue = false
-		if y < voidY + RESCUE_BUFFER then
+		if y < voidY + s.VOID_BUFFER then
 			needsRescue = true
 		end
-		if not needsRescue and lastFrameY and not flying then
-			local drop = lastFrameY - y
-			if drop >= SUDDEN_DROP_THRESHOLD and y < voidY + SUDDEN_DROP_VOID_MARGIN then
+		if not needsRescue and s.lastFrameY and not flying then
+			local drop = s.lastFrameY - y
+			if drop >= s.SUDDEN_DROP_THRESHOLD and y < voidY + s.SUDDEN_DROP_VOID_MARGIN then
 				needsRescue = true
 			end
 		end
 		if not needsRescue and not flying then
 			local velY = hrp.AssemblyLinearVelocity.Y
-			if velY < MAX_DOWN_VELOCITY and y < voidY + DANGER_ZONE_ABOVE_VOID then
+			if velY < s.MAX_DOWN_VELOCITY and y < voidY + s.DANGER_ZONE_ABOVE_VOID then
 				needsRescue = true
 			end
 		end
-		lastFrameY = y
-		if not needsRescue then
-			return
+		s.lastFrameY = y
+		if needsRescue then
+			doRescue(hrp, false)
 		end
-		local rescueCFrame = localSafeCFrame
-		if not rescueCFrame and protection and protection.lastSafePosition then
-			rescueCFrame = protection.lastSafePosition
-		end
-		if not rescueCFrame then
-			return
-		end
-		fastRescuing       = true
-		_G.SafeTeleportLock = true
-		lastFrameY         = rescueCFrame.Position.Y
-		hrp.AssemblyLinearVelocity  = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
-		hrp.CFrame = rescueCFrame
-		task.defer(function()
-			if hrp and hrp.Parent then
-				hrp.AssemblyLinearVelocity  = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
-				hrp.CFrame = rescueCFrame
-			end
-		end)
-		task.delay(0.18, function()
-			if hrp and hrp.Parent then
-				hrp.AssemblyLinearVelocity  = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
-				hrp.CFrame = rescueCFrame
-			end
-			_G.SafeTeleportLock = false
-			fastRescuing = false
-		end)
 	end)
 end
 initFastAntiVoid()
@@ -5279,7 +5275,7 @@ toggleView = function(nextState)
 	return viewing and "ON" or "OFF"
 end
 function teleportToSelectedTarget()
-	if isSafeZoneBlocking() then
+	if (_G.SafeTeleportLock == true) then
 		return
 	end
 	if not hasSelectedTargetOrPendingPlayer() then
@@ -6308,27 +6304,6 @@ if game.GameId == 3808081382 then
 	})
 	placesDropdown.Frame.LayoutOrder = 999998
 end
-safeZone.toggleControl = tog({
-	name = "Safe Zone",
-	default = safeZone.enabled,
-	saveKey = "AutoSafeZone",
-	fun = function(enabled)
-		safeZone.enabled = enabled
-		if not enabled then
-			setNothingXProtectionEnabled(true)
-			if safeZone.atDestination and safeZone.savedCFrame then
-				startSafeZoneTravel(safeZone.savedCFrame, "return", function()
-					safeZone.atDestination = false
-					safeZone.savedCFrame = nil
-					safeZone.pointCurrent = safeZone.pointStart
-				end)
-			else
-				stopSafeZoneTravel()
-			end
-		end
-	end,
-})
-safeZone.toggleControl.Frame.LayoutOrder = 999999
 syncPlacesKeybindDisplay()
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
@@ -7072,9 +7047,6 @@ player.CharacterAdded:Connect(function(newChar)
 	getTrashState.keyHeld = false
 	getTrashState.savedCFrame = nil
 	getTrashState.holdCFrame = nil
-	stopSafeZoneTravel()
-	safeZone.savedCFrame = nil
-	safeZone.atDestination = false
 	bindLocalCharacter(newChar)
 	if not hum then
 		hum = newChar:WaitForChild("Humanoid")
@@ -7099,6 +7071,14 @@ player.CharacterAdded:Connect(function(newChar)
 	syncTargetPickKeybindDisplay()
 	syncSetBackKeybindDisplay()
 	updateTargetDisplay()
+	if lastDeathCFrame then
+		task.delay(0.35, function()
+			local r = newChar:FindFirstChild("HumanoidRootPart")
+			if r and lastDeathCFrame then
+				r.CFrame = lastDeathCFrame
+			end
+		end)
+	end
 end)
 task.spawn(function()
 	while true do
@@ -7189,12 +7169,12 @@ do
 			shouldRefreshTargetDisplay = true
 		end
 	end
-	safeZone.targetDisplayAccumulator = (safeZone.targetDisplayAccumulator or 0) + dt
-	if shouldRefreshTargetDisplay or safeZone.targetDisplayAccumulator >= 0.15 then
-		safeZone.targetDisplayAccumulator = 0
+	targetDisplayAccumulator = (targetDisplayAccumulator or 0) + dt
+	if shouldRefreshTargetDisplay or targetDisplayAccumulator >= 0.15 then
+		targetDisplayAccumulator = 0
 		updateTargetDisplay()
 	end
-	local safeZoneBlocked = isSafeZoneBlocking()
+	local isTeleportLocked = (_G.SafeTeleportLock == true)
 	if (viewing or autoTpEnabled or flingEnabled) and not manualAttackTpPlayer and not hasSelectedTargetOrPendingPlayer() then
 		if viewing then
 			stopView()
@@ -7239,7 +7219,7 @@ do
 			end
 		end
 	end
-	if safeZoneBlocked then
+	if isTeleportLocked then
 		return
 	end
 	if not autoTpEnabled then
@@ -7303,42 +7283,6 @@ do
 	end
 	end)
 end
-task.spawn(function()
-	while true do
-		nextFrame()
-		if safeZone.enabled then
-			local character = player.Character
-			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if characterRoot and humanoid and humanoid.Health > 0 then
-				if safeZone.atDestination and safeZone.savedCFrame and humanoid.Health >= safeZone.returnHp and safeZone.travelMode ~= "return" then
-					startSafeZoneTravel(safeZone.savedCFrame, "return", function()
-						setNothingXProtectionEnabled(true)
-						safeZone.atDestination = false
-						safeZone.savedCFrame = nil
-						safeZone.pointCurrent = safeZone.pointStart
-					end)
-				elseif humanoid.Health <= safeZone.lowHp and not safeZone.atDestination and safeZone.travelMode ~= "to_safe" and canSaveSafeZonePosition(character, characterRoot, humanoid) then
-					safeZone.savedCFrame = getUprightSetBackCFrame(characterRoot.Position, characterRoot.CFrame)
-					safeZone.pointCurrent = safeZone.pointStart
-					setNothingXProtectionEnabled(false)
-					safeZone.atDestination = true
-				elseif safeZone.atDestination and safeZone.savedCFrame then
-					local safeDestination = getSafeZoneDestination(safeZone.savedCFrame)
-					startSafeZoneTravel(safeDestination, "to_safe")
-					safeZone.pointCurrent = math.clamp(safeZone.pointCurrent + safeZone.pointAdd, safeZone.pointStart, safeZone.pointMax)
-				end
-			end
-		elseif safeZone.atDestination and safeZone.savedCFrame and safeZone.travelMode ~= "return" then
-			setNothingXProtectionEnabled(true)
-			startSafeZoneTravel(safeZone.savedCFrame, "return", function()
-				safeZone.atDestination = false
-				safeZone.savedCFrame = nil
-				safeZone.pointCurrent = safeZone.pointStart
-			end)
-		end
-	end
-end)
 UserInputService.InputEnded:Connect(function(input)
 	local key = input.KeyCode
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
