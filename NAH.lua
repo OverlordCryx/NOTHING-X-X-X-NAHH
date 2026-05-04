@@ -682,6 +682,8 @@ local placesTPs = {
 	["Prison"] = CFrame.new(438, 439, -376),
 	["Montain 1"] = CFrame.new(-15, 653, -388),
 	["Montain 2"] = CFrame.new(322, 671, 446),
+	["Montain 2 Left"] = CFrame.new(240, 699, 465),
+	["Montain 2 Right"] = CFrame.new(398, 699, 404),
 	["Counter"] = CFrame.new(-68, 39, 20346),
 	["Counter Up"] = CFrame.new(-78, 94, 20354),
 	["Atomic Base"] = CFrame.new(1063, 40, 23006),
@@ -690,11 +692,12 @@ local placesTPs = {
 	["Atomic Slash Up"] = CFrame.new(1063, 190, 23006),
 }
 local placesOrder = {
-	"Middle Of Map", "Prison", "Montain 1", "Montain 2",
+	"Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right",
 	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
 	"Atomic Slash", "Atomic Slash Up"
 }
 local placesDropdown = nil
+local movementPanel = nil
 local selectedPlace = nil
 local autoTpEnabled = false
 local flingEnabled = false
@@ -915,7 +918,7 @@ local function syncPlacesKeybindDisplay()
 	local hasMain = hasMapMainPart()
 	if hasMain ~= lastHasMainState then
 		lastHasMainState = hasMain
-		local mapPlaces = { "Middle Of Map", "Prison", "Montain 1", "Montain 2" }
+		local mapPlaces = { 	"Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right", }
 		local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
 		local currentItems = {}
 		if hasMain then
@@ -953,6 +956,17 @@ local function syncPlacesKeybindDisplay()
 		hideState = true,
 	}
 	updateKeybindText()
+end
+local lastHasMainMovementState = nil
+local function syncMovementDisplay()
+	if not movementPanel then return end
+	local hasMain = hasMapMainPart()
+	if hasMain ~= lastHasMainMovementState then
+		lastHasMainMovementState = hasMain
+		if movementPanel.Button3 and movementPanel.Button3.Button then
+			movementPanel.Button3.Button.Visible = hasMain
+		end
+	end
 end
 function syncSetBackKeybindDisplay()
 	keybindEntries.SetBack = {
@@ -3589,30 +3603,29 @@ end
             end
         end)
     end
-    local hasDummyMainPart = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MainPart")
     local supportsDashBlock = game.GameId == 3808081382
     local createMovementPanel = _G["2tog_on_one_button"]
     while type(createMovementPanel) ~= "function" do
         nextFrame()
         createMovementPanel = _G["2tog_on_one_button"]
     end
-    local panel = createMovementPanel({
+    movementPanel = createMovementPanel({
         title = "Movement",
         name1 = "Stay",
         name2 = supportsDashBlock and "Dash Block" or nil,
         buttonName = "Fix Camera",
         buttonName2 = "Lay",
-        buttonName3 = hasDummyMainPart and "Dummy" or nil,
+        buttonName3 = "Dummy",
         default1 = false,
         default2 = supportsDashBlock and false or nil,
         fun1 = setStayState,
         fun2 = supportsDashBlock and setDashBlockRuntime or nil,
         buttonfun = fixCamera,
         buttonfun2 = layCharacter,
-        buttonfun3 = hasDummyMainPart and teleportToWeakestDummy or nil,
+        buttonfun3 = teleportToWeakestDummy,
     })
-    StayToggle = panel.First
-    DashToggle = panel.Second
+    StayToggle = movementPanel.First
+    DashToggle = movementPanel.Second
     player.CharacterAdded:Connect(function()
         if isActive then
             cleanupStay()
@@ -6928,7 +6941,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if not selectedPlace or selectedPlace == "" then
 			return
 		end
-		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2"
+		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
 		if isMapLocation then
 			local xmap = Workspace:FindFirstChild("Map")
 			if not (xmap and xmap:FindFirstChild("MainPart")) then
@@ -7606,6 +7619,7 @@ task.spawn(function()
     while true do
         syncPlacesKeybindDisplay()
         syncGetTrashKeybindDisplay()
+        syncMovementDisplay()
         task.wait(1)
     end
 end)
