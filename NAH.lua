@@ -2091,7 +2091,7 @@ function startSetBackTravel()
 			stopSetBackTravel()
 			return
 		end
-		local step = math.min(6000 * dt, distance)
+		local step = math.min(90000 * dt, distance)
 		local nextPosition = getSetBackTravelPosition(liveRoot, destination, step)
 		liveRoot.CFrame = getUprightSetBackCFrame(nextPosition, destination)
 		liveRoot.AssemblyLinearVelocity = Vector3.zero
