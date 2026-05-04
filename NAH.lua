@@ -3698,7 +3698,7 @@ end
         end
         if player.Character then task.spawn(SetupCombatCharacter, player.Character) end
         player.CharacterAdded:Connect(function(c) task.spawn(SetupCombatCharacter, c) end)
-        local combatHolder = panel.Frame
+        local combatHolder = movementPanel.Frame
         combatHolder.Size = UDim2.new(1, -4, 0, 108)
         local combatRow = Instance.new("Frame")
         combatRow.BackgroundTransparency = 1
