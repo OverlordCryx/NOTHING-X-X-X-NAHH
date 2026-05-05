@@ -683,6 +683,7 @@ local placesDropdown = nil
 local movementPanel = nil
 local selectedPlace = nil
 local autoTpEnabled = false
+local trashBlockEnabled = false
 local flingEnabled = false
 walkFlingEnabled = false
 auraFlingEnabled = false
@@ -796,6 +797,9 @@ if tonumber(controlSaveData.AuraRange) then
 end
 if type(controlSaveData.WalkFlingUseNormal) == "boolean" then
 	walkFlingUseNormal = controlSaveData.WalkFlingUseNormal
+end
+if type(controlSaveData.BLClickTrash) == "boolean" then
+	trashBlockEnabled = controlSaveData.BLClickTrash
 end
 if type(controlSaveData.AttackTpMode) == "string" then
 	attackTpMode = controlSaveData.AttackTpMode
@@ -2292,6 +2296,9 @@ local function hasLiveStoredTarget(model)
 end
 _G.lastValidTrashTime = 0
 function isTpBlocked()
+	if not trashBlockEnabled then
+		return false
+	end
 	local character = player.Character
 	if not character then
 		return false
@@ -3495,6 +3502,8 @@ end
         buttonfun2 = layCharacter,
         buttonfun3 = teleportToWeakestDummy,
     })
+    
+
     StayToggle = movementPanel.First
     DashToggle = movementPanel.Second
     player.CharacterAdded:Connect(function()
@@ -3587,7 +3596,7 @@ end
             btn.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
             btn.BackgroundTransparency = 0.06
             btn.BorderSizePixel = 0
-            btn.Size = UDim2.new(1/3, -5, 1, 0)
+            btn.Size = UDim2.new(1/4, -5, 1, 0)
             btn.AutoButtonColor = false
             btn.Font = Enum.Font.GothamBold
             btn.Text = text
@@ -3630,6 +3639,9 @@ end
             workspace:SetAttribute("EffectAffects", val and 1 or 0)
             workspace:SetAttribute("NoDashCooldown", val)
         end, "NoDashCD")
+        makeCombatToggle("BL click Trash", function(val)
+            trashBlockEnabled = val
+        end, "BLClickTrash")
     end
 end)
 task.spawn(function()
