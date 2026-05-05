@@ -62,11 +62,11 @@ local function overpowerRootState(rootPart, targetCFrame, linearVelocity, angula
 		end
 	end)
 end
-local function applyTeleportRootState(rootPart, targetCFrame, linearVelocity)
+local function applyTeleportRootState(rootPart, targetCFrame, linearVelocity, angularVelocity)
 	if not rootPart or not rootPart.Parent or not targetCFrame then
 		return
 	end
-	overpowerRootState(rootPart, targetCFrame, linearVelocity or Vector3.zero, Vector3.zero)
+	overpowerRootState(rootPart, targetCFrame, linearVelocity or Vector3.zero, angularVelocity or Vector3.zero)
 end
 local player = Players.LocalPlayer
 if not player then
@@ -633,15 +633,15 @@ local syncModelDropdownSelectionToManualTarget
 local stopView
 local startView
 local toggleView
-local attackTpBehindDistance = 1.85
-local attackTpAirBehindDistance = 1.15
-local attackTpLeadTime = 0.03
-local attackTpAirLeadTime = 0.06
-local attackTpMaxHorizontalLead = 4.5
-local attackTpVerticalLead = 0.04
-local attackTpMaxVerticalLead = 1.35
+local attackTpBehindDistance = 1.6
+local attackTpAirBehindDistance = 1.05
+local attackTpLeadTime = 0.02
+local attackTpAirLeadTime = 0.035
+local attackTpMaxHorizontalLead = 6.0
+local attackTpVerticalLead = 0.02
+local attackTpMaxVerticalLead = 2.0
 local attackTpGroundVerticalOffset = 0
-local attackTpAirVerticalOffset = 0.45
+local attackTpAirVerticalOffset = 0.35
 local customOffsets = {
 	["Custom 1"] = { x = 0, y = 0, z = 0 },
 	["Custom 2"] = { x = 0, y = 0, z = 0 },
@@ -2659,38 +2659,51 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	if not isAliveHumanoid(characterHumanoid) then
 		return nil, nil
 	end
-	local useAirTracking = isAirborneHumanoid(targetHumanoid) or isAirborneHumanoid(characterHumanoid)
+
+	local amFlying = flying or (_G.NOTHINGX_FlyActive == true)
+	local isTargetAir = isAirborneHumanoid(targetHumanoid)
+	local useAirTracking = isTargetAir or isAirborneHumanoid(characterHumanoid) or amFlying
+	
 	local targetVelocity = targetRoot.AssemblyLinearVelocity
 	local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
+	
 	local horizontalVelocity = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
 	local horizontalLead = horizontalVelocity * leadTime
 	if horizontalLead.Magnitude > attackTpMaxHorizontalLead then
 		horizontalLead = horizontalLead.Unit * attackTpMaxHorizontalLead
 	end
-	local verticalLead = math.clamp((targetVelocity.Y * leadTime) + attackTpVerticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
+	
+	local verticalVel = targetVelocity.Y
+	local verticalLead = (verticalVel * leadTime) + (isTargetAir and attackTpVerticalLead or 0)
+	verticalLead = math.clamp(verticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
+	
 	local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
 	local isRagdoll = targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll")
-	local mode = attackTpMode or "Above"
+	
+	local mode = attackTpMode or "Behind"
 	local finalCFrame = nil
+	local verticalOffset = useAirTracking and attackTpAirVerticalOffset or attackTpGroundVerticalOffset
+	
 	if mode == "Above" then
 		local dist = isRagdoll and 4.2 or 6.8
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, dist, 0), predictedTargetPosition, worldUpVector)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, dist + verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Under" then
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, -6.5, 0), predictedTargetPosition, worldUpVector)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, -6.5 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Behind" then
 		local followDirection = getHorizontalUnit(targetVelocity)
 			or getHorizontalUnit(targetRoot.CFrame.LookVector)
 			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
 			or Vector3.new(0, 0, -1)
-		local dist = isRagdoll and 1.2 or 1.85
-		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist), predictedTargetPosition, worldUpVector)
+		local dist = isRagdoll and 1.2 or attackTpBehindDistance
+		if useAirTracking then dist = attackTpAirBehindDistance end
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Aggressive" then
 		local followDirection = getHorizontalUnit(targetVelocity)
 			or getHorizontalUnit(targetRoot.CFrame.LookVector)
 			or Vector3.new(0, 0, -1)
-		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * 0.8) + Vector3.new(0, 1.2, 0), predictedTargetPosition, worldUpVector)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * 0.6) + Vector3.new(0, 1.2 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Middle" then
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 0.1, 0), predictedTargetPosition, worldUpVector)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, verticalOffset + 0.1, 0), predictedTargetPosition, worldUpVector)
 	elseif string.find(tostring(mode), "Custom") then
 		local cleanMode = tostring(mode):match("Custom %d+")
 		local offsets = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
@@ -2698,11 +2711,13 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 		if offsetVec.Magnitude < 0.1 then
 			offsetVec = Vector3.new(0, 0.1, 0)
 		end
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + offsetVec, predictedTargetPosition, worldUpVector)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + offsetVec + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	end
+	
 	if not finalCFrame then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 6.8, 0), predictedTargetPosition, worldUpVector)
 	end
+	
 	return finalCFrame, targetVelocity
 end
 local function getCamLockTarget()
@@ -7200,7 +7215,7 @@ do
 		if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
 			teleportToSelectedTarget()
 		end
-	elseif not flingEnabled then
+	elseif not (flingEnabled and (_G.NOTHINGX_FlingActive or true)) then
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -7209,7 +7224,18 @@ do
 			if isValidAttackTpTarget(targetModel) then
 				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
 				if targetCFrame then
-					applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero)
+					local amFlinging = walkFlingEnabled or flingEnabled
+					local resolvedLinear = targetVelocity or Vector3.zero
+					local resolvedAngular = Vector3.zero
+					
+					if amFlinging then
+						local power = walkFlingEnabled and walkFlingPower or flingPower
+						resolvedAngular = Vector3.new(power, power, power)
+						resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.4)
+					end
+					
+					applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
+					
 					if pendingTeleportToSelectedPlayer then
 						teleportToSelectedTarget()
 					end
@@ -7245,8 +7271,19 @@ do
 			end
 			if isValidAttackTpTarget(attackTpTarget) then
 				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
-				if targetCFrame and targetVelocity then
-					applyTeleportRootState(characterRoot, targetCFrame, targetVelocity)
+				if targetCFrame then
+					local amFlinging = walkFlingEnabled or flingEnabled
+					local resolvedLinear = targetVelocity or Vector3.zero
+					local resolvedAngular = Vector3.zero
+					
+					if amFlinging then
+						local power = walkFlingEnabled and walkFlingPower or flingPower
+						resolvedAngular = Vector3.new(power, power, power)
+						resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.4)
+					end
+					
+					applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
+					
 					if flying and bv and bg then
 						bv.Position = characterRoot.Position
 						bg.CFrame = getRotationOnlyCFrame(targetCFrame)
