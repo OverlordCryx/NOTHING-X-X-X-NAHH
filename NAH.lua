@@ -633,15 +633,15 @@ local syncModelDropdownSelectionToManualTarget
 local stopView
 local startView
 local toggleView
-local attackTpBehindDistance = 1.6
-local attackTpAirBehindDistance = 1.05
-local attackTpLeadTime = 0.02
-local attackTpAirLeadTime = 0.035
-local attackTpMaxHorizontalLead = 6.0
-local attackTpVerticalLead = 0.02
-local attackTpMaxVerticalLead = 2.0
+local attackTpBehindDistance = 1.15
+local attackTpAirBehindDistance = 0.85
+local attackTpLeadTime = 0.012
+local attackTpAirLeadTime = 0.025
+local attackTpMaxHorizontalLead = 8.0
+local attackTpVerticalLead = 0.015
+local attackTpMaxVerticalLead = 3.0
 local attackTpGroundVerticalOffset = 0
-local attackTpAirVerticalOffset = 0.35
+local attackTpAirVerticalOffset = 0.25
 local customOffsets = {
 	["Custom 1"] = { x = 0, y = 0, z = 0 },
 	["Custom 2"] = { x = 0, y = 0, z = 0 },
@@ -7010,6 +7010,10 @@ player.CharacterRemoving:Connect(function(removingChar)
 	if removingChar ~= char then
 		return
 	end
+	if mainLoopConnection then
+		mainLoopConnection:Disconnect()
+		mainLoopConnection = nil
+	end
 	_G.NOTHINGX_PendingFlyRespawn = flying == true
 	attackTpHolding = false
 	stopSetBackTravel()
@@ -7223,87 +7227,106 @@ do
 	if isTeleportLocked then
 		return
 	end
-	if not autoTpEnabled then
-		if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
-			teleportToSelectedTarget()
-		end
-	elseif not (flingEnabled and (_G.NOTHINGX_FlingActive or true)) then
+
+	local function performGodTP(target)
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
-			local targetModel = resolveAttackTpTarget()
-			if isValidAttackTpTarget(targetModel) then
-				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
-				if targetCFrame then
-					local amFlinging = walkFlingEnabled or flingEnabled
-					local resolvedLinear = targetVelocity or Vector3.zero
-					local resolvedAngular = Vector3.zero
-					
-					if amFlinging then
-						local power = walkFlingEnabled and walkFlingPower or flingPower
-						resolvedAngular = Vector3.new(power, power, power)
-						resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.4)
-					end
-					
-					applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
-					
-					if pendingTeleportToSelectedPlayer then
-						teleportToSelectedTarget()
-					end
-					if flying and bv and bg then
-						bv.Position = characterRoot.Position
-						bg.CFrame = getRotationOnlyCFrame(targetCFrame)
-					end
-				elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(targetModel) then
-					teleportToSelectedTarget()
+			local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, target)
+			if targetCFrame then
+				local amFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled
+				local resolvedLinear = targetVelocity or Vector3.zero
+				local resolvedAngular = Vector3.zero
+				
+				if amFlinging then
+					local power = (walkFlingEnabled and walkFlingPower) or (flingEnabled and flingPower) or (clickFlingEnabled and flingPower) or (auraFlingEnabled and flingPower) or 20000
+					resolvedAngular = Vector3.new(power * 2, power * 2, power * 2)
+					resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.5)
+				end
+				
+				applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
+				
+				if flying and bv and bg then
+					bv.Position = characterRoot.Position
+					bg.CFrame = getRotationOnlyCFrame(targetCFrame)
 				end
 			end
 		end
-	elseif pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
-		teleportToSelectedTarget()
 	end
+
+	if autoTpEnabled then
+		local targetModel = resolveAttackTpTarget()
+		if isValidAttackTpTarget(targetModel) then
+			performGodTP(targetModel)
+		end
+	end
+
 	if attackTpEnabled and attackTpHolding then
-		local character = player.Character
-		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
-			if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
-				clearManualAttackTpTarget()
+		if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
+			clearManualAttackTpTarget()
+		end
+		if not manualAttackTpPlayer and manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
+			clearManualAttackTpTarget()
+		end
+		if isDeadTargetModel(attackTpTarget) and not manualAttackTpPlayer then
+			attackTpTarget = nil
+		end
+		local preferredTarget = resolveAttackTpTarget()
+		if preferredTarget then
+			attackTpTarget = preferredTarget
+		end
+		if isValidAttackTpTarget(attackTpTarget) then
+			performGodTP(attackTpTarget)
+		end
+	end
+
+	if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
+		teleportToSelectedTarget()
+		pendingTeleportToSelectedPlayer = false
+	end
+	end)
+	
+	task.spawn(function()
+		local steppedConn
+		steppedConn = RunService.Stepped:Connect(function()
+			if not targetActionHeartbeat or not targetActionHeartbeat.Connected then
+				steppedConn:Disconnect()
+				return
 			end
-			if not manualAttackTpPlayer and manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
-				clearManualAttackTpTarget()
-			end
-			if isDeadTargetModel(attackTpTarget) and not manualAttackTpPlayer then
-				attackTpTarget = nil
-			end
-			local preferredTarget = resolveAttackTpTarget()
-			if preferredTarget then
-				attackTpTarget = preferredTarget
-			end
-			if isValidAttackTpTarget(attackTpTarget) then
-				local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, attackTpTarget)
-				if targetCFrame then
-					local amFlinging = walkFlingEnabled or flingEnabled
-					local resolvedLinear = targetVelocity or Vector3.zero
-					local resolvedAngular = Vector3.zero
-					
-					if amFlinging then
-						local power = walkFlingEnabled and walkFlingPower or flingPower
-						resolvedAngular = Vector3.new(power, power, power)
-						resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.4)
-					end
-					
-					applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
-					
-					if flying and bv and bg then
-						bv.Position = characterRoot.Position
-						bg.CFrame = getRotationOnlyCFrame(targetCFrame)
+			if _G.SafeTeleportLock == true then return end
+			
+			local function fastPerform(target)
+				local character = player.Character
+				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+				if characterRoot and not isTpBlocked() then
+					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, target)
+					if targetCFrame then
+						local amFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled
+						local resolvedLinear = targetVelocity or Vector3.zero
+						local resolvedAngular = Vector3.zero
+						if amFlinging then
+							local power = (walkFlingEnabled and walkFlingPower) or (flingEnabled and flingPower) or (clickFlingEnabled and flingPower) or (auraFlingEnabled and flingPower) or 20000
+							resolvedAngular = Vector3.new(power * 2.1, power * 2.1, power * 2.1)
+						end
+						applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
 					end
 				end
 			end
-		end
-	end
+
+			if autoTpEnabled then
+				local targetModel = resolveAttackTpTarget()
+				if isValidAttackTpTarget(targetModel) then
+					fastPerform(targetModel)
+				end
+			end
+			if attackTpEnabled and attackTpHolding then
+				local attackTarget = resolveAttackTpTarget()
+				if isValidAttackTpTarget(attackTarget) then
+					fastPerform(attackTarget)
+				end
+			end
+		end)
 	end)
 end
 UserInputService.InputEnded:Connect(function(input)
@@ -7516,54 +7539,54 @@ local function hasAnyToolInBackpack()
     if not player.Backpack then return false end
     return #player.Backpack:GetChildren() > 0
 end
-local runningLoop = false
+local mainLoopConnection = nil
 local function startMainLoop()
-    if runningLoop then return end
-    runningLoop = true
-    task.spawn(function()
-        while runningLoop do
-            if isWaitingForNewGui then
-                task.wait(0.1)
-                continue
+    if mainLoopConnection then return end
+    mainLoopConnection = RunService.Heartbeat:Connect(function()
+        if isWaitingForNewGui then
+            return
+        end
+        if not hasAnyToolInBackpack() or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            if mainLoopConnection then
+                mainLoopConnection:Disconnect()
+                mainLoopConnection = nil
             end
-            task.wait()
-            if not hasAnyToolInBackpack() then
-                runningLoop = false
-                break
-            end
-            local magicHealth = currentBar and currentBar:FindFirstChild("MagicHealth")
-            if not magicHealth then continue end
-            local freecam     = playerGui:FindFirstChild("Freecam")
-            local lock        = playerGui:FindFirstChild("Lock")
-            local mobileJunk  = playerGui:FindFirstChild("MobileJunk")
-            local magicUlt    = magicHealth:FindFirstChild("Ult")
-            local magicText   = magicHealth:FindFirstChild("TextLabel")
-            local magicButton = magicHealth:FindFirstChild("ImageButton")
-            if freecam    then destroyOnce(freecam) end
-            if lock       then destroyOnce(lock) end
-            if mobileJunk then destroyOnce(mobileJunk) end
-            if magicUlt    then destroyOnce(magicUlt) end
-            if magicText   then destroyOnce(magicText) end
-            if magicButton then destroyOnce(magicButton) end
-            if magicUlt and (magicUlt:IsA("ImageLabel") or magicUlt:IsA("ImageButton")) then
-                local ultimateValue = player:GetAttribute("Ultimate") or 0
-                magicUlt.ImageTransparency = (ultimateValue == 100) and 0.33 or 0.5
-            end
-            local healthSection = magicHealth:FindFirstChild("Health")
-            local specialBar = healthSection and healthSection:FindFirstChild("Bar") 
-                and healthSection.Bar:FindFirstChild("Bar")
-            if specialBar and (specialBar:IsA("ImageLabel") or specialBar:IsA("ImageButton")) then
-                local ultimateValue = player:GetAttribute("Ultimate") or 0
-                specialBar.ImageTransparency = (ultimateValue == 100) and 0.1 or 0.5
-                specialBar.ImageColor3 = Color3.new(0, 0, 0)
-            end
-            local cooldown = currentHotbar and currentHotbar:FindFirstChild("Backpack")
-                and currentHotbar.Backpack:FindFirstChild("LocalScript")
-                and currentHotbar.Backpack.LocalScript:FindFirstChild("Cooldown")
-            if cooldown then
-                cooldown.BackgroundColor3 = Color3.new(0, 0, 0)
-                cooldown.BackgroundTransparency = 0.45
-            end
+            return
+        end
+
+        local magicHealth = currentBar and currentBar:FindFirstChild("MagicHealth")
+        if not magicHealth then return end
+
+        local magicUlt    = magicHealth:FindFirstChild("Ult")
+        local magicText   = magicHealth:FindFirstChild("TextLabel")
+        local magicButton = magicHealth:FindFirstChild("ImageButton")
+        
+        if magicUlt    then destroyOnce(magicUlt) end
+        if magicText   then destroyOnce(magicText) end
+        if magicButton then destroyOnce(magicButton) end
+        
+        if magicUlt and (magicUlt:IsA("ImageLabel") or magicUlt:IsA("ImageButton")) then
+            local ultimateValue = player:GetAttribute("Ultimate") or 0
+            magicUlt.ImageTransparency = (ultimateValue == 100) and 0.33 or 0.5
+        end
+        
+        local healthSection = magicHealth:FindFirstChild("Health")
+        local specialBar = healthSection and healthSection:FindFirstChild("Bar") 
+            and healthSection.Bar:FindFirstChild("Bar")
+        
+        if specialBar and (specialBar:IsA("ImageLabel") or specialBar:IsA("ImageButton")) then
+            local ultimateValue = player:GetAttribute("Ultimate") or 0
+            specialBar.ImageTransparency = (ultimateValue == 100) and 0.1 or 0.5
+            specialBar.ImageColor3 = Color3.new(0, 0, 0)
+        end
+        
+        local cooldown = currentHotbar and currentHotbar:FindFirstChild("Backpack")
+            and currentHotbar.Backpack:FindFirstChild("LocalScript")
+            and currentHotbar.Backpack.LocalScript:FindFirstChild("Cooldown")
+        
+        if cooldown then
+            cooldown.BackgroundColor3 = Color3.new(0, 0, 0)
+            cooldown.BackgroundTransparency = 0.45
         end
     end)
 end
