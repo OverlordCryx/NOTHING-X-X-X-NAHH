@@ -879,8 +879,16 @@ local function updateKeybindText()
 	keybindText.Text = table.concat(lines, "\n")
 end
 local function hasMapMainPart()
-	local map = Workspace:FindFirstChild("Map")
-	return map and map:FindFirstChild("MainPart") ~= nil
+	return game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
+end
+local mapDependentControls = {}
+local function syncMapDependentVisibility()
+	local hasMain = hasMapMainPart()
+	for _, control in ipairs(mapDependentControls) do
+		if control and typeof(control) == "Instance" then
+			control.Visible = hasMain
+		end
+	end
 end
 local lastHasMainState = nil
 local function syncPlacesKeybindDisplay()
@@ -897,7 +905,9 @@ local function syncPlacesKeybindDisplay()
 		for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
 		if placesDropdown then
 			placesDropdown.SetItems(currentItems)
+			placesDropdown.Frame.Visible = hasMain
 		end
+		syncMapDependentVisibility()
 	end
 	if placesDropdown then
 		if selectedPlace then
@@ -931,12 +941,11 @@ local lastHasMainMovementState = nil
 local function syncMovementDisplay()
 	if not movementPanel then return end
 	local hasMain = hasMapMainPart()
-	if hasMain ~= lastHasMainMovementState then
-		lastHasMainMovementState = hasMain
-		if movementPanel.Button3 and movementPanel.Button3.Button then
-			movementPanel.Button3.Button.Visible = hasMain
-		end
-	end
+	if movementPanel.First and movementPanel.First.Button then movementPanel.First.Button.Visible = hasMain end
+	if movementPanel.Second and movementPanel.Second.Button then movementPanel.Second.Button.Visible = hasMain end
+	if movementPanel.Button and movementPanel.Button.Button then movementPanel.Button.Button.Visible = hasMain end
+	if movementPanel.Button2 and movementPanel.Button2.Button then movementPanel.Button2.Button.Visible = hasMain end
+	if movementPanel.Button3 and movementPanel.Button3.Button then movementPanel.Button3.Button.Visible = not hasMain end
 end
 function syncSetBackKeybindDisplay()
 	keybindEntries.SetBack = {
@@ -3521,20 +3530,23 @@ end
         nextFrame()
         createMovementPanel = _G["2tog_on_one_button"]
     end
+    local isTSB = game.GameId == 3808081382
+    local isMainMap = game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
+    local showDummy = isTSB and not isMainMap
     movementPanel = createMovementPanel({
         title = "Movement",
         name1 = "Stay",
         name2 = supportsDashBlock and "Dash Block" or nil,
         buttonName = "Fix Camera",
         buttonName2 = "Lay",
-        buttonName3 = "Dummy",
+        buttonName3 = showDummy and "Dummy" or nil,
         default1 = false,
         default2 = supportsDashBlock and false or nil,
         fun1 = setStayState,
         fun2 = supportsDashBlock and setDashBlockRuntime or nil,
         buttonfun = fixCamera,
         buttonfun2 = layCharacter,
-        buttonfun3 = teleportToWeakestDummy,
+        buttonfun3 = showDummy and teleportToWeakestDummy or nil,
     })
     
 
@@ -3625,8 +3637,11 @@ end
         combatLayout.VerticalAlignment = Enum.VerticalAlignment.Center
         combatLayout.Padding = UDim.new(0, 6)
         combatLayout.Parent = combatRow
-        local function makeCombatToggle(text, callback, saveKey)
+        local function makeCombatToggle(text, callback, saveKey, hideIfNoMap)
             local btn = Instance.new("TextButton")
+            if hideIfNoMap then
+                table.insert(mapDependentControls, btn)
+            end
             btn.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
             btn.BackgroundTransparency = 0.06
             btn.BorderSizePixel = 0
@@ -3667,15 +3682,15 @@ end
             if enabled and callback then callback(enabled) end
             render()
         end
-        makeCombatToggle("Auto Whirlwind Dunk", function(val) WhirlwindEnabled = val end, "AutoWhirlwind")
-        makeCombatToggle("Auto Combo", function(val) WallComboEnabled = val end, "AutoCombo")
+        makeCombatToggle("Auto Whirlwind Dunk", function(val) WhirlwindEnabled = val end, "AutoWhirlwind", true)
+        makeCombatToggle("Auto Combo", function(val) WallComboEnabled = val end, "AutoCombo", true)
         makeCombatToggle("No Dash CD", function(val)
             workspace:SetAttribute("EffectAffects", val and 1 or 0)
             workspace:SetAttribute("NoDashCooldown", val)
-        end, "NoDashCD")
+        end, "NoDashCD", true)
         makeCombatToggle("BL click Trash", function(val)
             trashBlockEnabled = val
-        end, "BLClickTrash")
+        end, "BLClickTrash", false)
     end
 end)
 task.spawn(function()
@@ -3817,8 +3832,9 @@ function initProtectionRuntime()
 		protection.EXTREME_LOW_Y = protection.VOID_Y + protection.EXTREME_LOW_OFFSET
 	end
 	protection.getReferenceCFrame = function()
+		local isMainPlace = game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
 		local map = Workspace:FindFirstChild("Map")
-		local main = map and map:FindFirstChild("MainPart")
+		local main = isMainPlace and map and map:FindFirstChild("MainPart")
 		if main then
 			return main.CFrame
 		end
@@ -4134,8 +4150,9 @@ local function getBestRescueCFrame()
 	end
 	local p = _G.NOTHINGX_Protection
 	if p and p.lastSafePosition then return p.lastSafePosition end
+	local isMainPlace = game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
 	local map = Workspace:FindFirstChild("Map")
-	local main = map and map:FindFirstChild("MainPart")
+	local main = isMainPlace and map and map:FindFirstChild("MainPart")
 	if main then return main.CFrame + Vector3.new(0, 180, 0) end
 	return CFrame.new(139, 620, 32)
 end
@@ -6350,165 +6367,167 @@ local function getTPModeItems()
 	return items
 end
 local tpModesDropdown = nil
-local function getTPModeCleanItems()
-	local items = { "Above", "Under", "Behind", "Middle", "Aggressive", "Auto", "Auto Closet", "Auto Far", "Auto Custom" }
-	for i = 1, 10 do
-		table.insert(items, "Custom " .. i)
+do
+	function getTPModeCleanItems()
+		local items = { "Above", "Under", "Behind", "Middle", "Aggressive", "Auto", "Auto Closet", "Auto Far", "Auto Custom" }
+		for i = 1, 10 do
+			table.insert(items, "Custom " .. i)
+		end
+		return items
 	end
-	return items
-end
-local function getTPModeDisplayNames()
-	local names = {
-		["Auto Custom"] = string.format("Auto Custom (%s)", tostring(autoCustomDistance))
-	}
-	for i = 1, 10 do
-		names["Custom " .. i] = getCustomDisplayName(i)
+	function getTPModeDisplayNames()
+		local names = {
+			["Auto Custom"] = string.format("Auto Custom (%s)", tostring(autoCustomDistance))
+		}
+		for i = 1, 10 do
+			names["Custom " .. i] = getCustomDisplayName(i)
+		end
+		return names
 	end
-	return names
-end
-local autoCustomFrame = makeControlFrame(45)
-autoCustomFrame.Visible = false
-local function createAutoCustomInput(label, position)
-	local labelObj = Instance.new("TextLabel")
-	labelObj.BackgroundTransparency = 1
-	labelObj.Position = UDim2.fromScale(0.05, 0)
-	labelObj.Size = UDim2.fromScale(0.4, 1)
-	labelObj.Font = Enum.Font.GothamBold
-	labelObj.Text = label
-	labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
-	labelObj.TextScaled = true
-	labelObj.TextXAlignment = Enum.TextXAlignment.Left
-	labelObj.Parent = autoCustomFrame
-	local box = Instance.new("TextBox")
-	box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
-	box.BorderSizePixel = 0
-	box.Position = UDim2.fromScale(0.55, 0.15)
-	box.Size = UDim2.fromScale(0.35, 0.7)
-	box.Font = Enum.Font.GothamMedium
-	box.TextColor3 = Color3.fromRGB(255, 200, 200)
-	box.TextScaled = true
-	box.ClearTextOnFocus = false
-	box.Text = tostring(autoCustomDistance)
-	box.Parent = autoCustomFrame
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = box
-	box.Focused:Connect(function() box.Text = "" end)
-	box:GetPropertyChangedSignal("Text"):Connect(function()
-		local text = box.Text
-		local filtered = text:gsub("[^-0-9%.]", "")
-		if filtered ~= text then box.Text = filtered end
-	end)
-	box.FocusLost:Connect(function()
-		local val = tonumber(box.Text)
-		if val ~= nil then
-			autoCustomDistance = val
-			setSavedControlValue("AutoCustomDistance", val)
+	local autoCustomFrame = makeControlFrame(45)
+	autoCustomFrame.Visible = false
+	function createAutoCustomInput(label, position)
+		local labelObj = Instance.new("TextLabel")
+		labelObj.BackgroundTransparency = 1
+		labelObj.Position = UDim2.fromScale(0.05, 0)
+		labelObj.Size = UDim2.fromScale(0.4, 1)
+		labelObj.Font = Enum.Font.GothamBold
+		labelObj.Text = label
+		labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
+		labelObj.TextScaled = true
+		labelObj.TextXAlignment = Enum.TextXAlignment.Left
+		labelObj.Parent = autoCustomFrame
+		local box = Instance.new("TextBox")
+		box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+		box.BorderSizePixel = 0
+		box.Position = UDim2.fromScale(0.55, 0.15)
+		box.Size = UDim2.fromScale(0.35, 0.7)
+		box.Font = Enum.Font.GothamMedium
+		box.TextColor3 = Color3.fromRGB(255, 200, 200)
+		box.TextScaled = true
+		box.ClearTextOnFocus = false
+		box.Text = tostring(autoCustomDistance)
+		box.Parent = autoCustomFrame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = box
+		box.Focused:Connect(function() box.Text = "" end)
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = box.Text
+			local filtered = text:gsub("[^-0-9%.]", "")
+			if filtered ~= text then box.Text = filtered end
+		end)
+		box.FocusLost:Connect(function()
+			local val = tonumber(box.Text)
+			if val ~= nil then
+				autoCustomDistance = val
+				setSavedControlValue("AutoCustomDistance", val)
+				if tpModesDropdown then
+					tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+					tpModesDropdown.SetValue(attackTpMode, true)
+				end
+			else
+				box.Text = tostring(autoCustomDistance)
+			end
 			if tpModesDropdown then
 				tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
 				tpModesDropdown.SetValue(attackTpMode, true)
 			end
-		else
-			box.Text = tostring(autoCustomDistance)
-		end
-		if tpModesDropdown then
-			tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
-			tpModesDropdown.SetValue(attackTpMode, true)
-		end
-	end)
-	return box
-end
-autoCustomInput = createAutoCustomInput("Distance", 0.375)
-autoCustomFrame.LayoutOrder = 1001
-local function updateCustomUI()
-	local currentMode = tostring(attackTpMode)
-	local isAutoCustom = (currentMode == "Auto Custom")
-	local isCustom = (string.find(currentMode, "Custom") ~= nil) and not isAutoCustom
-	customOffsetFrame.Visible = isCustom
-	autoCustomFrame.Visible = isAutoCustom
-	if isCustom then
-		local cleanMode = tostring(attackTpMode):match("Custom %d+")
-		local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
-		zInput.Text = tostring(off.z)
-		yInput.Text = tostring(off.y)
-		xInput.Text = tostring(off.x)
+		end)
+		return box
 	end
-	if isAutoCustom or true then
-		autoCustomInput.Text = tostring(autoCustomDistance)
-	end
-end
-local function createOffsetInput(label, axis, position)
-	local labelObj = Instance.new("TextLabel")
-	labelObj.BackgroundTransparency = 1
-	labelObj.Position = UDim2.fromScale(position, 0.2)
-	labelObj.Size = UDim2.fromScale(0.1, 0.3)
-	labelObj.Font = Enum.Font.GothamBold
-	labelObj.Text = label
-	labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
-	labelObj.TextScaled = true
-	labelObj.Parent = customOffsetFrame
-	local box = Instance.new("TextBox")
-	box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
-	box.BorderSizePixel = 0
-	box.Position = UDim2.fromScale(position, 0.5)
-	box.Size = UDim2.fromScale(0.25, 0.4)
-	box.Font = Enum.Font.GothamMedium
-	box.TextColor3 = Color3.fromRGB(255, 200, 200)
-	box.TextScaled = true
-	box.ClearTextOnFocus = false
-	box.Text = "0"
-	box.Parent = customOffsetFrame
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = box
-	box.Focused:Connect(function()
-		box.Text = ""
-	end)
-	box:GetPropertyChangedSignal("Text"):Connect(function()
-		local text = box.Text
-		local filtered = text:gsub("[^-0-9%.]", "")
-		if filtered ~= text then
-			box.Text = filtered
+	autoCustomInput = createAutoCustomInput("Distance", 0.375)
+	autoCustomFrame.LayoutOrder = 1001
+	function updateCustomUI()
+		local currentMode = tostring(attackTpMode)
+		local isAutoCustom = (currentMode == "Auto Custom")
+		local isCustom = (string.find(currentMode, "Custom") ~= nil) and not isAutoCustom
+		customOffsetFrame.Visible = isCustom
+		autoCustomFrame.Visible = isAutoCustom
+		if isCustom then
+			local cleanMode = tostring(attackTpMode):match("Custom %d+")
+			local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
+			zInput.Text = tostring(off.z)
+			yInput.Text = tostring(off.y)
+			xInput.Text = tostring(off.x)
 		end
-	end)
-	box.FocusLost:Connect(function()
-		local val = tonumber(box.Text)
-		local cleanMode = tostring(attackTpMode):match("Custom %d+")
-		if not cleanMode then return end
-		if val == nil then
-			box.Text = tostring(customOffsets[cleanMode][axis])
-		else
-			box.Text = tostring(val)
-			customOffsets[cleanMode][axis] = val
-			controlSaveData.CustomOffsets = customOffsets
-			saveSliderSaveData()
-			if tpModesDropdown then
-				tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+		if isAutoCustom or true then
+			autoCustomInput.Text = tostring(autoCustomDistance)
+		end
+	end
+	function createOffsetInput(label, axis, position)
+		local labelObj = Instance.new("TextLabel")
+		labelObj.BackgroundTransparency = 1
+		labelObj.Position = UDim2.fromScale(position, 0.2)
+		labelObj.Size = UDim2.fromScale(0.1, 0.3)
+		labelObj.Font = Enum.Font.GothamBold
+		labelObj.Text = label
+		labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
+		labelObj.TextScaled = true
+		labelObj.Parent = customOffsetFrame
+		local box = Instance.new("TextBox")
+		box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+		box.BorderSizePixel = 0
+		box.Position = UDim2.fromScale(position, 0.5)
+		box.Size = UDim2.fromScale(0.25, 0.4)
+		box.Font = Enum.Font.GothamMedium
+		box.TextColor3 = Color3.fromRGB(255, 200, 200)
+		box.TextScaled = true
+		box.ClearTextOnFocus = false
+		box.Text = "0"
+		box.Parent = customOffsetFrame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 6)
+		corner.Parent = box
+		box.Focused:Connect(function()
+			box.Text = ""
+		end)
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = box.Text
+			local filtered = text:gsub("[^-0-9%.]", "")
+			if filtered ~= text then
+				box.Text = filtered
 			end
-		end
-	end)
-	return box
+		end)
+		box.FocusLost:Connect(function()
+			local val = tonumber(box.Text)
+			local cleanMode = tostring(attackTpMode):match("Custom %d+")
+			if not cleanMode then return end
+			if val == nil then
+				box.Text = tostring(customOffsets[cleanMode][axis])
+			else
+				box.Text = tostring(val)
+				customOffsets[cleanMode][axis] = val
+				controlSaveData.CustomOffsets = customOffsets
+				saveSliderSaveData()
+				if tpModesDropdown then
+					tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+				end
+			end
+		end)
+		return box
+	end
+	zInput = createOffsetInput("Z", "z", 0.05)
+	yInput = createOffsetInput("Y", "y", 0.375)
+	xInput = createOffsetInput("X", "x", 0.7)
+	autoCustomFrame.Parent = uiX
+	
+	tpModesDropdown = Dropdown({
+		namedropdown = "TP Modes",
+		inside = getTPModeCleanItems(),
+		itemDisplayNames = getTPModeDisplayNames(),
+		multi = false,
+		deffultin = attackTpMode or "Behind",
+		fun = function(value)
+			attackTpMode = value
+			controlSaveData.AttackTpMode = value
+			saveSliderSaveData()
+			updateCustomUI()
+		end,
+	})
+	tpModesDropdown.Frame.LayoutOrder = 1000
+	customOffsetFrame.LayoutOrder = 1002
 end
-zInput = createOffsetInput("Z", "z", 0.05)
-yInput = createOffsetInput("Y", "y", 0.375)
-xInput = createOffsetInput("X", "x", 0.7)
-autoCustomFrame.Parent = uiX
-
-tpModesDropdown = Dropdown({
-	namedropdown = "TP Modes",
-	inside = getTPModeCleanItems(),
-	itemDisplayNames = getTPModeDisplayNames(),
-	multi = false,
-	deffultin = attackTpMode or "Behind",
-	fun = function(value)
-		attackTpMode = value
-		controlSaveData.AttackTpMode = value
-		saveSliderSaveData()
-		updateCustomUI()
-	end,
-})
-tpModesDropdown.Frame.LayoutOrder = 1000
-customOffsetFrame.LayoutOrder = 1002
 customOffsetFrame.Parent = uiX
 updateCustomUI()
 task.spawn(function()
@@ -7021,8 +7040,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		end
 		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
 		if isMapLocation then
-			local xmap = Workspace:FindFirstChild("Map")
-			if not (xmap and xmap:FindFirstChild("MainPart")) then
+			if game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555 then
 				return
 			end
 		end
