@@ -899,13 +899,11 @@ local function syncPlacesKeybindDisplay()
 		local mapPlaces = { 	"Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right", }
 		local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
 		local currentItems = {}
-		if hasMain then
-			for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
-		end
+		for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
 		for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
 		if placesDropdown then
 			placesDropdown.SetItems(currentItems)
-			placesDropdown.Frame.Visible = hasMain
+			placesDropdown.Frame.Visible = (game.GameId == 3808081382)
 		end
 		syncMapDependentVisibility()
 	end
