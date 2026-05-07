@@ -628,6 +628,7 @@ local manualAttackTpTarget = nil
 local manualAttackTpPlayer = nil
 local attackTpHolding = false
 local attackTpMode = "Behind"
+local autoCustomDistance = 2.0
 local isSelectablePlayerDropdownTarget
 local syncModelDropdownSelectionToManualTarget
 local stopView
@@ -803,6 +804,9 @@ if type(controlSaveData.BLClickTrash) == "boolean" then
 end
 if type(controlSaveData.AttackTpMode) == "string" then
 	attackTpMode = controlSaveData.AttackTpMode
+end
+if tonumber(controlSaveData.AutoCustomDistance) then
+	autoCustomDistance = tonumber(controlSaveData.AutoCustomDistance)
 end
 if type(controlSaveData.CustomOffsets) == "table" then
 	for k, v in pairs(controlSaveData.CustomOffsets) do
@@ -2707,8 +2711,38 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	elseif mode == "Aggressive" then
 		local followDirection = getHorizontalUnit(targetVelocity)
 			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
 			or Vector3.new(0, 0, -1)
 		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * 0.6) + Vector3.new(0, 1.2 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Auto Closet" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+			or Vector3.new(0, 0, -1)
+		local dist = isRagdoll and 0.2 or 0.5
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, 0.8 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Auto Far" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+			or Vector3.new(0, 0, -1)
+		local dist = isRagdoll and 2.5 or 4.0
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, 1.5 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Auto" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+			or Vector3.new(0, 0, -1)
+		local dist = isRagdoll and 0.6 or 1.4
+		local height = isRagdoll and 1.0 or 1.2
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, height + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Auto Custom" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+			or Vector3.new(0, 0, -1)
+		local dist = isRagdoll and (autoCustomDistance * 0.5) or autoCustomDistance
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, 1.2 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Middle" then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, verticalOffset + 0.1, 0), predictedTargetPosition, worldUpVector)
 	elseif string.find(tostring(mode), "Custom") then
@@ -6316,15 +6350,91 @@ local function getTPModeItems()
 	return items
 end
 local tpModesDropdown = nil
+local function getTPModeCleanItems()
+	local items = { "Above", "Under", "Behind", "Middle", "Aggressive", "Auto", "Auto Closet", "Auto Far", "Auto Custom" }
+	for i = 1, 10 do
+		table.insert(items, "Custom " .. i)
+	end
+	return items
+end
+local function getTPModeDisplayNames()
+	local names = {
+		["Auto Custom"] = string.format("Auto Custom (%s)", tostring(autoCustomDistance))
+	}
+	for i = 1, 10 do
+		names["Custom " .. i] = getCustomDisplayName(i)
+	end
+	return names
+end
+local autoCustomFrame = makeControlFrame(45)
+autoCustomFrame.Visible = false
+local function createAutoCustomInput(label, position)
+	local labelObj = Instance.new("TextLabel")
+	labelObj.BackgroundTransparency = 1
+	labelObj.Position = UDim2.fromScale(0.05, 0)
+	labelObj.Size = UDim2.fromScale(0.4, 1)
+	labelObj.Font = Enum.Font.GothamBold
+	labelObj.Text = label
+	labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
+	labelObj.TextScaled = true
+	labelObj.TextXAlignment = Enum.TextXAlignment.Left
+	labelObj.Parent = autoCustomFrame
+	local box = Instance.new("TextBox")
+	box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+	box.BorderSizePixel = 0
+	box.Position = UDim2.fromScale(0.55, 0.15)
+	box.Size = UDim2.fromScale(0.35, 0.7)
+	box.Font = Enum.Font.GothamMedium
+	box.TextColor3 = Color3.fromRGB(255, 200, 200)
+	box.TextScaled = true
+	box.ClearTextOnFocus = false
+	box.Text = tostring(autoCustomDistance)
+	box.Parent = autoCustomFrame
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = box
+	box.Focused:Connect(function() box.Text = "" end)
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		local text = box.Text
+		local filtered = text:gsub("[^-0-9%.]", "")
+		if filtered ~= text then box.Text = filtered end
+	end)
+	box.FocusLost:Connect(function()
+		local val = tonumber(box.Text)
+		if val ~= nil then
+			autoCustomDistance = val
+			setSavedControlValue("AutoCustomDistance", val)
+			if tpModesDropdown then
+				tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+				tpModesDropdown.SetValue(attackTpMode, true)
+			end
+		else
+			box.Text = tostring(autoCustomDistance)
+		end
+		if tpModesDropdown then
+			tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+			tpModesDropdown.SetValue(attackTpMode, true)
+		end
+	end)
+	return box
+end
+autoCustomInput = createAutoCustomInput("Distance", 0.375)
+autoCustomFrame.LayoutOrder = 1001
 local function updateCustomUI()
-	local isCustom = string.find(tostring(attackTpMode), "Custom") ~= nil
+	local currentMode = tostring(attackTpMode)
+	local isAutoCustom = (currentMode == "Auto Custom")
+	local isCustom = (string.find(currentMode, "Custom") ~= nil) and not isAutoCustom
 	customOffsetFrame.Visible = isCustom
+	autoCustomFrame.Visible = isAutoCustom
 	if isCustom then
 		local cleanMode = tostring(attackTpMode):match("Custom %d+")
 		local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
 		zInput.Text = tostring(off.z)
 		yInput.Text = tostring(off.y)
 		xInput.Text = tostring(off.x)
+	end
+	if isAutoCustom or true then
+		autoCustomInput.Text = tostring(autoCustomDistance)
 	end
 end
 local function createOffsetInput(label, axis, position)
@@ -6373,11 +6483,7 @@ local function createOffsetInput(label, axis, position)
 			controlSaveData.CustomOffsets = customOffsets
 			saveSliderSaveData()
 			if tpModesDropdown then
-				local displayNames = {}
-				for i = 1, 10 do
-					displayNames["Custom " .. i] = getCustomDisplayName(i)
-				end
-				tpModesDropdown.SetItemDisplayNames(displayNames)
+				tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
 			end
 		end
 	end)
@@ -6386,20 +6492,8 @@ end
 zInput = createOffsetInput("Z", "z", 0.05)
 yInput = createOffsetInput("Y", "y", 0.375)
 xInput = createOffsetInput("X", "x", 0.7)
-local function getTPModeCleanItems()
-	local items = { "Above", "Under", "Behind", "Middle", "Aggressive" }
-	for i = 1, 10 do
-		table.insert(items, "Custom " .. i)
-	end
-	return items
-end
-local function getTPModeDisplayNames()
-	local names = {}
-	for i = 1, 10 do
-		names["Custom " .. i] = getCustomDisplayName(i)
-	end
-	return names
-end
+autoCustomFrame.Parent = uiX
+
 tpModesDropdown = Dropdown({
 	namedropdown = "TP Modes",
 	inside = getTPModeCleanItems(),
@@ -6413,6 +6507,8 @@ tpModesDropdown = Dropdown({
 		updateCustomUI()
 	end,
 })
+tpModesDropdown.Frame.LayoutOrder = 1000
+customOffsetFrame.LayoutOrder = 1002
 customOffsetFrame.Parent = uiX
 updateCustomUI()
 task.spawn(function()
@@ -6516,7 +6612,7 @@ task.spawn(function()
 		billboard.Name = ESP_BILLBOARD_NAME
 		billboard.Adornee = head
 		billboard.AlwaysOnTop = true
-		billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
+		billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 5.2, 0)
 		billboard.Size = UDim2.fromOffset(BILLBOARD_MIN_WIDTH, 0)
 		billboard.MaxDistance = 333
 		billboard.Parent = model
@@ -6699,60 +6795,70 @@ task.spawn(function()
 		local hpPercent = humanoid.MaxHealth > 0 and ((humanoid.Health / humanoid.MaxHealth) * 100) or 0
 		local hpValue = clampPercent(hpPercent)
 		local ultimateValue = clampPercent(ultimateAttr)
-		local billboard = ensureOverlayBillboard(model)
-		if billboard then
-			billboard.Adornee = head
-			local frame = billboard:FindFirstChild("Root")
-			local hpLine = frame and frame:FindFirstChild("HpLine")
-			local sepOne = frame and frame:FindFirstChild("SepOne")
-			local characterLine = frame and frame:FindFirstChild("CharacterLine")
-			local sepTwo = frame and frame:FindFirstChild("SepTwo")
-			local ultimateLine = frame and frame:FindFirstChild("UltimateLine")
-			local visibleCount = 0
-			local contentWidth = 0
-			local visibleGuiCount = 0
-			local hpVisible = updateLine(
-				hpLine,
-				espOverlayConfig.showHp,
-				string.format("%d%%", hpValue),
-				getHpColor(hpValue)
-			)
-			local characterVisible = updateLine(
-				characterLine,
-				espOverlayConfig.showCharacter and tostring(characterAttr or "") ~= "",
-				tostring(characterAttr or ""),
-				getCharacterNameColor(characterAttr)
-			)
-			local hideUltimateForBaldUlted = ultedAttr
-			local ultimateVisible = updateLine(
-				ultimateLine,
-				espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
-				string.format("%d%%", ultimateValue),
-				getUltimateColor(ultimateValue)
-			)
-			if hpVisible then
-				visibleCount = visibleCount + 1
+		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate
+		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
+		
+		if not showBillboard then
+			if billboard then
+				billboard:Destroy()
 			end
-			if characterVisible then
-				visibleCount = visibleCount + 1
-			end
-			if ultimateVisible then
-				visibleCount = visibleCount + 1
-			end
-			local showSepOne = hpVisible and characterVisible
-			local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
-			updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 0, 0))
-			updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 0, 0))
-			for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine }) do
-				if guiObject and guiObject.Visible then
-					visibleGuiCount = visibleGuiCount + 1
-					contentWidth = contentWidth + guiObject.Size.X.Offset
+		else
+			billboard = ensureOverlayBillboard(model)
+			if billboard then
+				billboard.Enabled = true
+				billboard.Adornee = head
+				local frame = billboard:FindFirstChild("Root")
+				local hpLine = frame and frame:FindFirstChild("HpLine")
+				local sepOne = frame and frame:FindFirstChild("SepOne")
+				local characterLine = frame and frame:FindFirstChild("CharacterLine")
+				local sepTwo = frame and frame:FindFirstChild("SepTwo")
+				local ultimateLine = frame and frame:FindFirstChild("UltimateLine")
+				local visibleCount = 0
+				local contentWidth = 0
+				local visibleGuiCount = 0
+				local hpVisible = updateLine(
+					hpLine,
+					espOverlayConfig.showHp,
+					string.format("%d%%", hpValue),
+					getHpColor(hpValue)
+				)
+				local characterVisible = updateLine(
+					characterLine,
+					espOverlayConfig.showCharacter and tostring(characterAttr or "") ~= "",
+					tostring(characterAttr or ""),
+					getCharacterNameColor(characterAttr)
+				)
+				local hideUltimateForBaldUlted = ultedAttr
+				local ultimateVisible = updateLine(
+					ultimateLine,
+					espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
+					string.format("%d%%", ultimateValue),
+					getUltimateColor(ultimateValue)
+				)
+				if hpVisible then
+					visibleCount = visibleCount + 1
 				end
+				if characterVisible then
+					visibleCount = visibleCount + 1
+				end
+				if ultimateVisible then
+					visibleCount = visibleCount + 1
+				end
+				local showSepOne = hpVisible and characterVisible
+				local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
+				updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 0, 0))
+				updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 0, 0))
+				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine }) do
+					if guiObject and guiObject.Visible then
+						visibleGuiCount = visibleGuiCount + 1
+						contentWidth = contentWidth + guiObject.Size.X.Offset
+					end
+				end
+				if visibleGuiCount > 1 then
+					contentWidth = contentWidth + ((visibleGuiCount - 1) * BILLBOARD_ITEM_PADDING)
+				end
+				updateBillboardVisibility(billboard, frame, visibleCount, contentWidth)
 			end
-			if visibleGuiCount > 1 then
-				contentWidth = contentWidth + ((visibleGuiCount - 1) * BILLBOARD_ITEM_PADDING)
-			end
-			updateBillboardVisibility(billboard, frame, visibleCount, contentWidth)
 		end
 		local state = espOverlayState[targetPlayer] or {}
 		local canUseHighlight = espOverlayConfig.showEsp and not isBald
@@ -6827,16 +6933,12 @@ task.spawn(function()
 				or espOverlayConfig.showCharacter
 				or espOverlayConfig.showUltimate
 				or espOverlayConfig.showEsp
-			if overlayEnabled then
-				for _, targetPlayer in ipairs(Players:GetPlayers()) do
-					if targetPlayer ~= player then
-						updatePlayerOverlay(targetPlayer)
-					end
+			for _, targetPlayer in ipairs(Players:GetPlayers()) do
+				if targetPlayer ~= player then
+					updatePlayerOverlay(targetPlayer)
 				end
-				task.wait(0.2)
-			else
-				task.wait(0.5)
 			end
+			task.wait(overlayEnabled and 0.2 or 0.5)
 		end
 	end)
 end)
