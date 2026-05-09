@@ -676,13 +676,27 @@ local placesTPs = {
 	["Atomic Slash Up"] = CFrame.new(1063, 190, 23006),
 }
 local placesOrder = {
-	"Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right",
+	"/\\", "Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right",
 	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
 	"Atomic Slash", "Atomic Slash Up"
 }
 local placesDropdown = nil
 local movementPanel = nil
-local selectedPlace = nil
+local selectedPlace = "/\\"
+local afkEnabled = false
+local afkSavedCFrame = nil
+local afkConnection = nil
+local safeZoneHPEnabled = false
+local safeZoneHPSavedCFrame = nil
+local safeZoneHPInSafeZone = false
+local safeZoneCycleIndex = 0
+local safeZonePositions = {
+	Vector3.new(9e9, 9e9, 9e9),
+	Vector3.new(-9e9, 9e9, 9e9),
+	Vector3.new(9e9, 9e9, -9e9),
+	Vector3.new(-9e9, 9e9, -9e9),
+	Vector3.new(0, 9e9, 0)
+}
 autoTpEnabled = false
 trashBlockEnabled = false
 flingEnabled = false
@@ -802,6 +816,9 @@ end
 if type(controlSaveData.BLClickTrash) == "boolean" then
 	trashBlockEnabled = controlSaveData.BLClickTrash
 end
+if controlSaveData.SelectedPlace then
+	selectedPlace = controlSaveData.SelectedPlace
+end
 if type(controlSaveData.AttackTpMode) == "string" then
 	attackTpMode = controlSaveData.AttackTpMode
 end
@@ -898,7 +915,7 @@ function syncPlacesKeybindDisplay()
 		lastHasMainState = hasMain
 		local mapPlaces = { 	"Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right", }
 		local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
-		local currentItems = {}
+		local currentItems = { "/\\" }
 		for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
 		for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
 		if placesDropdown then
@@ -923,7 +940,7 @@ function syncPlacesKeybindDisplay()
 			end
 		end
 	end
-	if not selectedPlace then
+	if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
 		keybindEntries.Places = nil
 		updateKeybindText()
 		return
@@ -1466,6 +1483,118 @@ local function toggleSpeed(nextState)
 	end
 	syncSpeedKeybindDisplay()
 	return active and "ON" or "OFF"
+end
+local function toggleAFK(enabled)
+	afkEnabled = enabled
+	if afkConnection then
+		afkConnection:Disconnect()
+		afkConnection = nil
+	end
+	local character = player.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local protection = _G.NOTHINGX_Protection
+	if afkEnabled then
+		afkSavedCFrame = hrp.CFrame
+		if protection then
+			protection.Enabled = false
+			protection.oldBoundarySize = protection.boundarySize
+			protection.boundarySize = Vector3.new(2e10, 0, 2e10)
+		end
+		_G.SafeTeleportLock = true
+		afkConnection = RunService.Heartbeat:Connect(function()
+			local char = player.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root then
+				safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+				local targetPos = safeZonePositions[safeZoneCycleIndex]
+				root.CFrame = CFrame.new(targetPos)
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+			end
+		end)
+	else
+		if protection then
+			protection.Enabled = true
+			if protection.oldBoundarySize then
+				protection.boundarySize = protection.oldBoundarySize
+			end
+		end
+		_G.SafeTeleportLock = false
+		if afkSavedCFrame then
+			hrp.CFrame = afkSavedCFrame
+			afkSavedCFrame = nil
+		end
+	end
+	return afkEnabled and "ON" or "OFF"
+end
+local function handleSafeZoneHP()
+	if not safeZoneHPEnabled or afkEnabled then return end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoid or not hrp then return end
+	local hp = humanoid.Health
+	local protection = _G.NOTHINGX_Protection
+	if hp <= 25 then
+		if not safeZoneHPInSafeZone then
+			safeZoneHPInSafeZone = true
+			safeZoneHPSavedCFrame = hrp.CFrame
+			if protection then
+				protection.Enabled = false
+				protection.oldBoundarySize = protection.boundarySize
+				protection.boundarySize = Vector3.new(2e10, 0, 2e10)
+			end
+			_G.SafeTeleportLock = true
+			safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+			hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
+		else
+			safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+			hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
+		end
+	elseif safeZoneHPInSafeZone and hp >= 48 then
+		safeZoneHPInSafeZone = false
+		if protection then
+			protection.Enabled = true
+			if protection.oldBoundarySize then
+				protection.boundarySize = protection.oldBoundarySize
+			end
+		end
+		_G.SafeTeleportLock = false
+		if safeZoneHPSavedCFrame then
+			hrp.CFrame = safeZoneHPSavedCFrame
+			safeZoneHPSavedCFrame = nil
+		end
+	end
+end
+local safeZoneHPConnection = nil
+local function toggleSafeZoneHP(enabled)
+	safeZoneHPEnabled = enabled
+	if safeZoneHPConnection then
+		safeZoneHPConnection:Disconnect()
+		safeZoneHPConnection = nil
+	end
+	if not enabled and safeZoneHPInSafeZone then
+		safeZoneHPInSafeZone = false
+		local protection = _G.NOTHINGX_Protection
+		if protection then
+			protection.Enabled = true
+			if protection.oldBoundarySize then
+				protection.boundarySize = protection.oldBoundarySize
+			end
+		end
+		_G.SafeTeleportLock = false
+		local character = player.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if hrp and safeZoneHPSavedCFrame then
+			hrp.CFrame = safeZoneHPSavedCFrame
+			safeZoneHPSavedCFrame = nil
+		end
+	end
+	if enabled then
+		safeZoneHPConnection = RunService.Heartbeat:Connect(handleSafeZoneHP)
+	end
+	return safeZoneHPEnabled and "ON" or "OFF"
 end
 local function stopFly()
 	flying = false
@@ -2670,7 +2799,7 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	end
 	local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
 	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
-	if not targetRoot or not isAliveHumanoid(targetHumanoid) or targetRoot.Anchored then
+	if not targetRoot or not isAliveHumanoid(targetHumanoid) then
 		return nil, nil
 	end
 	local characterHumanoid = characterRoot.Parent and characterRoot.Parent:FindFirstChildOfClass("Humanoid")
@@ -3312,6 +3441,17 @@ local function SetupHumanoid(Char, Human)
 	UpdateJumpPower()
 	local propertyToWatch = Human.UseJumpPower and "JumpPower" or "JumpHeight"
 	ModConnections.jpLoop = Human:GetPropertyChangedSignal(propertyToWatch):Connect(UpdateJumpPower)
+	task.spawn(function()
+		local hrp = Char:WaitForChild("HumanoidRootPart", 5)
+		if hrp then
+			if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect() end
+			local function unanchor()
+				hrp.Anchored = false
+			end
+			unanchor()
+			ModConnections.hrpLoop = hrp:GetPropertyChangedSignal("Anchored"):Connect(unanchor)
+		end
+	end)
 end
 local function isCounter(acc)
 	if not acc or not acc:IsA("Accessory") then return false end
@@ -3350,10 +3490,13 @@ end
 ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
 task.spawn(function()
 	while speaker.Parent do
-		task.wait(0.35)
+		task.wait()
 		local char = speaker.Character
-		if not char then continue end
-		usunPusteAccessory(char)
+		if char then
+			usunPusteAccessory(char)
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then hrp.Anchored = false end
+		end
 	end
 end)
 end
@@ -6346,14 +6489,31 @@ if game.GameId == 3808081382 then
 		namedropdown = "Places",
 		inside = placesOrder,
 		multi = false,
-		deffultin = nil,
+		deffultin = selectedPlace,
 		fun = function(value)
 			selectedPlace = value
+			setSavedControlValue("SelectedPlace", value)
 			syncPlacesKeybindDisplay()
 		end,
 	})
 	placesDropdown.Frame.LayoutOrder = 999998
 end
+local afkTog = tog({
+	name = "Safe Zone (AFK)",
+	saveKey = "AFKEnabled",
+	fun = function(enabled)
+		toggleAFK(enabled)
+	end,
+})
+afkTog.Frame.LayoutOrder = 999999
+local hpSafeTog = tog({
+	name = "Safe Zone (HP 25 - 48)",
+	saveKey = "HPSafeZoneEnabled",
+	fun = function(enabled)
+		toggleSafeZoneHP(enabled)
+	end,
+})
+hpSafeTog.Frame.LayoutOrder = 1000000
 syncPlacesKeybindDisplay()
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
@@ -7033,7 +7193,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local key = input.KeyCode
 	local isBacktick = (key.Name == "BackQuote" or key.Name == "Backquote" or key == Enum.KeyCode.Tilde or key.Value == 96 or key.Value == 126)
 	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick then
-		if not selectedPlace or selectedPlace == "" then
+		if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
 			return
 		end
 		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
