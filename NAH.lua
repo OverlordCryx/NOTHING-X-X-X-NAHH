@@ -1,15 +1,15 @@
 repeat
     task.wait();
 until game:IsLoaded();
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local Workspace = game:GetService("Workspace")
-local CoreGui = game:GetService("CoreGui")
-local function nextFrame()
+Players = game:GetService("Players")
+TweenService = game:GetService("TweenService")
+UserInputService = game:GetService("UserInputService")
+GuiService = game:GetService("GuiService")
+RunService = game:GetService("RunService")
+HttpService = game:GetService("HttpService")
+Workspace = game:GetService("Workspace")
+CoreGui = game:GetService("CoreGui")
+function nextFrame()
 	return RunService.Heartbeat:Wait()
 end
 task.spawn(function()
@@ -23,7 +23,7 @@ task.spawn(function()
         end
     end
 end)
-local function overpowerRootState(rootPart, targetCFrame, linearVelocity, angularVelocity)
+function overpowerRootState(rootPart, targetCFrame, linearVelocity, angularVelocity)
 	if not rootPart or not rootPart.Parent or not targetCFrame then
 		return
 	end
@@ -72,7 +72,7 @@ local player = Players.LocalPlayer
 if not player then
 	return
 end
-local function showExistingGuiInfo(gui, title, text, duration)
+function showExistingGuiInfo(gui, title, text, duration)
 	local infoContainer = gui:FindFirstChild("InfoContainer")
 	local infoTitle = infoContainer and infoContainer:FindFirstChild("InfoTitle")
 	local infoText = infoContainer and infoContainer:FindFirstChild("InfoText")
@@ -205,7 +205,7 @@ do
 	leftGradient.Rotation = 90
 	leftGradient.Parent = keybindFrame
 end
-local keybindText = Instance.new("TextLabel")
+keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
 keybindText.AnchorPoint = Vector2.new(0, 0)
 keybindText.Position = UDim2.fromScale(0, 0)
@@ -227,7 +227,7 @@ do
 	keybindTextConstraint.MaxTextSize = 24
 	keybindTextConstraint.Parent = keybindText
 end
-local targetFrame = Instance.new("Frame")
+targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(0.5, 0)
 targetFrame.Position = UDim2.fromScale(0.5, 0.025)
@@ -265,7 +265,7 @@ do
 	targetGradient.Rotation = 90
 	targetGradient.Parent = targetFrame
 end
-local targetValueText = Instance.new("TextLabel")
+targetValueText = Instance.new("TextLabel")
 targetValueText.Name = "TargetValue"
 targetValueText.AnchorPoint = Vector2.new(0, 0)
 targetValueText.Position = UDim2.fromScale(0, 0)
@@ -288,7 +288,7 @@ do
 	targetValueConstraint.MaxTextSize = 20
 	targetValueConstraint.Parent = targetValueText
 end
-local infoContainer = Instance.new("Frame")
+infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
 infoContainer.Position = UDim2.fromScale(0.5, 0.08)
@@ -333,7 +333,7 @@ do
 	infoGradient.Rotation = 90
 	infoGradient.Parent = infoContainer
 end
-local infoTitle = Instance.new("TextLabel")
+infoTitle = Instance.new("TextLabel")
 infoTitle.Name = "InfoTitle"
 infoTitle.AnchorPoint = Vector2.new(0, 0)
 infoTitle.Position = UDim2.fromScale(0, 0)
@@ -356,7 +356,7 @@ do
 	infoTitleConstraint.MaxTextSize = 22
 	infoTitleConstraint.Parent = infoTitle
 end
-local infoText = Instance.new("TextLabel")
+infoText = Instance.new("TextLabel")
 infoText.Name = "InfoText"
 infoText.AnchorPoint = Vector2.new(0, 0)
 infoText.Position = UDim2.fromScale(0, 0)
@@ -379,7 +379,7 @@ do
 	infoTextConstraint.MaxTextSize = 18
 	infoTextConstraint.Parent = infoText
 end
-local settingsWindow = Instance.new("Frame")
+settingsWindow = Instance.new("Frame")
 settingsWindow.Name = "WindowUI"
 settingsWindow.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsWindow.Position = UDim2.fromScale(0.5, 0.57)
@@ -496,7 +496,7 @@ do
 	divider.ZIndex = 11
 	divider.Parent = settingsWindow
 end
-local uiX = Instance.new("ScrollingFrame")
+uiX = Instance.new("ScrollingFrame")
 uiX.Name = "UI-x"
 uiX.AnchorPoint = Vector2.new(0.5, 1)
 uiX.Position = UDim2.fromScale(0.5, 0.95)
@@ -555,23 +555,23 @@ task.spawn(function()
 end)
 print("✅")
 end)
-local keybindEntries = {}
-local introFinished = false
-local pendingInfoCall = nil
-local settingsOpen = false
-local draggingWindow = false
-local dragStartPosition = nil
-local dragStartInputPosition = nil
-local openDropdowns = {}
-local sliderStates = {}
-local controlSaveData = {}
-local sliderSaveFile = "NOTHING_X_0.file"
-local Speed = 1.5
-local speedKeybind = Enum.KeyCode.E
-local flyKeybind = Enum.KeyCode.R
-local camLockKeybind = Enum.KeyCode.Z
-local attackTpKeybind = Enum.KeyCode.T
-local targetSelectKeybind = Enum.KeyCode.C
+keybindEntries = {}
+introFinished = false
+pendingInfoCall = nil
+settingsOpen = false
+draggingWindow = false
+dragStartPosition = nil
+dragStartInputPosition = nil
+openDropdowns = {}
+sliderStates = {}
+controlSaveData = {}
+sliderSaveFile = "NOTHING_X_0.file"
+Speed = 1.5
+speedKeybind = Enum.KeyCode.E
+flyKeybind = Enum.KeyCode.R
+camLockKeybind = Enum.KeyCode.Z
+attackTpKeybind = Enum.KeyCode.T
+targetSelectKeybind = Enum.KeyCode.C
 setBackKeybind = Enum.KeyCode.N
 local getTrashState = {
 	keybind = Enum.KeyCode.LeftControl,
@@ -596,53 +596,53 @@ setBackPressToken = 0
 setBackLastPressAt = 0
 setBackPressCount = 0
 setBackTravelToken = 0
-local lastDeathCFrame = nil
-local active = false
-local speedLoopRunning = false
-local holdingW = false
-local holdingS = false
-local holdingA = false
-local holdingD = false
+lastDeathCFrame = nil
+active = false
+speedLoopRunning = false
+holdingW = false
+holdingS = false
+holdingA = false
+holdingD = false
 local cam = Workspace.CurrentCamera
 local char = player.Character or player.CharacterAdded:Wait()
 local hum = char:WaitForChild("Humanoid")
 local root = char:WaitForChild("HumanoidRootPart")
 local localCharacterDiedConnection = nil
-local flying = false
-local bv = nil
-local bg = nil
-local flySpeed = 1.5
-local flySpeedMultiplier = 555
-local velocity = Vector3.new()
-local currentVel = Vector3.new()
+flying = false
+bv = nil
+bg = nil
+flySpeed = 1.5
+flySpeedMultiplier = 555
+velocity = Vector3.new()
+currentVel = Vector3.new()
 local targetDisplayAccumulator = 0
-local camLockEnabled = false
-local camLockTarget = nil
-local camLockWaiting = false
-local camLockAcquireRadius = 120
-local manualTargetAcquireRadius = 130
-local attackTpEnabled = false
-local attackTpTarget = nil
-local lastTargetDeathTime = 0
-local manualAttackTpTarget = nil
-local manualAttackTpPlayer = nil
-local attackTpHolding = false
-local attackTpMode = "Behind"
-local autoCustomDistance = 2.0
+camLockEnabled = false
+camLockTarget = nil
+camLockWaiting = false
+camLockAcquireRadius = 120
+manualTargetAcquireRadius = 130
+attackTpEnabled = false
+attackTpTarget = nil
+lastTargetDeathTime = 0
+manualAttackTpTarget = nil
+manualAttackTpPlayer = nil
+attackTpHolding = false
+attackTpMode = "Behind"
+autoCustomDistance = 2.0
 local isSelectablePlayerDropdownTarget
 local syncModelDropdownSelectionToManualTarget
 local stopView
 local startView
 local toggleView
-local attackTpBehindDistance = 1.15
-local attackTpAirBehindDistance = 0.85
-local attackTpLeadTime = 0.012
-local attackTpAirLeadTime = 0.025
-local attackTpMaxHorizontalLead = 8.0
-local attackTpVerticalLead = 0.015
-local attackTpMaxVerticalLead = 3.0
-local attackTpGroundVerticalOffset = 0
-local attackTpAirVerticalOffset = 0.25
+attackTpBehindDistance = 1.15
+attackTpAirBehindDistance = 0.85
+attackTpLeadTime = 0.012
+attackTpAirLeadTime = 0.025
+attackTpMaxHorizontalLead = 8.0
+attackTpVerticalLead = 0.015
+attackTpMaxVerticalLead = 3.0
+attackTpGroundVerticalOffset = 0
+attackTpAirVerticalOffset = 0.25
 local customOffsets = {
 	["Custom 1"] = { x = 0, y = 0, z = 0 },
 	["Custom 2"] = { x = 0, y = 0, z = 0 },
@@ -683,9 +683,9 @@ local placesOrder = {
 local placesDropdown = nil
 local movementPanel = nil
 local selectedPlace = nil
-local autoTpEnabled = false
-local trashBlockEnabled = false
-local flingEnabled = false
+autoTpEnabled = false
+trashBlockEnabled = false
+flingEnabled = false
 walkFlingEnabled = false
 auraFlingEnabled = false
 clickFlingEnabled = false
@@ -716,19 +716,19 @@ flingTargetIndex = 1
 flingOrbitSpeed = 999999999999999
 flingOrbitIncrement = 0.1
 flingOrbitMax = 1.3
-local viewing = false
-local currentViewTarget = nil
-local currentViewPlayer = nil
-local viewDied = nil
-local viewChanged = nil
+viewing = false
+currentViewTarget = nil
+currentViewPlayer = nil
+viewDied = nil
+viewChanged = nil
 pendingTeleportToSelectedPlayer = false
-local targetActionControls = nil
-local flingModeControls = nil
-local resolveAttackTpTarget
-local zeroLocalPlayerRoot
-local syncFlingModeControls
-local runGetTrash
-local function encodeKeybindValue(keyCode)
+targetActionControls = nil
+flingModeControls = nil
+function resolveAttackTpTarget() end -- Placeholder for now, will be updated by function declaration
+function zeroLocalPlayerRoot() end
+function syncFlingModeControls() end
+function runGetTrash() end
+function encodeKeybindValue(keyCode)
 	if not keyCode then
 		return ""
 	end
@@ -737,7 +737,7 @@ local function encodeKeybindValue(keyCode)
 	end
 	return keyCode.Name or ""
 end
-local function decodeKeybindValue(value)
+function decodeKeybindValue(value)
 	if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
 		return value
 	end
@@ -752,7 +752,7 @@ local function decodeKeybindValue(value)
 	end
 	return nil
 end
-local function loadSliderSaveData()
+function loadSliderSaveData()
 	if type(isfile) ~= "function" or type(readfile) ~= "function" then
 		return
 	end
@@ -775,7 +775,7 @@ local function loadSliderSaveData()
 		controlSaveData = decoded
 	end
 end
-local function saveSliderSaveData()
+function saveSliderSaveData()
 	if type(writefile) ~= "function" then
 		return
 	end
@@ -830,7 +830,7 @@ do
 		getTrashState.keybind = savedGetTrashKeybind
 	end
 end
-local function parseEnabledValue(value)
+function parseEnabledValue(value)
 	if type(value) == "boolean" then
 		return value
 	end
@@ -840,7 +840,7 @@ local function parseEnabledValue(value)
 	local normalized = string.lower(tostring(value))
 	return normalized == "on" or normalized == "true" or normalized == "1"
 end
-local function updateKeybindText()
+function updateKeybindText()
 	local lines = {}
 	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "Custom", "Places" }
 	local function appendEntry(entry)
@@ -878,11 +878,11 @@ local function updateKeybindText()
 	end
 	keybindText.Text = table.concat(lines, "\n")
 end
-local function hasMapMainPart()
+function hasMapMainPart()
 	return game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
 end
 local mapDependentControls = {}
-local function syncMapDependentVisibility()
+function syncMapDependentVisibility()
 	local hasMain = hasMapMainPart()
 	for _, control in ipairs(mapDependentControls) do
 		if control and typeof(control) == "Instance" then
@@ -891,7 +891,7 @@ local function syncMapDependentVisibility()
 	end
 end
 local lastHasMainState = nil
-local function syncPlacesKeybindDisplay()
+function syncPlacesKeybindDisplay()
 	if game.GameId ~= 3808081382 then return end
 	local hasMain = hasMapMainPart()
 	if hasMain ~= lastHasMainState then
