@@ -2649,9 +2649,16 @@ local function updateTargetDisplay()
 			syncTargetActionControls()
 		end
 	end
-	local currentEntry = keybindEntries.TargetPick
-	if not currentEntry or currentEntry.name ~= "Target" or currentEntry.keybind ~= encodeKeybindValue(targetSelectKeybind) or currentEntry.hideState ~= true then
-		syncTargetPickKeybindDisplay()
+	if displayName == "" then
+		targetValueText.Size = UDim2.fromScale(0, 1)
+		targetHPText.Visible = false
+		hpSeparator.Visible = false
+	elseif not isHPEnabled or not displayedTarget then
+		targetValueText.Size = UDim2.fromScale(1, 1)
+		targetHPText.Visible = false
+		hpSeparator.Visible = false
+	else
+		targetValueText.Size = UDim2.fromScale(0, 1)
 	end
 end
 local function getClosestAliveTarget()
@@ -3707,15 +3714,23 @@ task.spawn(function()
             btn.BackgroundColor3 = enabled and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
             btn.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
         end
-        btn.MouseButton1Click:Connect(function()
-            enabled = not enabled
+        local function setValue(val, skipCallback)
+            enabled = val == true
             render()
             if saveKey then setSavedControlValue(saveKey, enabled) end
-            if callback then callback(enabled) end
+            if not skipCallback and callback then callback(enabled) end
+        end
+        btn.MouseButton1Click:Connect(function()
+            setValue(not enabled)
         end)
         if enabled and callback then task.spawn(callback, true) end
         render()
-        return btn
+        return {
+            Button = btn,
+            SetValue = setValue,
+            GetValue = function() return enabled end,
+            tog_change = setValue
+        }
     end
     local function makeHubBtn(parent, text, callback, widthMult)
         local btn = Instance.new("TextButton")
@@ -3737,8 +3752,8 @@ task.spawn(function()
         return btn
     end
     local row1 = makeRow(32)
-    makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
-    makeHubTog(row1, supportsDashBlock and "Dash Block" or "Dash", supportsDashBlock and setDashBlockRuntime or nil, "DashBlockEnabled", false)
+    StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
+    DashToggle = makeHubTog(row1, supportsDashBlock and "Dash Block" or "Dash", supportsDashBlock and setDashBlockRuntime or nil, "DashBlockEnabled", false)
     makeHubBtn(row1, "Fix Cam", fixCamera)
     makeHubBtn(row1, "Lay", layCharacter)
     local row2 = makeRow(66)
