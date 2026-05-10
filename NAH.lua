@@ -220,7 +220,7 @@ keybindText.Parent = keybindFrame
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
-targetFrame.Position = UDim2.new(1, -10, 0, 10)
+targetFrame.Position = UDim2.new(1, -260, 0, 10)
 targetFrame.Size = UDim2.fromScale(0.1, 0.02)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.5
@@ -1032,7 +1032,7 @@ local function toggleVoidDead(state)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end)
-	task.delay(1.1, function()
+	task.delay(0.9, function()
 		voidDeadActive = false
 		if conn then conn:Disconnect() end
 		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
