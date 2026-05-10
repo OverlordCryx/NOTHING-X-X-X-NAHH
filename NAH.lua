@@ -1032,7 +1032,7 @@ local function toggleVoidDead(state)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end)
-	task.delay(1.9, function()
+	task.delay(1.1, function()
 		voidDeadActive = false
 		if conn then conn:Disconnect() end
 		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
