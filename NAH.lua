@@ -576,12 +576,12 @@ sliderSaveFile = "NOTHING_X_0.file"
 Speed = 1.5
 speedKeybind = Enum.KeyCode.E
 flyKeybind = Enum.KeyCode.R
-camLockKeybind = Enum.KeyCode.Z
+camLockKeybind = Enum.KeyCode.V
 attackTpKeybind = Enum.KeyCode.T
 targetSelectKeybind = Enum.KeyCode.C
 setBackKeybind = Enum.KeyCode.N
 voidDeadActive = false
-voidDeadKeybind = Enum.KeyCode.V
+voidDeadKeybind = Enum.KeyCode.Z
 local voidDeadLastCF = nil
 local voidDeadConn = nil
 local getTrashState = {
@@ -996,38 +996,46 @@ local function syncVoidDeadKeybindDisplay()
 	keybindEntries.VoidDead = {
 		name = "Void Dead",
 		keybind = encodeKeybindValue(voidDeadKeybind),
-		enabled = voidDeadActive,
+		hideState = true,
 	}
 	updateKeybindText()
 end
-local function toggleVoidDead()
+local VoidDeadToggle = nil
+local function toggleVoidDead(state)
+	if state == false then
+		voidDeadActive = false
+		return
+	end
 	local plr = game:GetService("Players").LocalPlayer
 	local character = plr.Character
 	if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid")) then
+		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
 		return
 	end
-	voidDeadActive = not voidDeadActive
-	if voidDeadActive then
-		voidDeadLastCF = character.HumanoidRootPart.CFrame
-		pcall(function()
-			workspace.FallenPartsDestroyHeight = 0/0
-			workspace.Camera.CameraType = Enum.CameraType.Scriptable
-		end)
-		if voidDeadConn then voidDeadConn:Disconnect() end
-		voidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
-			local current = plr.Character
-			local hrp = current and current:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.CFrame = CFrame.new(hrp.Position.X, -700, hrp.Position.Z)
-				hrp.AssemblyLinearVelocity = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
-			end
-		end)
-	else
-		if voidDeadConn then
-			voidDeadConn:Disconnect()
-			voidDeadConn = nil
+	if voidDeadActive then return end 
+	voidDeadActive = true
+	syncVoidDeadKeybindDisplay()
+	if VoidDeadToggle then VoidDeadToggle:SetValue(true, true) end
+	voidDeadLastCF = character.HumanoidRootPart.CFrame
+	pcall(function()
+		workspace.FallenPartsDestroyHeight = 0/0
+		workspace.Camera.CameraType = Enum.CameraType.Scriptable
+	end)
+	local hrp = character.HumanoidRootPart
+	local conn
+	conn = game:GetService("RunService").Heartbeat:Connect(function()
+		if not voidDeadActive or not hrp.Parent then
+			if conn then conn:Disconnect() end
+			return
 		end
+		hrp.CFrame = CFrame.new(hrp.Position.X, -700, hrp.Position.Z)
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end)
+	task.delay(1.9, function()
+		voidDeadActive = false
+		if conn then conn:Disconnect() end
+		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
 		if voidDeadLastCF and character and character:FindFirstChild("HumanoidRootPart") then
 			applyTeleportRootState(character.HumanoidRootPart, voidDeadLastCF)
 		end
@@ -1035,8 +1043,8 @@ local function toggleVoidDead()
 			workspace.Camera.CameraType = Enum.CameraType.Custom
 			workspace.Camera.CameraSubject = character:FindFirstChild("Humanoid") or character
 		end)
-	end
-	syncVoidDeadKeybindDisplay()
+		syncVoidDeadKeybindDisplay()
+	end)
 end
 local function syncFlyKeybindDisplay()
 	keybindEntries.Fly = {
@@ -3802,14 +3810,19 @@ task.spawn(function()
         return btn
     end
     local row1 = makeRow(32)
+    VoidDeadToggle = makeHubTog(row1, "Void Dead", toggleVoidDead, "VoidDeadEnabled", false)
     StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
     DashToggle = makeHubTog(row1, supportsDashBlock and "Dash Block" or "Dash", supportsDashBlock and setDashBlockRuntime or nil, "DashBlockEnabled", false)
     makeHubBtn(row1, "Fix Cam", fixCamera)
     makeHubBtn(row1, "Lay", layCharacter)
     local row2 = makeRow(66)
-    makeHubTog(row2, "Whirlwind", function(v) WhirlwindEnabled = v end, "AutoWhirlwind", false)
-    makeHubTog(row2, "Auto Combo", function(v) WallComboEnabled = v end, "AutoCombo", false)
-    makeHubTog(row2, "No Dash CD", function(v) workspace:SetAttribute("NoDashCooldown", v) end, "NoDashCD", false)
+    makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
+    makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
+    makeHubTog(row2, "No Dash CD", function(v) 
+        workspace:SetAttribute("NoDashCooldown", v)
+        player:SetAttribute("NoDashCooldown", v)
+        if player.Character then player.Character:SetAttribute("NoDashCooldown", v) end
+    end, "NoDashCD", false)
     makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
     local row3 = makeRow(100)
     makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
@@ -3836,11 +3849,10 @@ task.spawn(function()
         }
         local function SpamQ()
             VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
-            task.wait(0.05)
             VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
         end
         local function HandleWallComboTilt(track, combatChar)
-            if not WallComboEnabled or not track.Animation then return end
+            if not _G.WallComboEnabled or not track.Animation then return end
             if WallComboIDs[track.Animation.AnimationId] then
                 local hrp = combatChar:FindFirstChild("HumanoidRootPart")
                 if hrp then
@@ -3848,7 +3860,7 @@ task.spawn(function()
                     local startTime = tick()
                     local conn
                     conn = RunService.Heartbeat:Connect(function()
-                        if not WallComboEnabled or tick() - startTime >= 0.3 then
+                        if not _G.WallComboEnabled or tick() - startTime >= 0.3 then
                             if hrp and hrp.Parent then hrp.CFrame = startCFrame end
                             conn:Disconnect()
                         elseif hrp and hrp.Parent then
@@ -3862,7 +3874,7 @@ task.spawn(function()
             local combatHumanoid = combatChar:WaitForChild("Humanoid")
             local combatAnimator = combatHumanoid:WaitForChild("Animator")
             combatAnimator.AnimationPlayed:Connect(function(track)
-                if WhirlwindEnabled and track.Animation and track.Animation.AnimationId == WhirlwindDunkID then
+                if _G.WhirlwindEnabled and track.Animation and track.Animation.AnimationId == WhirlwindDunkID then
                     task.wait(1.2)
                     local hrp = combatChar:FindFirstChild("HumanoidRootPart")
                     if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(0, 100, 0) end
@@ -3870,10 +3882,10 @@ task.spawn(function()
                 HandleWallComboTilt(track, combatChar)
             end)
             combatChar.DescendantAdded:Connect(function(desc)
-                if desc:IsA("ObjectValue") and desc.Name:lower() == "wallcombo" and WallComboEnabled then
+                if desc:IsA("ObjectValue") and desc.Name:lower() == "wallcombo" and _G.WallComboEnabled then
                     local startTime = tick()
                     local duration = desc:GetAttribute("DeleteMe") or 0.6
-                    repeat SpamQ(); task.wait()
+                    repeat SpamQ(); task.wait(0.01)
                     until not desc.Parent or desc.Parent ~= combatChar or tick() - startTime >= duration
                 end
             end)
