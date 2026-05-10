@@ -1001,17 +1001,40 @@ local function syncVoidDeadKeybindDisplay()
 	updateKeybindText()
 end
 local VoidDeadToggle = nil
+function getUprightSetBackCFrame(position, sourceCFrame)
+	local look = sourceCFrame and sourceCFrame.LookVector or Vector3.new(0, 0, -1)
+	local flatLook = Vector3.new(look.X, 0, look.Z)
+	if flatLook.Magnitude <= 0.001 then
+		flatLook = Vector3.new(0, 0, -1)
+	else
+		flatLook = flatLook.Unit
+	end
+	return CFrame.lookAt(position, position + flatLook, Vector3.new(0, 1, 0))
+end
+local function canSaveSetBackPosition(character, rootPart, humanoid)
+	if not character or not rootPart or not humanoid then
+		return false
+	end
+	if humanoid.FloorMaterial ~= Enum.Material.Air then
+		return true
+	end
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { character }
+	rayParams.IgnoreWater = false
+	local hit = Workspace:Raycast(rootPart.Position, Vector3.new(0, -8, 0), rayParams)
+	return hit ~= nil
+end
 local function toggleVoidDead(state)
 	local targetState = state
 	if targetState == nil then
 		targetState = not voidDeadActive
 	end
-
 	if voidDeadActive == targetState then return end
-	
 	local plr = game:GetService("Players").LocalPlayer
 	local character = plr.Character
-
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if targetState == false then
 		voidDeadActive = false
 		if voidDeadConn then 
@@ -1019,49 +1042,56 @@ local function toggleVoidDead(state)
 			voidDeadConn = nil
 		end
 		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
-		
-		if voidDeadLastCF and character and character:FindFirstChild("HumanoidRootPart") then
-			applyTeleportRootState(character.HumanoidRootPart, voidDeadLastCF)
+		if voidDeadLastCF and hrp and humanoid and humanoid.Health > 0 then
+			applyTeleportRootState(hrp, voidDeadLastCF)
 		end
-		
 		pcall(function()
 			workspace.Camera.CameraType = Enum.CameraType.Custom
-			workspace.Camera.CameraSubject = character:FindFirstChild("Humanoid") or character
+			workspace.Camera.CameraSubject = humanoid or character
 		end)
-		
 		syncVoidDeadKeybindDisplay()
 		return
 	end
-
-	if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid")) then
+	if not (character and hrp and humanoid) then
 		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
 		return
 	end
-
+	if canSaveSetBackPosition(character, hrp, humanoid) then
+		voidDeadLastCF = hrp.CFrame
+	elseif setBackSavedCFrame then
+		voidDeadLastCF = setBackSavedCFrame
+	else
+		voidDeadLastCF = hrp.CFrame
+	end
 	voidDeadActive = true
 	syncVoidDeadKeybindDisplay()
 	if VoidDeadToggle then VoidDeadToggle:SetValue(true, true) end
-	
-	voidDeadLastCF = character.HumanoidRootPart.CFrame
-	
 	pcall(function()
 		workspace.FallenPartsDestroyHeight = 0/0
 		workspace.Camera.CameraType = Enum.CameraType.Scriptable
 	end)
-
-	local hrp = character.HumanoidRootPart
 	if voidDeadConn then voidDeadConn:Disconnect() end
 	voidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
-		if not voidDeadActive or not hrp.Parent then
+		if not voidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) then
 			if voidDeadConn then 
 				voidDeadConn:Disconnect() 
 				voidDeadConn = nil
+			end
+			if voidDeadActive and humanoid and humanoid.Health <= 0 then
+				toggleVoidDead(false)
 			end
 			return
 		end
 		hrp.CFrame = CFrame.new(hrp.Position.X, -700, hrp.Position.Z)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
+	end)
+	local deathConn
+	deathConn = humanoid.Died:Connect(function()
+		if voidDeadActive then
+			toggleVoidDead(false)
+		end
+		deathConn:Disconnect()
 	end)
 end
 local function syncFlyKeybindDisplay()
@@ -2130,30 +2160,6 @@ runGetTrash = function()
 		end
 	end)
 	return "ON"
-end
-function getUprightSetBackCFrame(position, sourceCFrame)
-	local look = sourceCFrame and sourceCFrame.LookVector or Vector3.new(0, 0, -1)
-	local flatLook = Vector3.new(look.X, 0, look.Z)
-	if flatLook.Magnitude <= 0.001 then
-		flatLook = Vector3.new(0, 0, -1)
-	else
-		flatLook = flatLook.Unit
-	end
-	return CFrame.lookAt(position, position + flatLook, Vector3.new(0, 1, 0))
-end
-local function canSaveSetBackPosition(character, rootPart, humanoid)
-	if not character or not rootPart or not humanoid then
-		return false
-	end
-	if humanoid.FloorMaterial ~= Enum.Material.Air then
-		return true
-	end
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	rayParams.FilterDescendantsInstances = { character }
-	rayParams.IgnoreWater = false
-	local hit = Workspace:Raycast(rootPart.Position, Vector3.new(0, -8, 0), rayParams)
-	return hit ~= nil
 end
 function saveSetBackPosition()
 	local currentCharacter = player.Character
@@ -3828,7 +3834,6 @@ task.spawn(function()
         return btn
     end
     local row1 = makeRow(32)
-    VoidDeadToggle = makeHubTog(row1, "Void Dead", toggleVoidDead, "VoidDeadEnabled", false)
     StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
     DashToggle = makeHubTog(row1, supportsDashBlock and "Dash Block" or "Dash", supportsDashBlock and setDashBlockRuntime or nil, "DashBlockEnabled", false)
     makeHubBtn(row1, "Fix Cam", fixCamera)
@@ -3993,11 +3998,9 @@ do
 	local StarterPack = game:GetService("StarterPack")
 	local RunService = game:GetService("RunService")
 	local LocalPlayer = Players.LocalPlayer
-
 	pcall(function()
 		Workspace.FallenPartsDestroyHeight = 0/0
 	end)
-
 	local BOUNDARY_X = 200000
 	local BOUNDARY_Z = 200000
 	local BOUNDARY_Y_DOWN = -10000
@@ -4006,12 +4009,10 @@ do
 	local MAX_SAFE_POSITIONS = 10
 	local displacedClient = nil
 	local originalParent = nil
-
 	local function forceClientDisplace(char, pos)
 		if pos.Y <= CLIENT_MOVE_Y then
 			local charHandler = char:FindFirstChild("CharacterHandler")
 			local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
-			
 			if clientModule then
 				if not displacedClient then
 					originalParent = clientModule.Parent
@@ -4025,7 +4026,6 @@ do
 			end
 		end
 	end
-
 	local function updateMonitoring()
 		local char = LocalPlayer.Character
 		if not char then
@@ -4038,7 +4038,6 @@ do
 		local pos = hrp.Position
 		local humanoid = char:FindFirstChildOfClass("Humanoid")
 		local alive = humanoid and humanoid.Health > 0
-
 		if alive and humanoid.FloorMaterial ~= Enum.Material.Air and pos.Y > CLIENT_MOVE_Y then
 			local lastSafe = safePositions[1]
 			if not lastSafe or (lastSafe.Position - pos).Magnitude > 5 then
@@ -4048,7 +4047,6 @@ do
 				end
 			end
 		end
-
 		local outOfBounds = math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z or pos.Y <= BOUNDARY_Y_DOWN
 		if outOfBounds and alive then
 			for i = 1, #safePositions do
@@ -4065,9 +4063,7 @@ do
 				end
 			end
 		end
-
 		forceClientDisplace(char, pos)
-
 		if pos.Y > CLIENT_MOVE_Y and displacedClient and originalParent then
 			pcall(function()
 				if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
@@ -4077,7 +4073,6 @@ do
 			displacedClient = nil
 			originalParent = nil
 		end
-
 		if not alive and displacedClient then
 			pcall(function()
 				if displacedClient.Parent == StarterPack then
@@ -4088,7 +4083,6 @@ do
 			originalParent = nil
 		end
 	end
-
 	local function setupHrpListeners(hrp, char)
 		if not hrp then return end
 		local function fastCheck()
@@ -4097,16 +4091,13 @@ do
 		hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
 		hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
 	end
-
 	LocalPlayer.CharacterAdded:Connect(function(char)
 		local hrp = char:WaitForChild("HumanoidRootPart", 5)
 		setupHrpListeners(hrp, char)
 	end)
-
 	if LocalPlayer.Character then
 		setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
 	end
-
 	RunService.Stepped:Connect(updateMonitoring)
 	RunService.Heartbeat:Connect(updateMonitoring)
 end
