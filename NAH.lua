@@ -70,10 +70,10 @@ local function applyTeleportRootState(rootPart, targetCFrame, linearVelocity, an
 end
 local player = Players.LocalPlayer
 local espOverlayConfig = {
-    showCharacter = true,
-    showUltimate = true,
-    showHp = true,
-    showEsp = true,
+    showCharacter = false,
+    showUltimate = false,
+    showHp = false,
+    showEsp = false,
 }
 local espOverlayState = {}
 function showExistingGuiInfo(gui, title, text, duration)
@@ -177,7 +177,7 @@ local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
 keybindFrame.Position = UDim2.new(0, 10, 0.5, 0)
-keybindFrame.Size = UDim2.fromScale(0.1, 0.14)
+keybindFrame.Size = UDim2.fromScale(0, 0)
 keybindFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 keybindFrame.BackgroundTransparency = 0.2
 keybindFrame.BorderSizePixel = 0
@@ -188,15 +188,15 @@ keybindFrame.Visible = false
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
 do
 	local keybindSizeConstraint = Instance.new("UISizeConstraint")
-	keybindSizeConstraint.MinSize = Vector2.new(160, 60)
+	keybindSizeConstraint.MinSize = Vector2.new(0, 0) 
 	keybindSizeConstraint.MaxSize = Vector2.new(240, 450) 
 	keybindSizeConstraint.Parent = keybindFrame
 end
 local keybindPadding = Instance.new("UIPadding")
-keybindPadding.PaddingTop = UDim.new(0, 0)
-keybindPadding.PaddingBottom = UDim.new(0, 0)
-keybindPadding.PaddingLeft = UDim.new(0, 0)
-keybindPadding.PaddingRight = UDim.new(0, 0)
+keybindPadding.PaddingTop = UDim.new(0, 10)
+keybindPadding.PaddingBottom = UDim.new(0, 10)
+keybindPadding.PaddingLeft = UDim.new(0, 12)
+keybindPadding.PaddingRight = UDim.new(0, 12)
 keybindPadding.Parent = keybindFrame
 keybindFrame.Parent = screenGui
 keybindText = Instance.new("TextLabel")
@@ -211,7 +211,7 @@ keybindText.TextStrokeTransparency = 1
 keybindText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 keybindText.Font = Enum.Font.GothamBold
 keybindText.TextSize = 16
-keybindText.LineHeight = 1.2
+keybindText.LineHeight = 1.5
 keybindText.TextScaled = false
 keybindText.TextWrapped = true
 keybindText.TextYAlignment = Enum.TextYAlignment.Top
@@ -223,7 +223,7 @@ targetFrame.AnchorPoint = Vector2.new(1, 0)
 targetFrame.Position = UDim2.new(1, -10, 0, 10)
 targetFrame.Size = UDim2.fromScale(0.1, 0.02)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-targetFrame.BackgroundTransparency = 0.2
+targetFrame.BackgroundTransparency = 0.5
 targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
 targetFrame.ClipsDescendants = true 
@@ -254,8 +254,10 @@ local function setSavedControlValue(key, value)
 	saveSliderSaveData()
 end
 local targetPadding = Instance.new("UIPadding")
-targetPadding.PaddingLeft = UDim.new(0, 0)
-targetPadding.PaddingRight = UDim.new(0, 0)
+targetPadding.PaddingLeft = UDim.new(0, 10)
+targetPadding.PaddingRight = UDim.new(0, 10)
+targetPadding.PaddingTop = UDim.new(0, 5)
+targetPadding.PaddingBottom = UDim.new(0, 5)
 targetPadding.Parent = targetFrame
 targetFrame.Parent = screenGui
 local targetLayout = Instance.new("UIListLayout")
@@ -3745,10 +3747,10 @@ task.spawn(function()
     makeHubTog(row2, "No Dash CD", function(v) workspace:SetAttribute("NoDashCooldown", v) end, "NoDashCD", true)
     makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
     local row3 = makeRow(100)
-    makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", true)
-    makeHubTog(row3, "Names", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", true)
-    makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", true)
-    makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", true)
+    makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
+    makeHubTog(row3, "Names", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false)
+    makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
+    makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
     local row4 = makeRow(134)
     makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
     makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
@@ -6596,7 +6598,7 @@ task.spawn(function()
 		return math.clamp(math.floor(numericValue + 0.5), 0, 999)
 	end
 	local function getCharacterNameColor(characterName)
-		return Color3.fromRGB(255, 0, 0)
+		return Color3.fromRGB(255, 255, 255)
 	end
 	local function getUltimateColor(ultimatePercent)
 		local value = clampPercent(ultimatePercent)
