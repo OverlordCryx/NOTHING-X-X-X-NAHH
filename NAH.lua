@@ -69,9 +69,13 @@ local function applyTeleportRootState(rootPart, targetCFrame, linearVelocity, an
 	overpowerRootState(rootPart, targetCFrame, linearVelocity or Vector3.zero, angularVelocity or Vector3.zero)
 end
 local player = Players.LocalPlayer
-if not player then
-	return
-end
+local espOverlayConfig = {
+    showCharacter = true,
+    showUltimate = true,
+    showHp = true,
+    showEsp = true,
+}
+local espOverlayState = {}
 function showExistingGuiInfo(gui, title, text, duration)
 	local infoContainer = gui:FindFirstChild("InfoContainer")
 	local infoTitle = infoContainer and infoContainer:FindFirstChild("InfoTitle")
@@ -93,11 +97,11 @@ function showExistingGuiInfo(gui, title, text, duration)
 	end
 	TweenService:Create(infoTitle, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		TextTransparency = 0,
-		TextStrokeTransparency = 0,
+		TextStrokeTransparency = 1,
 	}):Play()
 	TweenService:Create(infoText, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		TextTransparency = 0,
-		TextStrokeTransparency = 0.2,
+		TextStrokeTransparency = 1,
 	}):Play()
 	task.delay(tonumber(duration) or 3, function()
 		if not infoContainer.Parent then
@@ -152,7 +156,11 @@ local function updateGlobalScale()
 	local scaleX = viewportSize.X / baseResolution.X
 	local scaleY = viewportSize.Y / baseResolution.Y
 	local finalScale = math.min(scaleX, scaleY)
-	mainScale.Scale = math.clamp(finalScale, 0.6, 1.4)
+	mainScale.Scale = math.clamp(finalScale, 0.5, 1.2)
+	if infoContainer then
+		local yPos = 0.08 + (1 - mainScale.Scale) * 0.15
+		infoContainer.Position = UDim2.fromScale(0.5, yPos)
+	end
 end
 task.spawn(function()
 	updateGlobalScale()
@@ -162,49 +170,35 @@ local background = Instance.new("Frame")
 background.Name = "Background"
 background.Size = UDim2.fromScale(1, 1)
 background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-background.BorderSizePixel = 0
+background.BorderSizePixel = 1
+background.BorderColor3 = Color3.fromRGB(255, 0, 0)
 background.Parent = screenGui
 local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
-keybindFrame.Position = UDim2.fromScale(0.03, 0.5)
+keybindFrame.Position = UDim2.new(0, 10, 0.5, 0)
 keybindFrame.Size = UDim2.fromScale(0.1, 0.14)
-keybindFrame.BackgroundColor3 = Color3.fromRGB(15, 0, 0)
-keybindFrame.BackgroundTransparency = 0.4
+keybindFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+keybindFrame.BackgroundTransparency = 0.2
 keybindFrame.BorderSizePixel = 0
+keybindFrame.ClipsDescendants = true 
+do
+end
 keybindFrame.Visible = false
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
 do
 	local keybindSizeConstraint = Instance.new("UISizeConstraint")
-	keybindSizeConstraint.MinSize = Vector2.new(120, 40)
-	keybindSizeConstraint.MaxSize = Vector2.new(280, 500)
+	keybindSizeConstraint.MinSize = Vector2.new(160, 60)
+	keybindSizeConstraint.MaxSize = Vector2.new(240, 450) 
 	keybindSizeConstraint.Parent = keybindFrame
 end
 local keybindPadding = Instance.new("UIPadding")
-keybindPadding.PaddingTop = UDim.new(0, 8)
-keybindPadding.PaddingBottom = UDim.new(0, 8)
-keybindPadding.PaddingLeft = UDim.new(0, 10)
-keybindPadding.PaddingRight = UDim.new(0, 10)
+keybindPadding.PaddingTop = UDim.new(0, 0)
+keybindPadding.PaddingBottom = UDim.new(0, 0)
+keybindPadding.PaddingLeft = UDim.new(0, 0)
+keybindPadding.PaddingRight = UDim.new(0, 0)
 keybindPadding.Parent = keybindFrame
 keybindFrame.Parent = screenGui
-local leftStroke = Instance.new("UIStroke")
-leftStroke.Color = Color3.fromRGB(255, 0, 0)
-leftStroke.Thickness = 3
-leftStroke.Transparency = 1
-leftStroke.Parent = keybindFrame
-do
-	local leftCorner = Instance.new("UICorner")
-	leftCorner.CornerRadius = UDim.new(0, 18)
-	leftCorner.Parent = keybindFrame
-	local leftGradient = Instance.new("UIGradient")
-	leftGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-		ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-	})
-	leftGradient.Rotation = 90
-	leftGradient.Parent = keybindFrame
-end
 keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
 keybindText.AnchorPoint = Vector2.new(0, 0)
@@ -212,182 +206,197 @@ keybindText.Position = UDim2.fromScale(0, 0)
 keybindText.Size = UDim2.new(1, 0, 0, 0)
 keybindText.AutomaticSize = Enum.AutomaticSize.Y
 keybindText.BackgroundTransparency = 1
-keybindText.TextColor3 = Color3.fromRGB(255, 110, 110)
-keybindText.TextStrokeTransparency = 0.2
-keybindText.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
+keybindText.TextColor3 = Color3.fromRGB(255, 0, 0)
+keybindText.TextStrokeTransparency = 1
+keybindText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 keybindText.Font = Enum.Font.GothamBold
-keybindText.TextScaled = true
+keybindText.TextSize = 16
+keybindText.LineHeight = 1.2
+keybindText.TextScaled = false
 keybindText.TextWrapped = true
 keybindText.TextYAlignment = Enum.TextYAlignment.Top
 keybindText.TextXAlignment = Enum.TextXAlignment.Center
 keybindText.Parent = keybindFrame
-do
-	local keybindTextConstraint = Instance.new("UITextSizeConstraint")
-	keybindTextConstraint.MinTextSize = 12
-	keybindTextConstraint.MaxTextSize = 24
-	keybindTextConstraint.Parent = keybindText
-end
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
-targetFrame.AnchorPoint = Vector2.new(0.5, 0)
-targetFrame.Position = UDim2.fromScale(0.5, 0.025)
+targetFrame.AnchorPoint = Vector2.new(1, 0)
+targetFrame.Position = UDim2.new(1, -10, 0, 10)
 targetFrame.Size = UDim2.fromScale(0.1, 0.02)
-targetFrame.BackgroundColor3 = Color3.fromRGB(20, 0, 0)
-targetFrame.BackgroundTransparency = 0.5
+targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+targetFrame.BackgroundTransparency = 0.2
+targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
+targetFrame.ClipsDescendants = true 
+do
+end
 targetFrame.Visible = false
 targetFrame.AutomaticSize = Enum.AutomaticSize.XY
 do
 	local targetSizeConstraint = Instance.new("UISizeConstraint")
 	targetSizeConstraint.MinSize = Vector2.new(100, 30)
+	targetSizeConstraint.MaxSize = Vector2.new(180, 50) 
 	targetSizeConstraint.Parent = targetFrame
 end
+local function roundToTenth(value)
+	return math.floor((value * 10) + 0.5) / 10
+end
+local function getSavedControlValue(key)
+	if not key or key == "" then
+		return nil
+	end
+	return controlSaveData[key]
+end
+local function setSavedControlValue(key, value)
+	if not key or key == "" then
+		return
+	end
+	controlSaveData[key] = value
+	saveSliderSaveData()
+end
 local targetPadding = Instance.new("UIPadding")
-targetPadding.PaddingLeft = UDim.new(0, 12)
-targetPadding.PaddingRight = UDim.new(0, 12)
+targetPadding.PaddingLeft = UDim.new(0, 0)
+targetPadding.PaddingRight = UDim.new(0, 0)
 targetPadding.Parent = targetFrame
 targetFrame.Parent = screenGui
-do
-	local targetCorner = Instance.new("UICorner")
-	targetCorner.CornerRadius = UDim.new(0, 18)
-	targetCorner.Parent = targetFrame
-	local targetStroke = Instance.new("UIStroke")
-	targetStroke.Color = Color3.fromRGB(255, 0, 0)
-	targetStroke.Thickness = 3
-	targetStroke.Transparency = 0.1
-	targetStroke.Parent = targetFrame
-	local targetGradient = Instance.new("UIGradient")
-	targetGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-		ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-	})
-	targetGradient.Rotation = 90
-	targetGradient.Parent = targetFrame
-end
+local targetLayout = Instance.new("UIListLayout")
+targetLayout.FillDirection = Enum.FillDirection.Horizontal
+targetLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+targetLayout.Padding = UDim.new(0, 8) 
+targetLayout.Parent = targetFrame
 targetValueText = Instance.new("TextLabel")
-targetValueText.Name = "TargetValue"
-targetValueText.AnchorPoint = Vector2.new(0, 0)
-targetValueText.Position = UDim2.fromScale(0, 0)
-targetValueText.Size = UDim2.new(1, 0, 1, 0)
-targetValueText.AutomaticSize = Enum.AutomaticSize.XY
+targetValueText.Name = "TargetValueText"
 targetValueText.BackgroundTransparency = 1
-targetValueText.Text = ""
-targetValueText.TextColor3 = Color3.fromRGB(255, 110, 110)
-targetValueText.TextStrokeTransparency = 0.2
-targetValueText.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
+targetValueText.Position = UDim2.fromScale(0, 0)
+targetValueText.Size = UDim2.fromScale(0, 1)
+targetValueText.AutomaticSize = Enum.AutomaticSize.X
 targetValueText.Font = Enum.Font.GothamBold
-targetValueText.TextScaled = true
-targetValueText.TextWrapped = true
-targetValueText.TextXAlignment = Enum.TextXAlignment.Center
+targetValueText.Text = ""
+targetValueText.TextColor3 = Color3.fromRGB(255, 0, 0)
+targetValueText.TextStrokeTransparency = 1
+targetValueText.TextSize = 13
+targetValueText.TextScaled = false
+targetValueText.TextWrapped = false 
+targetValueText.ClipsDescendants = false
 targetValueText.TextYAlignment = Enum.TextYAlignment.Center
+targetValueText.LayoutOrder = 3
 targetValueText.Parent = targetFrame
-do
-	local targetValueConstraint = Instance.new("UITextSizeConstraint")
-	targetValueConstraint.MinTextSize = 12
-	targetValueConstraint.MaxTextSize = 20
-	targetValueConstraint.Parent = targetValueText
-end
+targetHPText = Instance.new("TextLabel")
+targetHPText.Name = "TargetHPText"
+targetHPText.BackgroundTransparency = 1
+targetHPText.Position = UDim2.fromScale(0, 0)
+targetHPText.Size = UDim2.fromScale(0, 1)
+targetHPText.AutomaticSize = Enum.AutomaticSize.X
+targetHPText.Font = Enum.Font.GothamBold
+targetHPText.Text = ""
+targetHPText.TextColor3 = Color3.fromRGB(255, 0, 0)
+targetHPText.TextStrokeTransparency = 1
+targetHPText.TextSize = 13
+targetHPText.TextScaled = false
+targetHPText.TextWrapped = false 
+targetHPText.ClipsDescendants = false
+targetHPText.TextXAlignment = Enum.TextXAlignment.Left
+targetHPText.LayoutOrder = 1
+targetHPText.Parent = targetFrame
+hpSeparator = Instance.new("TextLabel")
+hpSeparator.Name = "Separator"
+hpSeparator.BackgroundTransparency = 1
+hpSeparator.Position = UDim2.fromScale(0, 0)
+hpSeparator.Size = UDim2.fromScale(0, 1)
+hpSeparator.AutomaticSize = Enum.AutomaticSize.X
+hpSeparator.Font = Enum.Font.GothamBold
+hpSeparator.Text = "|"
+hpSeparator.TextColor3 = Color3.fromRGB(255, 0, 0)
+hpSeparator.TextTransparency = 0
+hpSeparator.TextSize = 13
+hpSeparator.TextWrapped = false
+hpSeparator.ClipsDescendants = false
+hpSeparator.LayoutOrder = 2
+hpSeparator.Parent = targetFrame
 infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
-infoContainer.Position = UDim2.fromScale(0.5, 0.08)
-infoContainer.Size = UDim2.fromScale(0.25, 0)
-infoContainer.AutomaticSize = Enum.AutomaticSize.Y
-infoContainer.BackgroundColor3 = Color3.fromRGB(15, 0, 0)
-infoContainer.BackgroundTransparency = 1
+infoContainer.Position = UDim2.fromScale(0.5, 0.1) 
+infoContainer.AutomaticSize = Enum.AutomaticSize.XY
+infoContainer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+infoContainer.BackgroundTransparency = 0.5
+infoContainer.BorderSizePixel = 0
+infoContainer.ClipsDescendants = true
+local infoStroke = Instance.new("UIStroke")
+infoStroke.Color = Color3.fromRGB(255, 0, 0)
+infoStroke.Thickness = 0 
+infoStroke.Transparency = 1 
+infoStroke.Parent = infoContainer
+do
+end
 infoContainer.Visible = false
 do
 	local infoSizeConstraint = Instance.new("UISizeConstraint")
-	infoSizeConstraint.MinSize = Vector2.new(220, 0)
-	infoSizeConstraint.MaxSize = Vector2.new(450, 250)
+	infoSizeConstraint.MinSize = Vector2.new(0, 0) 
+	infoSizeConstraint.MaxSize = Vector2.new(600, 400)
 	infoSizeConstraint.Parent = infoContainer
 end
 local infoPadding = Instance.new("UIPadding")
-infoPadding.PaddingTop = UDim.new(0, 10)
-infoPadding.PaddingBottom = UDim.new(0, 10)
-infoPadding.PaddingLeft = UDim.new(0, 15)
-infoPadding.PaddingRight = UDim.new(0, 15)
+infoPadding.PaddingTop = UDim.new(0, 8)
+infoPadding.PaddingBottom = UDim.new(0, 8)
+infoPadding.PaddingLeft = UDim.new(0, 20)
+infoPadding.PaddingRight = UDim.new(0, 20)
 infoPadding.Parent = infoContainer
 local infoListLayout = Instance.new("UIListLayout")
-infoListLayout.Padding = UDim.new(0, 5)
+infoListLayout.FillDirection = Enum.FillDirection.Vertical 
+infoListLayout.Padding = UDim.new(0, 4)
 infoListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+infoListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 infoListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 infoListLayout.Parent = infoContainer
 infoContainer.Parent = screenGui
-local infoStroke = Instance.new("UIStroke")
-infoStroke.Color = Color3.fromRGB(255, 0, 0)
-infoStroke.Thickness = 3
-infoStroke.Transparency = 1
-infoStroke.Parent = infoContainer
-do
-	local infoCorner = Instance.new("UICorner")
-	infoCorner.CornerRadius = UDim.new(0, 18)
-	infoCorner.Parent = infoContainer
-	local infoGradient = Instance.new("UIGradient")
-	infoGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-		ColorSequenceKeypoint.new(0.35, Color3.fromRGB(70, 0, 0)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-	})
-	infoGradient.Rotation = 90
-	infoGradient.Parent = infoContainer
-end
 infoTitle = Instance.new("TextLabel")
 infoTitle.Name = "InfoTitle"
 infoTitle.AnchorPoint = Vector2.new(0, 0)
 infoTitle.Position = UDim2.fromScale(0, 0)
-infoTitle.Size = UDim2.new(1, 0, 0, 0)
-infoTitle.AutomaticSize = Enum.AutomaticSize.Y
+infoTitle.Size = UDim2.fromScale(0, 0)
+infoTitle.AutomaticSize = Enum.AutomaticSize.XY
+infoTitle.TextXAlignment = Enum.TextXAlignment.Center
 infoTitle.BackgroundTransparency = 1
 infoTitle.Text = ""
-infoTitle.TextColor3 = Color3.fromRGB(255, 30, 30)
-infoTitle.TextStrokeTransparency = 0
-infoTitle.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
-infoTitle.Font = Enum.Font.GothamBlack
-infoTitle.TextScaled = true
-infoTitle.TextWrapped = true
-infoTitle.AutomaticSize = Enum.AutomaticSize.Y
+infoTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+infoTitle.TextStrokeTransparency = 1
+infoTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+infoTitle.Font = Enum.Font.GothamBold
+infoTitle.TextSize = 22 
+infoTitle.TextScaled = false
+infoTitle.TextWrapped = false
+infoTitle.AutomaticSize = Enum.AutomaticSize.XY
 infoTitle.LayoutOrder = 1
 infoTitle.Parent = infoContainer
-do
-	local infoTitleConstraint = Instance.new("UITextSizeConstraint")
-	infoTitleConstraint.MinTextSize = 14
-	infoTitleConstraint.MaxTextSize = 22
-	infoTitleConstraint.Parent = infoTitle
-end
 infoText = Instance.new("TextLabel")
 infoText.Name = "InfoText"
 infoText.AnchorPoint = Vector2.new(0, 0)
 infoText.Position = UDim2.fromScale(0, 0)
-infoText.Size = UDim2.new(1, 0, 0, 0)
-infoText.AutomaticSize = Enum.AutomaticSize.Y
+infoText.Size = UDim2.fromScale(0, 0)
+infoText.AutomaticSize = Enum.AutomaticSize.XY
+infoText.TextXAlignment = Enum.TextXAlignment.Center
 infoText.BackgroundTransparency = 1
 infoText.Text = ""
-infoText.TextColor3 = Color3.fromRGB(255, 110, 110)
-infoText.TextStrokeTransparency = 0.2
-infoText.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
+infoText.TextColor3 = Color3.fromRGB(255, 0, 0)
+infoText.TextStrokeTransparency = 1
+infoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoText.Font = Enum.Font.GothamBold
-infoText.TextScaled = true
-infoText.TextWrapped = true
-infoText.AutomaticSize = Enum.AutomaticSize.Y
+infoText.TextSize = 20 
+infoText.TextScaled = false
+infoText.TextWrapped = false
+infoText.AutomaticSize = Enum.AutomaticSize.XY
 infoText.LayoutOrder = 2
 infoText.Parent = infoContainer
-do
-	local infoTextConstraint = Instance.new("UITextSizeConstraint")
-	infoTextConstraint.MinTextSize = 12
-	infoTextConstraint.MaxTextSize = 18
-	infoTextConstraint.Parent = infoText
-end
 settingsWindow = Instance.new("Frame")
 settingsWindow.Name = "WindowUI"
 settingsWindow.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsWindow.Position = UDim2.fromScale(0.5, 0.57)
 settingsWindow.Size = UDim2.fromScale(0.22, 0.45)
+settingsWindow.ClipsDescendants = true
 do
 	local windowSizeConstraint = Instance.new("UISizeConstraint")
 	windowSizeConstraint.MinSize = Vector2.new(280, 350)
-	windowSizeConstraint.MaxSize = Vector2.new(450, 800)
+	windowSizeConstraint.MaxSize = Vector2.new(400, 650) 
 	windowSizeConstraint.Parent = settingsWindow
 end
 do
@@ -396,9 +405,18 @@ do
 	windowAspectRatio.DominantAxis = Enum.DominantAxis.Height
 	windowAspectRatio.Parent = settingsWindow
 end
-settingsWindow.BackgroundColor3 = Color3.fromRGB(12, 0, 0)
-settingsWindow.BackgroundTransparency = 1
+settingsWindow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+settingsWindow.BackgroundTransparency = 0.1
 settingsWindow.BorderSizePixel = 0
+local settingsStroke
+local windowOutlineStroke
+do
+	settingsStroke = Instance.new("UIStroke")
+	settingsStroke.Color = Color3.fromRGB(255, 0, 0)
+	settingsStroke.Thickness = 0 
+	settingsStroke.Transparency = 1 
+	settingsStroke.Parent = settingsWindow
+end
 settingsWindow.Visible = false
 settingsWindow.Active = true
 settingsWindow.ZIndex = 10
@@ -418,45 +436,28 @@ windowOutline.Parent = settingsWindow
 windowOutline.AnchorPoint = Vector2.new(0.5, 0.5)
 windowOutline.Position = UDim2.fromScale(0.5, 0.5)
 windowOutline.Size = UDim2.fromScale(1, 1)
+windowOutline.ClipsDescendants = true
 do
-	local windowOutlineCorner = Instance.new("UICorner")
-	windowOutlineCorner.CornerRadius = UDim.new(0, 18)
-	windowOutlineCorner.Parent = windowOutline
 end
-local windowOutlineStroke = Instance.new("UIStroke")
-windowOutlineStroke.Color = Color3.fromRGB(255, 0, 0)
-windowOutlineStroke.Thickness = 2
-windowOutlineStroke.Transparency = 0
-windowOutlineStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-windowOutlineStroke.Parent = windowOutline
-local settingsStroke = Instance.new("UIStroke")
-settingsStroke.Color = Color3.fromRGB(255, 0, 0)
-settingsStroke.Thickness = 3
-settingsStroke.Transparency = 1
-settingsStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-settingsStroke.Parent = settingsWindow
+do
+	windowOutlineStroke = Instance.new("UIStroke")
+	windowOutlineStroke.Color = Color3.fromRGB(255, 0, 0)
+	windowOutlineStroke.Thickness = 0 
+	windowOutlineStroke.Transparency = 1
+	windowOutlineStroke.Parent = windowOutline
+end
 do
 	local inputBlocker = Instance.new("TextButton")
 	inputBlocker.Name = "InputBlocker"
 	inputBlocker.Size = UDim2.fromScale(1, 1)
 	inputBlocker.BackgroundTransparency = 1
-	inputBlocker.BorderSizePixel = 0
+	inputBlocker.BorderSizePixel = 1
+inputBlocker.BorderColor3 = Color3.fromRGB(255, 0, 0)
 	inputBlocker.Text = ""
 	inputBlocker.AutoButtonColor = false
 	inputBlocker.Visible = true
 	inputBlocker.ZIndex = 10
 	inputBlocker.Parent = settingsWindow
-	local settingsCorner = Instance.new("UICorner")
-	settingsCorner.CornerRadius = UDim.new(0, 18)
-	settingsCorner.Parent = settingsWindow
-	local settingsGradient = Instance.new("UIGradient")
-	settingsGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-		ColorSequenceKeypoint.new(0.45, Color3.fromRGB(55, 0, 0)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(155, 0, 0)),
-	})
-	settingsGradient.Rotation = 90
-	settingsGradient.Parent = settingsWindow
 end
 local headerDragArea = Instance.new("Frame")
 headerDragArea.Name = "HeaderDragArea"
@@ -473,11 +474,12 @@ do
 	uiTitle.Size = UDim2.fromScale(0.52, 0.1)
 	uiTitle.BackgroundTransparency = 1
 	uiTitle.Text = "NOTHING X"
-	uiTitle.TextColor3 = Color3.fromRGB(255, 35, 35)
-	uiTitle.TextStrokeTransparency = 0
-	uiTitle.TextStrokeColor3 = Color3.fromRGB(120, 0, 0)
-	uiTitle.Font = Enum.Font.GothamBlack
-	uiTitle.TextScaled = true
+	uiTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+	uiTitle.TextStrokeTransparency = 1
+	uiTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	uiTitle.Font = Enum.Font.GothamBold
+	uiTitle.TextSize = 13
+	TextScaled = false
 	uiTitle.TextXAlignment = Enum.TextXAlignment.Left
 	uiTitle.ZIndex = 11
 	uiTitle.Parent = settingsWindow
@@ -492,7 +494,8 @@ do
 	divider.Size = UDim2.fromScale(0.9, 0.006)
 	divider.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 	divider.BackgroundTransparency = 0.15
-	divider.BorderSizePixel = 0
+	divider.BorderSizePixel = 1
+divider.BorderColor3 = Color3.fromRGB(255, 0, 0)
 	divider.ZIndex = 11
 	divider.Parent = settingsWindow
 end
@@ -502,10 +505,12 @@ uiX.AnchorPoint = Vector2.new(0.5, 1)
 uiX.Position = UDim2.fromScale(0.5, 0.95)
 uiX.Size = UDim2.fromScale(0.92, 0.72)
 uiX.BackgroundTransparency = 1
-uiX.BorderSizePixel = 0
+uiX.BorderSizePixel = 1
+uiX.BorderColor3 = Color3.fromRGB(0, 0, 0)
 uiX.CanvasSize = UDim2.fromOffset(0, 0)
 uiX.AutomaticCanvasSize = Enum.AutomaticSize.Y
 uiX.ElasticBehavior = Enum.ElasticBehavior.Never
+uiX.ScrollBarImageTransparency = 1
 uiX.ScrollBarThickness = 0
 uiX.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 0)
 uiX.Active = true
@@ -590,6 +595,9 @@ local getTrashState = {
 	keyHeld = false,
 	blockSetBack = false,
 }
+local function setTrashBlockEnabled(v)
+    getTrashState.blockSetBack = v
+end
 setBackSavedCFrame = nil
 setBackCollisionState = nil
 setBackPressToken = 0
@@ -738,7 +746,7 @@ viewChanged = nil
 pendingTeleportToSelectedPlayer = false
 targetActionControls = nil
 flingModeControls = nil
-function resolveAttackTpTarget() end -- Placeholder for now, will be updated by function declaration
+function resolveAttackTpTarget() end 
 function zeroLocalPlayerRoot() end
 function syncFlingModeControls() end
 function runGetTrash() end
@@ -1495,7 +1503,11 @@ local function toggleAFK(enabled)
 	if not hrp then return end
 	local protection = _G.NOTHINGX_Protection
 	if afkEnabled then
-		afkSavedCFrame = hrp.CFrame
+		if not safeZoneHPInSafeZone then
+			afkSavedCFrame = hrp.CFrame
+		else
+			afkSavedCFrame = safeZoneHPSavedCFrame
+		end
 		if protection then
 			protection.Enabled = false
 			protection.oldBoundarySize = protection.boundarySize
@@ -1514,17 +1526,19 @@ local function toggleAFK(enabled)
 			end
 		end)
 	else
-		if protection then
-			protection.Enabled = true
-			if protection.oldBoundarySize then
-				protection.boundarySize = protection.oldBoundarySize
+		if not safeZoneHPInSafeZone then
+			if protection then
+				protection.Enabled = true
+				if protection.oldBoundarySize then
+					protection.boundarySize = protection.oldBoundarySize
+				end
+			end
+			_G.SafeTeleportLock = false
+			if afkSavedCFrame then
+				hrp.CFrame = afkSavedCFrame
 			end
 		end
-		_G.SafeTeleportLock = false
-		if afkSavedCFrame then
-			hrp.CFrame = afkSavedCFrame
-			afkSavedCFrame = nil
-		end
+		afkSavedCFrame = nil
 	end
 	return afkEnabled and "ON" or "OFF"
 end
@@ -1554,17 +1568,19 @@ local function handleSafeZoneHP()
 		end
 	elseif safeZoneHPInSafeZone and hp >= 48 then
 		safeZoneHPInSafeZone = false
-		if protection then
-			protection.Enabled = true
-			if protection.oldBoundarySize then
-				protection.boundarySize = protection.oldBoundarySize
+		if not afkEnabled then
+			if protection then
+				protection.Enabled = true
+				if protection.oldBoundarySize then
+					protection.boundarySize = protection.oldBoundarySize
+				end
+			end
+			_G.SafeTeleportLock = false
+			if safeZoneHPSavedCFrame then
+				hrp.CFrame = safeZoneHPSavedCFrame
 			end
 		end
-		_G.SafeTeleportLock = false
-		if safeZoneHPSavedCFrame then
-			hrp.CFrame = safeZoneHPSavedCFrame
-			safeZoneHPSavedCFrame = nil
-		end
+		safeZoneHPSavedCFrame = nil
 	end
 end
 local safeZoneHPConnection = nil
@@ -1576,20 +1592,22 @@ local function toggleSafeZoneHP(enabled)
 	end
 	if not enabled and safeZoneHPInSafeZone then
 		safeZoneHPInSafeZone = false
-		local protection = _G.NOTHINGX_Protection
-		if protection then
-			protection.Enabled = true
-			if protection.oldBoundarySize then
-				protection.boundarySize = protection.oldBoundarySize
+		if not afkEnabled then
+			local protection = _G.NOTHINGX_Protection
+			if protection then
+				protection.Enabled = true
+				if protection.oldBoundarySize then
+					protection.boundarySize = protection.oldBoundarySize
+				end
+			end
+			_G.SafeTeleportLock = false
+			local character = player.Character
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			if hrp and safeZoneHPSavedCFrame then
+				hrp.CFrame = safeZoneHPSavedCFrame
 			end
 		end
-		_G.SafeTeleportLock = false
-		local character = player.Character
-		local hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if hrp and safeZoneHPSavedCFrame then
-			hrp.CFrame = safeZoneHPSavedCFrame
-			safeZoneHPSavedCFrame = nil
-		end
+		safeZoneHPSavedCFrame = nil
 	end
 	if enabled then
 		safeZoneHPConnection = RunService.Heartbeat:Connect(handleSafeZoneHP)
@@ -2594,6 +2612,22 @@ local function updateTargetDisplay()
 	local displayedTarget = getDisplayedTargetModel()
 	local displayName = displayedTarget and displayedTarget.Name or (manualAttackTpPlayer and manualAttackTpPlayer.Name or "")
 	targetValueText.Text = displayName
+	local isHPEnabled = getSavedControlValue("TargetHPEnabled") == true
+	if isHPEnabled and displayedTarget then
+		local hum = displayedTarget:FindFirstChildOfClass("Humanoid")
+		if hum then
+			targetHPText.Text = math.floor(hum.Health + 0.5) .. " HP"
+			targetHPText.Visible = true
+			hpSeparator.Visible = true
+		else
+			targetHPText.Visible = false
+			hpSeparator.Visible = false
+		end
+	else
+		targetHPText.Visible = false
+		hpSeparator.Visible = false
+		targetValueText.Size = UDim2.fromScale(0.9, 1)
+	end
 	targetFrame.Visible = displayName ~= ""
 	if targetStateChanged and not hasSelectedTargetOrPendingPlayer() then
 		if attackTpEnabled then
@@ -2793,7 +2827,7 @@ local function isAliveHumanoid(humanoid)
 		and humanoid.Health > 0
 		and humanoid:GetState() ~= Enum.HumanoidStateType.Dead
 end
-local function getAttackTpPlacement(characterRoot, targetModel)
+local function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
 	if not characterRoot or not targetModel then
 		return nil, nil
 	end
@@ -2806,31 +2840,24 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 	if not isAliveHumanoid(characterHumanoid) then
 		return nil, nil
 	end
-
 	local amFlying = flying or (_G.NOTHINGX_FlyActive == true)
 	local isTargetAir = isAirborneHumanoid(targetHumanoid)
 	local useAirTracking = isTargetAir or isAirborneHumanoid(characterHumanoid) or amFlying
-	
 	local targetVelocity = targetRoot.AssemblyLinearVelocity
 	local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
-	
 	local horizontalVelocity = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
 	local horizontalLead = horizontalVelocity * leadTime
 	if horizontalLead.Magnitude > attackTpMaxHorizontalLead then
 		horizontalLead = horizontalLead.Unit * attackTpMaxHorizontalLead
 	end
-	
 	local verticalVel = targetVelocity.Y
 	local verticalLead = (verticalVel * leadTime) + (isTargetAir and attackTpVerticalLead or 0)
 	verticalLead = math.clamp(verticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
-	
 	local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
 	local isRagdoll = targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll")
-	
-	local mode = attackTpMode or "Behind"
+	local mode = modeOverride or attackTpMode or "Behind"
 	local finalCFrame = nil
 	local verticalOffset = useAirTracking and attackTpAirVerticalOffset or attackTpGroundVerticalOffset
-	
 	if mode == "Above" then
 		local dist = isRagdoll and 4.2 or 6.8
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, dist + verticalOffset, 0), predictedTargetPosition, worldUpVector)
@@ -2879,6 +2906,10 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 			or Vector3.new(0, 0, -1)
 		local dist = isRagdoll and (autoCustomDistance * 0.5) or autoCustomDistance
 		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, 1.2 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Front" then
+		local followDirection = getHorizontalUnit(targetRoot.CFrame.LookVector) or Vector3.new(0, 0, 1)
+		local dist = isRagdoll and 2.5 or 4.0
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Middle" then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, verticalOffset + 0.1, 0), predictedTargetPosition, worldUpVector)
 	elseif string.find(tostring(mode), "Custom") then
@@ -2890,11 +2921,9 @@ local function getAttackTpPlacement(characterRoot, targetModel)
 		end
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + offsetVec + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	end
-	
 	if not finalCFrame then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 6.8, 0), predictedTargetPosition, worldUpVector)
 	end
-	
 	return finalCFrame, targetVelocity
 end
 local function getCamLockTarget()
@@ -3073,6 +3102,7 @@ local function getMovementInput()
 	return z, x
 end
 local function setSettingsVisible(visible)
+	if not settingsWindow or not windowOutline then return end
 	settingsOpen = visible
 	settingsWindow.Visible = visible
 	windowOutline.Visible = visible
@@ -3088,25 +3118,9 @@ local function setSettingsVisible(visible)
 		}):Play()
 	else
 		settingsWindow.BackgroundTransparency = 1
-		settingsStroke.Transparency = 1
-		windowOutlineStroke.Transparency = 1
+		if settingsStroke then settingsStroke.Transparency = 1 end
+		if windowOutlineStroke then windowOutlineStroke.Transparency = 1 end
 	end
-end
-local function roundToTenth(value)
-	return math.floor((value * 10) + 0.5) / 10
-end
-local function getSavedControlValue(key)
-	if not key or key == "" then
-		return nil
-	end
-	return controlSaveData[key]
-end
-local function setSavedControlValue(key, value)
-	if not key or key == "" then
-		return
-	end
-	controlSaveData[key] = value
-	saveSliderSaveData()
 end
 local function applySliderValue(state, rawValue, triggerCallback)
 	local minValue = tonumber(state.min) or 0
@@ -3134,19 +3148,13 @@ local function applySliderValue(state, rawValue, triggerCallback)
 end
 local function makeControlFrame(heightScale)
 	local holder = Instance.new("Frame")
-	holder.BackgroundColor3 = Color3.fromRGB(8, 0, 0)
-	holder.BackgroundTransparency = 0.2
+	holder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	holder.BackgroundTransparency = 0.5
 	holder.Size = UDim2.new(1, -4, 0, heightScale)
-	holder.BorderSizePixel = 0
+	holder.BorderSizePixel = 1
+	holder.BorderColor3 = Color3.fromRGB(255, 0, 0)
 	holder.Active = true
-	local holderCorner = Instance.new("UICorner")
-	holderCorner.CornerRadius = UDim.new(0, 14)
-	holderCorner.Parent = holder
-	local holderStroke = Instance.new("UIStroke")
-	holderStroke.Color = Color3.fromRGB(120, 0, 0)
-	holderStroke.Thickness = 1.5
-	holderStroke.Transparency = 0.2
-	holderStroke.Parent = holder
+	holder.ClipsDescendants = true 
 	return holder
 end
 local function showInfo(title, text, time)
@@ -3166,19 +3174,15 @@ local function showInfo(title, text, time)
 	infoTitle.Text = titleValue
 	infoText.Text = textValue
 	infoContainer.Visible = true
-	TweenService:Create(infoContainer, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		BackgroundTransparency = 0.2,
-	}):Play()
-	TweenService:Create(infoStroke, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Transparency = 0.1,
-	}):Play()
-	TweenService:Create(infoTitle, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TextTransparency = 0,
-		TextStrokeTransparency = 0,
-	}):Play()
+	infoContainer.BackgroundTransparency = 0.5
+	if infoStroke then
+		infoStroke.Transparency = 1
+	end
+	infoTitle.TextTransparency = 0
+	infoTitle.TextStrokeTransparency = 1
 	TweenService:Create(infoText, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		TextTransparency = 0,
-		TextStrokeTransparency = 0.2,
+		TextStrokeTransparency = 1,
 	}):Play()
 	task.delay(duration, function()
 		if currentToken ~= (screenGui:GetAttribute("InfoToken") or 0) then
@@ -3188,9 +3192,11 @@ local function showInfo(title, text, time)
 		TweenService:Create(infoContainer, fadeTweenInfo, {
 			BackgroundTransparency = 1,
 		}):Play()
-		TweenService:Create(infoStroke, fadeTweenInfo, {
-			Transparency = 1,
-		}):Play()
+		if infoStroke then
+			TweenService:Create(infoStroke, fadeTweenInfo, {
+				Transparency = 1,
+			}):Play()
+		end
 		TweenService:Create(infoTitle, fadeTweenInfo, {
 			TextTransparency = 1,
 			TextStrokeTransparency = 1,
@@ -3556,26 +3562,6 @@ task.spawn(function()
             track:Stop()
         end
     end
-local function teleportToWeakestDummy()
-	local live = workspace:FindFirstChild("Live")
-	if not live then return end
-	local dummy = live:FindFirstChild("Weakest Dummy")
-	if not dummy then 
-		return 
-	end
-	local humanoid = dummy:FindFirstChildOfClass("Humanoid")
-	local dummyRoot = dummy:FindFirstChild("HumanoidRootPart")
-	local character = player.Character
-	local hrp = character and character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or humanoid.Health <= 0 or not dummyRoot or not hrp then
-		return
-	end
-	hrp.AssemblyLinearVelocity = Vector3.zero
-	hrp.AssemblyAngularVelocity = Vector3.zero
-	local forward = dummyRoot.CFrame.LookVector
-	local teleportPos = dummyRoot.Position + (forward * 4.5) + Vector3.new(0, 3, 0)
-	hrp.CFrame = CFrame.lookAt(teleportPos, dummyRoot.Position)
-end
     local function cleanupStay()
         if stayConn then
             stayConn:Disconnect()
@@ -3667,42 +3653,106 @@ end
     end
     local supportsDashBlock = game.GameId == 3808081382
     local createMovementPanel = _G["2tog_on_one_button"]
-    while type(createMovementPanel) ~= "function" do
-        nextFrame()
-        createMovementPanel = _G["2tog_on_one_button"]
+    local movementHub = makeControlFrame(180) 
+    movementHub.Parent = uiX
+    movementHub.LayoutOrder = 1
+    movementHub.ClipsDescendants = true
+    local hubTitle = Instance.new("TextLabel")
+    hubTitle.BackgroundTransparency = 1
+    hubTitle.Position = UDim2.new(0, 16, 0, 8)
+    hubTitle.Size = UDim2.new(1, -32, 0, 18)
+    hubTitle.Font = Enum.Font.GothamBold
+    hubTitle.Text = "Movement & System"
+    hubTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+    hubTitle.TextStrokeTransparency = 1
+    hubTitle.TextSize = 14
+    hubTitle.TextXAlignment = Enum.TextXAlignment.Left
+    hubTitle.Parent = movementHub
+    local function makeRow(yPos)
+        local row = Instance.new("Frame")
+        row.BackgroundTransparency = 1
+        row.BorderSizePixel = 0
+        row.Position = UDim2.new(0, 0, 0, yPos)
+        row.Size = UDim2.new(1, 0, 0, 28)
+        row.Parent = movementHub
+        local layout = Instance.new("UIListLayout")
+        layout.FillDirection = Enum.FillDirection.Horizontal
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.Padding = UDim.new(0, 0)
+        layout.Parent = row
+        return row
     end
-    local isTSB = game.GameId == 3808081382
-    local isMainMap = game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
-    local showDummy = isTSB and not isMainMap
-    movementPanel = createMovementPanel({
-        title = "Movement",
-        name1 = "Stay",
-        name2 = supportsDashBlock and "Dash Block" or nil,
-        buttonName = "Fix Camera",
-        buttonName2 = "Lay",
-        buttonName3 = showDummy and "Dummy" or nil,
-        default1 = false,
-        default2 = supportsDashBlock and false or nil,
-        fun1 = setStayState,
-        fun2 = supportsDashBlock and setDashBlockRuntime or nil,
-        buttonfun = fixCamera,
-        buttonfun2 = layCharacter,
-        buttonfun3 = showDummy and teleportToWeakestDummy or nil,
-    })
-    
-
-    StayToggle = movementPanel.First
-    DashToggle = movementPanel.Second
-    player.CharacterAdded:Connect(function()
-        if isActive then
-            cleanupStay()
-            isActive = false
-            if StayToggle and StayToggle.SetValue then
-                StayToggle:SetValue(false, true)
-            end
+    local function makeHubTog(parent, text, callback, saveKey, default, widthMult)
+        local btn = Instance.new("TextButton")
+        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        btn.BackgroundTransparency = 0.5
+        btn.BorderSizePixel = 0
+        btn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+        btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
+        btn.AutoButtonColor = false
+        btn.Font = Enum.Font.GothamBold
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextStrokeTransparency = 1
+        btn.TextSize = 13
+        btn.TextScaled = false
+        btn.Parent = parent
+        local enabled = default == true
+        if saveKey and getSavedControlValue(saveKey) ~= nil then
+            enabled = getSavedControlValue(saveKey) == true
         end
-        communicate = nil
-    end)
+        local function render()
+            btn.BackgroundColor3 = enabled and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+            btn.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+        end
+        btn.MouseButton1Click:Connect(function()
+            enabled = not enabled
+            render()
+            if saveKey then setSavedControlValue(saveKey, enabled) end
+            if callback then callback(enabled) end
+        end)
+        if enabled and callback then task.spawn(callback, true) end
+        render()
+        return btn
+    end
+    local function makeHubBtn(parent, text, callback, widthMult)
+        local btn = Instance.new("TextButton")
+        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        btn.BackgroundTransparency = 0.5
+        btn.BorderSizePixel = 0
+        btn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+        btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
+        btn.AutoButtonColor = true
+        btn.Font = Enum.Font.GothamBold
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextStrokeTransparency = 1
+        btn.TextSize = 13
+        btn.Parent = parent
+        btn.MouseButton1Click:Connect(function()
+            if callback then callback() end
+        end)
+        return btn
+    end
+    local row1 = makeRow(32)
+    makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
+    makeHubTog(row1, supportsDashBlock and "Dash Block" or "Dash", supportsDashBlock and setDashBlockRuntime or nil, "DashBlockEnabled", false)
+    makeHubBtn(row1, "Fix Cam", fixCamera)
+    makeHubBtn(row1, "Lay", layCharacter)
+    local row2 = makeRow(66)
+    makeHubTog(row2, "Whirlwind", function(v) WhirlwindEnabled = v end, "AutoWhirlwind", true)
+    makeHubTog(row2, "Auto Combo", function(v) WallComboEnabled = v end, "AutoCombo", true)
+    makeHubTog(row2, "No Dash CD", function(v) workspace:SetAttribute("NoDashCooldown", v) end, "NoDashCD", true)
+    makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
+    local row3 = makeRow(100)
+    makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", true)
+    makeHubTog(row3, "Names", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", true)
+    makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", true)
+    makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", true)
+    local row4 = makeRow(134)
+    makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
+    makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
+    makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
     if player.Character then
         setupCharacter(player.Character)
     end
@@ -3717,8 +3767,6 @@ end
             ["rbxassetid://15162694192"]=true,["rbxassetid://16552234590"]=true,
             ["rbxassetid://17889290569"]=true,
         }
-        local WhirlwindEnabled = false
-        local WallComboEnabled = false
         local function SpamQ()
             VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
             task.wait(0.05)
@@ -3765,73 +3813,6 @@ end
         end
         if player.Character then task.spawn(SetupCombatCharacter, player.Character) end
         player.CharacterAdded:Connect(function(c) task.spawn(SetupCombatCharacter, c) end)
-        local combatHolder = movementPanel.Frame
-        combatHolder.Size = UDim2.new(1, -4, 0, 108)
-        local combatRow = Instance.new("Frame")
-        combatRow.BackgroundTransparency = 1
-        combatRow.Position = UDim2.new(0, 10, 0, 70)
-        combatRow.Size = UDim2.new(1, -20, 0, 28)
-        combatRow.Parent = combatHolder
-        local combatLayout = Instance.new("UIListLayout")
-        combatLayout.FillDirection = Enum.FillDirection.Horizontal
-        combatLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        combatLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        combatLayout.Padding = UDim.new(0, 6)
-        combatLayout.Parent = combatRow
-        local function makeCombatToggle(text, callback, saveKey, hideIfNoMap)
-            local btn = Instance.new("TextButton")
-            if hideIfNoMap then
-                table.insert(mapDependentControls, btn)
-            end
-            btn.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
-            btn.BackgroundTransparency = 0.06
-            btn.BorderSizePixel = 0
-            btn.Size = UDim2.new(1/4, -5, 1, 0)
-            btn.AutoButtonColor = false
-            btn.Font = Enum.Font.GothamBold
-            btn.Text = text
-            btn.TextColor3 = Color3.fromRGB(255, 175, 175)
-            btn.TextStrokeTransparency = 0.15
-            btn.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-            btn.TextScaled = true
-            btn.TextWrapped = true
-            btn.Parent = combatRow
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 10)
-            corner.Parent = btn
-            local constraint = Instance.new("UITextSizeConstraint")
-            constraint.MinTextSize = 10
-            constraint.MaxTextSize = 14
-            constraint.Parent = btn
-            local enabled = false
-            if saveKey and controlSaveData[saveKey] ~= nil then
-                enabled = controlSaveData[saveKey]
-            end
-            local function render()
-                btn.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
-                btn.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
-            end
-            btn.MouseButton1Click:Connect(function()
-                enabled = not enabled
-                render()
-                if saveKey then
-                    controlSaveData[saveKey] = enabled
-                    saveSliderSaveData()
-                end
-                if callback then callback(enabled) end
-            end)
-            if enabled and callback then callback(enabled) end
-            render()
-        end
-        makeCombatToggle("Auto Whirlwind Dunk", function(val) WhirlwindEnabled = val end, "AutoWhirlwind", true)
-        makeCombatToggle("Auto Combo", function(val) WallComboEnabled = val end, "AutoCombo", true)
-        makeCombatToggle("No Dash CD", function(val)
-            workspace:SetAttribute("EffectAffects", val and 1 or 0)
-            workspace:SetAttribute("NoDashCooldown", val)
-        end, "NoDashCD", true)
-        makeCombatToggle("BL click Trash", function(val)
-            trashBlockEnabled = val
-        end, "BLClickTrash", false)
     end
 end)
 task.spawn(function()
@@ -4122,29 +4103,6 @@ function initProtectionRuntime()
 			end
 		end
 		return referenceCFrame + Vector3.new(0, 180, 0)
-	end
-	protection.getRescueCFrame = function(character, skippedEntries)
-		for index, entry in ipairs(protection.safePositionEntries) do
-			if not (skippedEntries and skippedEntries[index]) then
-				local target = protection.resolveEntryRescueCFrame(entry, character)
-				if target then
-					return target, index
-				end
-			end
-		end
-		for index, cf in ipairs(protection.safePositionHistory) do
-			local fallbackIndex = -index
-			if cf and not (skippedEntries and skippedEntries[fallbackIndex]) then
-				local target = protection.resolveEntryRescueCFrame({
-					cframe = cf,
-					position = cf.Position,
-				}, character)
-				if target then
-					return target, fallbackIndex
-				end
-			end
-		end
-		return protection.getFallbackRescueCFrame(character), "fallback"
 	end
 	protection.isCurrentSpotSafe = function(char, hrp, humanoid)
 		if not char or not hrp or protection.isOutsideBoundary(hrp.Position) then
@@ -4478,10 +4436,10 @@ function Slider(data)
 	nameLabel.Size = UDim2.fromScale(0.55, 0.25)
 	nameLabel.Font = Enum.Font.GothamBold
 	nameLabel.Text = state.name
-	nameLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	nameLabel.TextStrokeTransparency = 0.15
-	nameLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	nameLabel.TextScaled = true
+	nameLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	nameLabel.TextStrokeTransparency = 1
+	nameLabel.TextSize = 13
+	nameLabel.TextScaled = false
 	nameLabel.TextWrapped = true
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Parent = holder
@@ -4490,9 +4448,10 @@ function Slider(data)
 	nameConstraint.MaxTextSize = 18
 	nameConstraint.Parent = nameLabel
 	local editBox = Instance.new("TextBox")
-	editBox.BackgroundColor3 = Color3.fromRGB(22, 0, 0)
-	editBox.BackgroundTransparency = 0.08
+	editBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	editBox.BackgroundTransparency = 0.5
 	editBox.BorderSizePixel = 0
+	editBox.BorderColor3 = Color3.fromRGB(255, 0, 0)
 	editBox.Position = UDim2.fromScale(0.66, 0.3)
 	editBox.Size = UDim2.fromScale(0.24, 0.24)
 	editBox.ClearTextOnFocus = false
@@ -4500,34 +4459,34 @@ function Slider(data)
 	editBox.PlaceholderText = "set"
 	editBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
 	editBox.Text = "0"
-	editBox.TextColor3 = Color3.fromRGB(255, 180, 180)
-	editBox.TextScaled = true
+	editBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+	editBox.TextStrokeTransparency = 1
+	editBox.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	editBox.Font = Enum.Font.GothamBold
+	editBox.TextSize = 13
+	editBox.TextScaled = false
+	editBox.TextWrapped = true
 	editBox.Parent = holder
-	local editCorner = Instance.new("UICorner")
-	editCorner.CornerRadius = UDim.new(0, 10)
-	editCorner.Parent = editBox
 	local editConstraint = Instance.new("UITextSizeConstraint")
 	editConstraint.MinTextSize = 10
 	editConstraint.MaxTextSize = 14
 	editConstraint.Parent = editBox
 	local bar = Instance.new("Frame")
 	bar.BackgroundColor3 = Color3.fromRGB(35, 0, 0)
-	bar.BorderSizePixel = 0
 	bar.Position = UDim2.fromScale(0.05, 0.68)
 	bar.Size = UDim2.fromScale(0.9, 0.14)
 	bar.Active = true
 	bar.Parent = holder
-	local barCorner = Instance.new("UICorner")
-	barCorner.CornerRadius = UDim.new(1, 0)
-	barCorner.Parent = bar
+	local barStroke = Instance.new("UIStroke")
+	barStroke.Color = Color3.fromRGB(255, 0, 0)
+	barStroke.Thickness = 0 
+	barStroke.Transparency = 1
+	barStroke.Parent = bar
 	local fill = Instance.new("Frame")
 	fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.fromScale(0, 1)
 	fill.Parent = bar
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(1, 0)
-	fillCorner.Parent = fill
 	state.editBox = editBox
 	state.fill = fill
 	sliderStates[#sliderStates + 1] = state
@@ -4586,10 +4545,11 @@ function Textbox(data)
 	titleLabel.Size = UDim2.fromScale(0.9, 0.18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = textTitle
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
+	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextStrokeTransparency = 1
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
@@ -4598,23 +4558,21 @@ function Textbox(data)
 	titleConstraint.MaxTextSize = 18
 	titleConstraint.Parent = titleLabel
 	local inputBox = Instance.new("TextBox")
-	inputBox.BackgroundColor3 = Color3.fromRGB(22, 0, 0)
-	inputBox.BackgroundTransparency = 0.1
+	inputBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	inputBox.BackgroundTransparency = 0.5
 	inputBox.BorderSizePixel = 0
 	inputBox.Position = UDim2.fromScale(0.05, 0.42)
 	inputBox.Size = UDim2.fromScale(0.9, 0.38)
 	inputBox.ClearTextOnFocus = false
-	inputBox.Font = Enum.Font.GothamMedium
+	inputBox.Font = Enum.Font.GothamBold
 	inputBox.PlaceholderText = "type here"
 	inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
 	inputBox.Text = ""
-	inputBox.TextColor3 = Color3.fromRGB(255, 180, 180)
-	inputBox.TextScaled = true
+	inputBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+	inputBox.TextSize = 13
+	inputBox.TextScaled = false
 	inputBox.TextWrapped = true
 	inputBox.Parent = holder
-	local inputCorner = Instance.new("UICorner")
-	inputCorner.CornerRadius = UDim.new(0, 12)
-	inputCorner.Parent = inputBox
 	local inputConstraint = Instance.new("UITextSizeConstraint")
 	inputConstraint.MinTextSize = 12
 	inputConstraint.MaxTextSize = 16
@@ -4628,7 +4586,7 @@ function Textbox(data)
 end
 _G["2textbox_on_one_frame"] = function(data)
 	data = data or {}
-	local holder = makeControlFrame(92)
+	local holder = makeControlFrame(110) 
 	holder.Parent = uiX
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
@@ -4636,10 +4594,11 @@ _G["2textbox_on_one_frame"] = function(data)
 	titleLabel.Size = UDim2.fromScale(0.9, 0.16)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = tostring(data.title or "Inputs")
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
+	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextStrokeTransparency = 1
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
@@ -4665,15 +4624,17 @@ _G["2textbox_on_one_frame"] = function(data)
 		container.Parent = rowFrame
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
-		label.Position = UDim2.fromScale(0, 0)
-		label.Size = UDim2.fromScale(1, 0.3)
-		label.Font = Enum.Font.GothamMedium
+		label.Position = UDim2.fromScale(0, 0.05)
+		label.Size = UDim2.fromScale(1, 0.4)
+		label.Font = Enum.Font.GothamBold
 		label.Text = tostring(labelText or "")
-		label.TextColor3 = Color3.fromRGB(255, 160, 160)
-		label.TextStrokeTransparency = 0.2
-		label.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(255, 0, 0)
+		label.TextStrokeTransparency = 1
+		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		label.TextSize = 13
+		label.TextScaled = false
 		label.TextWrapped = true
+		label.ClipsDescendants = true
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.Parent = container
 		local labelConstraint = Instance.new("UITextSizeConstraint")
@@ -4681,22 +4642,21 @@ _G["2textbox_on_one_frame"] = function(data)
 		labelConstraint.MaxTextSize = 14
 		labelConstraint.Parent = label
 		local inputBox = Instance.new("TextBox")
-		inputBox.BackgroundColor3 = Color3.fromRGB(22, 0, 0)
-		inputBox.BackgroundTransparency = 0.1
+		inputBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		inputBox.BackgroundTransparency = 0.5
 		inputBox.BorderSizePixel = 0
-		inputBox.Position = UDim2.fromScale(0, 0.38)
-		inputBox.Size = UDim2.fromScale(1, 0.52)
+		inputBox.Position = UDim2.fromScale(0, 0.5)
+		inputBox.Size = UDim2.fromScale(1, 0.45)
 		inputBox.ClearTextOnFocus = false
-		inputBox.Font = Enum.Font.GothamMedium
+		inputBox.Font = Enum.Font.GothamBold
 		inputBox.PlaceholderText = "set"
 		inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
 		inputBox.Text = tostring(defaultValue or "")
-		inputBox.TextColor3 = Color3.fromRGB(255, 180, 180)
-		inputBox.TextScaled = true
+		inputBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+		inputBox.TextSize = 13
+		inputBox.TextScaled = false
+		inputBox.ClipsDescendants = true
 		inputBox.Parent = container
-		local inputCorner = Instance.new("UICorner")
-		inputCorner.CornerRadius = UDim.new(0, 12)
-		inputCorner.Parent = inputBox
 		local inputConstraint = Instance.new("UITextSizeConstraint")
 		inputConstraint.MinTextSize = 10
 		inputConstraint.MaxTextSize = 14
@@ -4802,11 +4762,13 @@ function Dropdown(data)
 	local itemDisplayNames = data.itemDisplayNames or {}
 	local selected = {}
 	local expanded = false
-	local collapsedHeight = 92
+	local collapsedHeight = 88
 	local expandedTopOffset = 36
 	local maxVisibleOptions = 6
 	local optionHeight = 28
 	local optionPadding = 6
+	local dropdownHolder = makeControlFrame(collapsedHeight)
+	dropdownHolder.ClipsDescendants = true
 	local function normalizeValues(value)
 		local result = {}
 		local seen = {}
@@ -4944,47 +4906,40 @@ function Dropdown(data)
 			setSelectedValue(items[1], true)
 		end
 	end
-	local holder = makeControlFrame(collapsedHeight)
+	local holder = makeControlFrame(88) 
 	holder.Parent = uiX
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Position = UDim2.new(0, 18, 0, 10)
-	nameLabel.Size = UDim2.new(1, -36, 0, 20)
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.Text = dropdownName
-	nameLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	nameLabel.TextStrokeTransparency = 0.15
-	nameLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	nameLabel.TextScaled = true
-	nameLabel.TextWrapped = true
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.ZIndex = 3
-	nameLabel.Parent = holder
-	local nameConstraint = Instance.new("UITextSizeConstraint")
-	nameConstraint.MinTextSize = 12
-	nameConstraint.MaxTextSize = 18
-	nameConstraint.Parent = nameLabel
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 10, 0, 8)
+	titleLabel.Size = UDim2.new(1, -20, 0, 18)
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Text = dropdownName
+	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextStrokeTransparency = 1
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
+	titleLabel.TextWrapped = true
+	titleLabel.ClipsDescendants = true
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = holder
 	local toggleButton = Instance.new("TextButton")
-	toggleButton.BackgroundColor3 = Color3.fromRGB(22, 0, 0)
-	toggleButton.BackgroundTransparency = 0.08
+	toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	toggleButton.BackgroundTransparency = 0.5
 	toggleButton.BorderSizePixel = 0
-	toggleButton.Position = UDim2.fromScale(0.05, 0.38)
-	toggleButton.Size = UDim2.fromScale(0.9, 0.3)
+	toggleButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+	toggleButton.Position = UDim2.new(0, 10, 0, 32)
+	toggleButton.Size = UDim2.new(1, -20, 0, 24)
 	toggleButton.AutoButtonColor = false
 	toggleButton.Font = Enum.Font.GothamBold
-	toggleButton.TextColor3 = Color3.fromRGB(255, 180, 180)
-	toggleButton.TextStrokeTransparency = 0.15
-	toggleButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	toggleButton.TextScaled = true
+	toggleButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+	toggleButton.TextStrokeTransparency = 1
+	toggleButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	toggleButton.TextSize = 13
+	toggleButton.TextScaled = false
 	toggleButton.TextWrapped = true
+	toggleButton.ClipsDescendants = true
 	toggleButton.Parent = holder
-	local toggleCorner = Instance.new("UICorner")
-	toggleCorner.CornerRadius = UDim.new(0, 12)
-	toggleCorner.Parent = toggleButton
-	local toggleConstraint = Instance.new("UITextSizeConstraint")
-	toggleConstraint.MinTextSize = 11
-	toggleConstraint.MaxTextSize = 15
-	toggleConstraint.Parent = toggleButton
+	local expandedTopOffset = 36 
 	local optionsFrame = Instance.new("Frame")
 	optionsFrame.BackgroundTransparency = 1
 	optionsFrame.Position = UDim2.new(0, 0, 0, expandedTopOffset)
@@ -4995,7 +4950,7 @@ function Dropdown(data)
 	optionsFrame.Parent = holder
 	local choiceFrame = Instance.new("ScrollingFrame")
 	choiceFrame.BackgroundColor3 = Color3.fromRGB(12, 0, 0)
-	choiceFrame.BackgroundTransparency = 0.18
+	choiceFrame.BackgroundTransparency = 0.5
 	choiceFrame.BorderSizePixel = 0
 	choiceFrame.AnchorPoint = Vector2.new(0.5, 0)
 	choiceFrame.Position = UDim2.fromScale(0.5, 0)
@@ -5012,15 +4967,8 @@ function Dropdown(data)
 	choiceFrame.BottomImage = ""
 	choiceFrame.Active = true
 	choiceFrame.ZIndex = 1
+	choiceFrame.ClipsDescendants = true
 	choiceFrame.Parent = optionsFrame
-	local choiceCorner = Instance.new("UICorner")
-	choiceCorner.CornerRadius = UDim.new(0, 12)
-	choiceCorner.Parent = choiceFrame
-	local choiceStroke = Instance.new("UIStroke")
-	choiceStroke.Color = Color3.fromRGB(110, 0, 0)
-	choiceStroke.Thickness = 1.2
-	choiceStroke.Transparency = 0.18
-	choiceStroke.Parent = choiceFrame
 	local optionsLayout = Instance.new("UIListLayout")
 	optionsLayout.Padding = UDim.new(0, optionPadding)
 	optionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -5038,7 +4986,9 @@ function Dropdown(data)
 		for item, button in pairs(optionButtons) do
 			local isOn = selected[item] == true
 			local display = itemDisplayNames[item] or item
-			button.BackgroundColor3 = isOn and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
+			button.BackgroundColor3 = isOn and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+			button.BackgroundTransparency = 0.5
+			button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
 			button.Text = isOn and ("[x] " .. display) or ("[ ] " .. display)
 		end
 	end
@@ -5054,26 +5004,21 @@ function Dropdown(data)
 		clearOptionButtons()
 		for _, item in ipairs(items) do
 			local optionButton = Instance.new("TextButton")
-			optionButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
-			optionButton.BackgroundTransparency = 0.06
+			optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			optionButton.BackgroundTransparency = 0.5
 			optionButton.BorderSizePixel = 0
 			optionButton.Size = UDim2.new(0.9, 0, 0, optionHeight)
 			optionButton.AutoButtonColor = false
 			optionButton.Font = Enum.Font.GothamMedium
-			optionButton.TextColor3 = Color3.fromRGB(255, 175, 175)
-			optionButton.TextStrokeTransparency = 0.2
-			optionButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-			optionButton.TextScaled = true
+			optionButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+			optionButton.TextStrokeTransparency = 1
+			optionButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+			optionButton.TextSize = 13
+			optionButton.TextScaled = false
 			optionButton.TextWrapped = true
+			optionButton.ClipsDescendants = true
 			optionButton.ZIndex = 1
 			optionButton.Parent = choiceFrame
-			local optionCorner = Instance.new("UICorner")
-			optionCorner.CornerRadius = UDim.new(0, 10)
-			optionCorner.Parent = optionButton
-			local optionConstraint = Instance.new("UITextSizeConstraint")
-			optionConstraint.MinTextSize = 10
-			optionConstraint.MaxTextSize = 14
-			optionConstraint.Parent = optionButton
 			optionButtons[item] = optionButton
 			optionButton.MouseButton1Click:Connect(function()
 				if multi then
@@ -5467,7 +5412,7 @@ toggleView = function(nextState)
 	syncTargetActionControls()
 	return viewing and "ON" or "OFF"
 end
-function teleportToSelectedTarget()
+function teleportToSelectedTarget(modeOverride)
 	if (_G.SafeTeleportLock == true) then
 		return
 	end
@@ -5488,7 +5433,7 @@ function teleportToSelectedTarget()
 		return
 	end
 	pendingTeleportToSelectedPlayer = false
-	local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel)
+	local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, targetModel, modeOverride)
 	if not targetCFrame then
 		return
 	end
@@ -5510,95 +5455,48 @@ function tog(data)
 			enabled = savedValue
 		end
 	end
-	local holder = makeControlFrame(64)
+	local holder = makeControlFrame(48)
 	holder.Parent = uiX
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Position = UDim2.fromScale(0.05, 0.2)
-	nameLabel.Size = UDim2.fromScale(0.56, 0.35)
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.Text = toggleName
-	nameLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	nameLabel.TextStrokeTransparency = 0.15
-	nameLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	nameLabel.TextScaled = true
-	nameLabel.TextWrapped = true
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Parent = holder
-	local nameConstraint = Instance.new("UITextSizeConstraint")
-	nameConstraint.MinTextSize = 12
-	nameConstraint.MaxTextSize = 18
-	nameConstraint.Parent = nameLabel
 	local switchButton = Instance.new("TextButton")
-	switchButton.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
 	switchButton.BorderSizePixel = 0
-	switchButton.Position = UDim2.fromScale(0.72, 0.22)
-	switchButton.Size = UDim2.fromScale(0.18, 0.36)
+	switchButton.Position = UDim2.fromScale(0.05, 0.15)
+	switchButton.Size = UDim2.fromScale(0.9, 0.7)
 	switchButton.AutoButtonColor = false
-	switchButton.Text = ""
+	switchButton.Font = Enum.Font.GothamBold
+	switchButton.Text = toggleName
+	switchButton.TextSize = 13
+	switchButton.TextWrapped = true
+	switchButton.ClipsDescendants = true
 	switchButton.Parent = holder
-	local switchCorner = Instance.new("UICorner")
-	switchCorner.CornerRadius = UDim.new(1, 0)
-	switchCorner.Parent = switchButton
-	local switchKnob = Instance.new("Frame")
-	switchKnob.BackgroundColor3 = Color3.fromRGB(255, 190, 190)
-	switchKnob.BorderSizePixel = 0
-	switchKnob.Size = UDim2.fromScale(0.42, 0.76)
-	switchKnob.Position = UDim2.fromScale(0.06, 0.12)
-	switchKnob.Parent = switchButton
-	local knobCorner = Instance.new("UICorner")
-	knobCorner.CornerRadius = UDim.new(1, 0)
-	knobCorner.Parent = switchKnob
-	local stateLabel = Instance.new("TextLabel")
-	stateLabel.BackgroundTransparency = 1
-	stateLabel.Position = UDim2.fromScale(0.05, 0.56)
-	stateLabel.Size = UDim2.fromScale(0.3, 0.2)
-	stateLabel.Font = Enum.Font.GothamMedium
-	stateLabel.TextColor3 = Color3.fromRGB(255, 150, 150)
-	stateLabel.TextScaled = true
-	stateLabel.TextXAlignment = Enum.TextXAlignment.Left
-	stateLabel.Parent = holder
-	local stateConstraint = Instance.new("UITextSizeConstraint")
-	stateConstraint.MinTextSize = 10
-	stateConstraint.MaxTextSize = 14
-	stateConstraint.Parent = stateLabel
-	local function renderToggle()
-		stateLabel.Text = enabled and "ON" or "OFF"
-		switchButton.BackgroundColor3 = enabled and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(30, 0, 0)
-		switchKnob.Position = enabled and UDim2.fromScale(0.52, 0.12) or UDim2.fromScale(0.06, 0.12)
+	local function render()
+		switchButton.BackgroundColor3 = enabled and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+		switchButton.BackgroundTransparency = 0.5
+		switchButton.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 0, 0)
 	end
-	local toggleControl = {
-		Frame = holder,
-	}
-	function toggleControl:SetValue(nextState, suppressCallback)
-		if nextState == nil then
-			enabled = not enabled
-		else
-			enabled = nextState == true
-		end
-		renderToggle()
+	switchButton.MouseButton1Click:Connect(function()
+		enabled = not enabled
+		render()
 		if saveKey ~= "" then
 			setSavedControlValue(saveKey, enabled)
 		end
-		if not suppressCallback and callback then
+		if callback then
 			callback(enabled)
 		end
-		return enabled
-	end
-	function toggleControl:GetValue()
-		return enabled
-	end
-	function toggleControl:tog_change(nextState, suppressCallback)
-		return self:SetValue(nextState, suppressCallback)
-	end
-	function toggleControl:Toggle(suppressCallback)
-		return self:SetValue(nil, suppressCallback)
-	end
-	switchButton.MouseButton1Click:Connect(function()
-		toggleControl:SetValue(nil)
 	end)
-	renderToggle()
-	return toggleControl
+	render()
+	return {
+		Frame = holder,
+		SetValue = function(nextState, suppressCallback)
+			enabled = nextState == true
+			render()
+			if not suppressCallback and callback then
+				callback(enabled)
+			end
+		end,
+		GetValue = function()
+			return enabled
+		end,
+	}
 end
 _G["3tog_on_one_one_button"] = function(data)
 	data = data or {}
@@ -5623,9 +5521,10 @@ _G["3tog_on_one_one_button"] = function(data)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
 	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
+	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
@@ -5646,21 +5545,19 @@ _G["3tog_on_one_one_button"] = function(data)
 	rowLayout.Parent = rowFrame
 	local function createSegment(text, isToggle, initialState, callback)
 		local segmentButton = Instance.new("TextButton")
-		segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
-		segmentButton.BackgroundTransparency = 0.06
+		segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		segmentButton.BackgroundTransparency = 0.5
 		segmentButton.BorderSizePixel = 0
 		segmentButton.Size = UDim2.new(0.25, -5, 1, 0)
 		segmentButton.AutoButtonColor = false
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
-		segmentButton.TextStrokeTransparency = 0.15
+		segmentButton.TextStrokeTransparency = 1
 		segmentButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-		segmentButton.TextScaled = true
+		segmentButton.TextSize = 13
+		segmentButton.TextScaled = false
 		segmentButton.TextWrapped = true
 		segmentButton.Parent = rowFrame
-		local segmentCorner = Instance.new("UICorner")
-		segmentCorner.CornerRadius = UDim.new(0, 10)
-		segmentCorner.Parent = segmentButton
 		local segmentConstraint = Instance.new("UITextSizeConstraint")
 		segmentConstraint.MinTextSize = 10
 		segmentConstraint.MaxTextSize = 14
@@ -5668,11 +5565,11 @@ _G["3tog_on_one_one_button"] = function(data)
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
-				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 220, 220)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(160, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 			else
-				segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 175, 175)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
 			end
 		end
 		segmentButton.MouseButton1Click:Connect(function()
@@ -5760,10 +5657,11 @@ _G["4tog_on_one_frame"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
+	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextStrokeTransparency = 1
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
@@ -5784,28 +5682,27 @@ _G["4tog_on_one_frame"] = function(data)
 	rowLayout.Parent = rowFrame
 	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
-		button.BackgroundTransparency = 0.06
+		button.BackgroundTransparency = 0.5
 		button.BorderSizePixel = 0
 		button.Size = UDim2.new(0.25, -5, 1, 0)
 		button.AutoButtonColor = false
 		button.Font = Enum.Font.GothamBold
 		button.Text = tostring(text)
-		button.TextStrokeTransparency = 0.15
-		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-		button.TextScaled = true
+		button.TextColor3 = Color3.fromRGB(255, 0, 0)
+		button.TextStrokeTransparency = 1
+		button.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		button.TextSize = 13
+		button.TextScaled = false
 		button.TextWrapped = true
 		button.Parent = rowFrame
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 10)
-		corner.Parent = button
 		local constraint = Instance.new("UITextSizeConstraint")
 		constraint.MinTextSize = 10
 		constraint.MaxTextSize = 13
 		constraint.Parent = button
 		local enabled = initialState == true
 		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
+			button.TextColor3 = Color3.fromRGB(255, 0, 0)
 		end
 		local control = {}
 		function control.SetValue(nextState, suppressCallback)
@@ -5889,10 +5786,11 @@ _G["5tog_on_one_frame"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
+	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextStrokeTransparency = 1
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
@@ -5913,20 +5811,19 @@ _G["5tog_on_one_frame"] = function(data)
 	rowLayout.Parent = rowFrame
 	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
-		button.BackgroundTransparency = 0.06
+		button.BackgroundTransparency = 0.5
 		button.BorderSizePixel = 0
 		button.Size = UDim2.new(0.2, -4, 1, 0)
 		button.AutoButtonColor = false
 		button.Font = Enum.Font.GothamBold
 		button.Text = tostring(text)
-		button.TextStrokeTransparency = 0.15
-		button.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-		button.TextScaled = true
+		button.TextColor3 = Color3.fromRGB(255, 0, 0)
+		button.TextStrokeTransparency = 1
+		button.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		button.TextSize = 13
+		button.TextScaled = false
 		button.TextWrapped = true
 		button.Parent = rowFrame
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 10)
-		corner.Parent = button
 		local constraint = Instance.new("UITextSizeConstraint")
 		constraint.MinTextSize = 9
 		constraint.MaxTextSize = 12
@@ -5934,8 +5831,8 @@ _G["5tog_on_one_frame"] = function(data)
 		local enabled = initialState == true
 		local control = {}
 		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(24, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 220, 220) or Color3.fromRGB(255, 175, 175)
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
+			button.TextColor3 = Color3.fromRGB(255, 0, 0)
 		end
 		function control.SetValue(nextState, suppressCallback)
 			enabled = nextState == true
@@ -6007,10 +5904,11 @@ _G["2tog_on_one_button"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
-	titleLabel.TextStrokeTransparency = 0.15
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	titleLabel.TextScaled = true
+	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextStrokeTransparency = 1
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	titleLabel.TextSize = 13
+	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
@@ -6031,21 +5929,20 @@ _G["2tog_on_one_button"] = function(data)
 	rowLayout.Parent = rowFrame
 	local function createSegment(text, isToggle, initialState, callback)
 		local segmentButton = Instance.new("TextButton")
-		segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
-		segmentButton.BackgroundTransparency = 0.06
+		segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		segmentButton.BackgroundTransparency = 0.5
 		segmentButton.BorderSizePixel = 0
 		segmentButton.Size = UDim2.new(1 / segmentCount, -5, 1, 0)
 		segmentButton.AutoButtonColor = false
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
-		segmentButton.TextStrokeTransparency = 0.15
-		segmentButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-		segmentButton.TextScaled = true
+		segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+		segmentButton.TextStrokeTransparency = 1
+		segmentButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		segmentButton.TextSize = 13
+		segmentButton.TextScaled = false
 		segmentButton.TextWrapped = true
 		segmentButton.Parent = rowFrame
-		local segmentCorner = Instance.new("UICorner")
-		segmentCorner.CornerRadius = UDim.new(0, 10)
-		segmentCorner.Parent = segmentButton
 		local segmentConstraint = Instance.new("UITextSizeConstraint")
 		segmentConstraint.MinTextSize = 10
 		segmentConstraint.MaxTextSize = 14
@@ -6054,10 +5951,10 @@ _G["2tog_on_one_button"] = function(data)
 		local function render()
 			if isToggle and enabled then
 				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 220, 220)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
 			else
-				segmentButton.BackgroundColor3 = Color3.fromRGB(24, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 175, 175)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
 			end
 		end
 		segmentButton.MouseButton1Click:Connect(function()
@@ -6124,22 +6021,20 @@ function button(data)
 	holder.Parent = uiX
 	local actionButton = Instance.new("TextButton")
 	actionButton.BackgroundColor3 = Color3.fromRGB(28, 0, 0)
-	actionButton.BackgroundTransparency = 0.05
+	actionButton.BackgroundTransparency = 0.5
 	actionButton.BorderSizePixel = 0
 	actionButton.Position = UDim2.fromScale(0.05, 0.16)
 	actionButton.Size = UDim2.fromScale(0.9, 0.56)
 	actionButton.AutoButtonColor = false
 	actionButton.Font = Enum.Font.GothamBold
 	actionButton.Text = buttonName
-	actionButton.TextColor3 = Color3.fromRGB(255, 170, 170)
-	actionButton.TextStrokeTransparency = 0.15
-	actionButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
-	actionButton.TextScaled = true
+	actionButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+	actionButton.TextStrokeTransparency = 1
+	actionButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	actionButton.TextSize = 13
+	actionButton.TextScaled = false
 	actionButton.TextWrapped = true
 	actionButton.Parent = holder
-	local actionCorner = Instance.new("UICorner")
-	actionCorner.CornerRadius = UDim.new(0, 12)
-	actionCorner.Parent = actionButton
 	local actionConstraint = Instance.new("UITextSizeConstraint")
 	actionConstraint.MinTextSize = 12
 	actionConstraint.MaxTextSize = 18
@@ -6420,7 +6315,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 		if not (manualAttackTpPlayer or manualAttackTpTarget) then
 			return
 		end
-		teleportToSelectedTarget()
+		teleportToSelectedTarget("Front")
 	end,
 })
 Dropdown({
@@ -6498,22 +6393,6 @@ if game.GameId == 3808081382 then
 	})
 	placesDropdown.Frame.LayoutOrder = 999998
 end
-local afkTog = tog({
-	name = "Safe Zone (AFK)",
-	saveKey = "AFKEnabled",
-	fun = function(enabled)
-		toggleAFK(enabled)
-	end,
-})
-afkTog.Frame.LayoutOrder = 999999
-local hpSafeTog = tog({
-	name = "Safe Zone (HP 25 - 48)",
-	saveKey = "HPSafeZoneEnabled",
-	fun = function(enabled)
-		toggleSafeZoneHP(enabled)
-	end,
-})
-hpSafeTog.Frame.LayoutOrder = 1000000
 syncPlacesKeybindDisplay()
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
@@ -6551,24 +6430,25 @@ do
 		labelObj.Size = UDim2.fromScale(0.4, 1)
 		labelObj.Font = Enum.Font.GothamBold
 		labelObj.Text = label
-		labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
-		labelObj.TextScaled = true
+		labelObj.TextColor3 = Color3.fromRGB(255, 0, 0)
+		labelObj.TextSize = 13
+		labelObj.TextScaled = false
+		labelObj.TextWrapped = true
 		labelObj.TextXAlignment = Enum.TextXAlignment.Left
 		labelObj.Parent = autoCustomFrame
 		local box = Instance.new("TextBox")
-		box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		box.BackgroundTransparency = 0.5
 		box.BorderSizePixel = 0
 		box.Position = UDim2.fromScale(0.55, 0.15)
 		box.Size = UDim2.fromScale(0.35, 0.7)
 		box.Font = Enum.Font.GothamMedium
-		box.TextColor3 = Color3.fromRGB(255, 200, 200)
-		box.TextScaled = true
+		box.TextColor3 = Color3.fromRGB(255, 0, 0)
+		box.TextSize = 13
+		box.TextScaled = false
 		box.ClearTextOnFocus = false
 		box.Text = tostring(autoCustomDistance)
 		box.Parent = autoCustomFrame
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 8)
-		corner.Parent = box
 		box.Focused:Connect(function() box.Text = "" end)
 		box:GetPropertyChangedSignal("Text"):Connect(function()
 			local text = box.Text
@@ -6620,23 +6500,24 @@ do
 		labelObj.Size = UDim2.fromScale(0.1, 0.3)
 		labelObj.Font = Enum.Font.GothamBold
 		labelObj.Text = label
-		labelObj.TextColor3 = Color3.fromRGB(255, 100, 100)
-		labelObj.TextScaled = true
+		labelObj.TextColor3 = Color3.fromRGB(255, 0, 0)
+		labelObj.TextSize = 13
+		labelObj.TextScaled = false
+		labelObj.TextWrapped = true
 		labelObj.Parent = customOffsetFrame
 		local box = Instance.new("TextBox")
-		box.BackgroundColor3 = Color3.fromRGB(25, 0, 0)
+		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		box.BackgroundTransparency = 0.5
 		box.BorderSizePixel = 0
 		box.Position = UDim2.fromScale(position, 0.5)
 		box.Size = UDim2.fromScale(0.25, 0.4)
 		box.Font = Enum.Font.GothamMedium
-		box.TextColor3 = Color3.fromRGB(255, 200, 200)
-		box.TextScaled = true
+		box.TextColor3 = Color3.fromRGB(255, 0, 0)
+		box.TextSize = 13
+		box.TextScaled = false
 		box.ClearTextOnFocus = false
 		box.Text = "0"
 		box.Parent = customOffsetFrame
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 6)
-		corner.Parent = box
 		box.Focused:Connect(function()
 			box.Text = ""
 		end)
@@ -6669,7 +6550,6 @@ do
 	yInput = createOffsetInput("Y", "y", 0.375)
 	xInput = createOffsetInput("X", "x", 0.7)
 	autoCustomFrame.Parent = uiX
-	
 	tpModesDropdown = Dropdown({
 		namedropdown = "TP Modes",
 		inside = getTPModeCleanItems(),
@@ -6698,23 +6578,16 @@ task.spawn(function()
 	if not screenGui.Parent then
 		return
 	end
-	local espOverlayConfig = {
-		showCharacter = false,
-		showUltimate = false,
-		showHp = false,
-		showEsp = false,
-	}
-	local espOverlayState = {}
 	local ESP_BILLBOARD_NAME = "NOTHING_X_OverlayBillboard"
 	local ESP_HIGHLIGHT_NAME = "NOTHING-X"
 	local TextService = game:GetService("TextService")
 	local BILLBOARD_MIN_WIDTH = 72
-	local BILLBOARD_PADDING_TOP = 5
-	local BILLBOARD_PADDING_BOTTOM = 5
-	local BILLBOARD_PADDING_LEFT = 6
-	local BILLBOARD_PADDING_RIGHT = 6
+	local BILLBOARD_PADDING_TOP = 0
+	local BILLBOARD_PADDING_BOTTOM = 0
+	local BILLBOARD_PADDING_LEFT = 0
+	local BILLBOARD_PADDING_RIGHT = 0
 	local BILLBOARD_LINE_HEIGHT = 16
-	local BILLBOARD_ITEM_PADDING = 4
+	local BILLBOARD_ITEM_PADDING = 0
 	local function clampPercent(value)
 		local numericValue = tonumber(value) or 0
 		if numericValue ~= numericValue then
@@ -6723,7 +6596,7 @@ task.spawn(function()
 		return math.clamp(math.floor(numericValue + 0.5), 0, 999)
 	end
 	local function getCharacterNameColor(characterName)
-		return Color3.fromRGB(255, 255, 255)
+		return Color3.fromRGB(255, 0, 0)
 	end
 	local function getUltimateColor(ultimatePercent)
 		local value = clampPercent(ultimatePercent)
@@ -6761,9 +6634,8 @@ task.spawn(function()
 		line.Size = UDim2.fromOffset(0, BILLBOARD_LINE_HEIGHT)
 		line.Font = Enum.Font.GothamBold
 		line.Text = ""
-		line.TextColor3 = defaultColor or Color3.fromRGB(255, 255, 255)
-		line.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-		line.TextStrokeTransparency = 0
+		line.TextColor3 = defaultColor or Color3.fromRGB(255, 0, 0)
+		line.TextStrokeTransparency = 1
 		line.TextScaled = false
 		line.TextSize = 14
 		line.TextWrapped = false
@@ -6797,25 +6669,17 @@ task.spawn(function()
 		frame.Name = "Root"
 		frame.Size = UDim2.new(1, 0, 0, 0)
 		frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		frame.BackgroundTransparency = 0.35
+		frame.BackgroundTransparency = 0.3
 		frame.BorderSizePixel = 0
 		frame.Parent = billboard
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, 10)
-		corner.Parent = frame
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(255, 0, 0)
-		stroke.Thickness = 1.4
-		stroke.Transparency = 0.1
-		stroke.Parent = frame
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, 6)
-		padding.PaddingRight = UDim.new(0, 6)
-		padding.PaddingTop = UDim.new(0, 5)
-		padding.PaddingBottom = UDim.new(0, 5)
+		padding.PaddingLeft = UDim.new(0, 0)
+		padding.PaddingRight = UDim.new(0, 0)
+		padding.PaddingTop = UDim.new(0, 0)
+		padding.PaddingBottom = UDim.new(0, 0)
 		padding.Parent = frame
 		local list = Instance.new("UIListLayout")
-		list.Padding = UDim.new(0, BILLBOARD_ITEM_PADDING)
+		list.Padding = UDim.new(0, 0)
 		list.FillDirection = Enum.FillDirection.Horizontal
 		list.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		list.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -6847,7 +6711,7 @@ task.spawn(function()
 		if seriousModeState == "strong" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 255, 255),
+				outline = Color3.fromRGB(255, 0, 0),
 				enabled = true,
 			}
 		end
@@ -6974,7 +6838,6 @@ task.spawn(function()
 		local ultimateValue = clampPercent(ultimateAttr)
 		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate
 		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
-		
 		if not showBillboard then
 			if billboard then
 				billboard:Destroy()
@@ -7073,36 +6936,6 @@ task.spawn(function()
 		end
 		espOverlayState[targetPlayer] = nil
 	end
-	local overlayToggleControl = _G["4tog_on_one_frame"]({
-		title = "UI",
-		name1 = "HP %",
-		name2 = "Character Name",
-		name3 = "ULT %",
-		name4 = "ULTED ESP",
-		saveKey1 = "Overlay4HP",
-		saveKey2 = "Overlay4Character",
-		saveKey3 = "Overlay4Ultimate",
-		saveKey4 = "Overlay4ESP",
-		default1 = espOverlayConfig.showHp,
-		default2 = espOverlayConfig.showCharacter,
-		default3 = espOverlayConfig.showUltimate,
-		default4 = espOverlayConfig.showEsp,
-		fun1 = function(enabled)
-			espOverlayConfig.showHp = enabled
-		end,
-		fun2 = function(enabled)
-			espOverlayConfig.showCharacter = enabled
-		end,
-		fun3 = function(enabled)
-			espOverlayConfig.showUltimate = enabled
-		end,
-		fun4 = function(enabled)
-			espOverlayConfig.showEsp = enabled
-		end,
-	})
-	if overlayToggleControl and overlayToggleControl.Frame then
-		overlayToggleControl.Frame.LayoutOrder = 100000
-	end
 	Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
 	task.spawn(function()
 		while screenGui.Parent do
@@ -7144,11 +6977,22 @@ end)
 UserInputService.InputChanged:Connect(function(input)
 	if draggingWindow and input.UserInputType == Enum.UserInputType.MouseMovement then
 		local delta = input.Position - dragStartInputPosition
+		local viewportSize = Workspace.CurrentCamera.ViewportSize
+		local scale = mainScale.Scale
+		local guiViewportSize = viewportSize / scale
+		local guiWindowSize = settingsWindow.AbsoluteSize / scale
+		local newOffsetUX = dragStartPosition.X.Offset + (delta.X / scale)
+		local newOffsetUY = dragStartPosition.Y.Offset + (delta.Y / scale)
+		local anchor = settingsWindow.AnchorPoint
+		local minUX = (guiWindowSize.X * anchor.X) - (guiViewportSize.X * dragStartPosition.X.Scale)
+		local maxUX = (guiViewportSize.X * (1 - dragStartPosition.X.Scale)) - (guiWindowSize.X * (1 - anchor.X))
+		local minUY = (guiWindowSize.Y * anchor.Y) - (guiViewportSize.Y * dragStartPosition.Y.Scale)
+		local maxUY = (guiViewportSize.Y * (1 - dragStartPosition.Y.Scale)) - (guiWindowSize.Y * (1 - anchor.Y))
 		settingsWindow.Position = UDim2.new(
 			dragStartPosition.X.Scale,
-			dragStartPosition.X.Offset + delta.X,
+			math.clamp(newOffsetUX, minUX, maxUX),
 			dragStartPosition.Y.Scale,
-			dragStartPosition.Y.Offset + delta.Y
+			math.clamp(newOffsetUY, minUY, maxUY)
 		)
 	end
 end)
@@ -7505,7 +7349,6 @@ do
 	if isTeleportLocked then
 		return
 	end
-
 	local function performGodTP(target)
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
@@ -7516,15 +7359,12 @@ do
 				local amFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled
 				local resolvedLinear = targetVelocity or Vector3.zero
 				local resolvedAngular = Vector3.zero
-				
 				if amFlinging then
 					local power = (walkFlingEnabled and walkFlingPower) or (flingEnabled and flingPower) or (clickFlingEnabled and flingPower) or (auraFlingEnabled and flingPower) or 20000
 					resolvedAngular = Vector3.new(power * 2, power * 2, power * 2)
 					resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.5)
 				end
-				
 				applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
-				
 				if flying and bv and bg then
 					bv.Position = characterRoot.Position
 					bg.CFrame = getRotationOnlyCFrame(targetCFrame)
@@ -7532,14 +7372,12 @@ do
 			end
 		end
 	end
-
 	if autoTpEnabled then
 		local targetModel = resolveAttackTpTarget()
 		if isValidAttackTpTarget(targetModel) then
 			performGodTP(targetModel)
 		end
 	end
-
 	if attackTpEnabled and attackTpHolding then
 		if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 			clearManualAttackTpTarget()
@@ -7558,13 +7396,11 @@ do
 			performGodTP(attackTpTarget)
 		end
 	end
-
 	if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
 		teleportToSelectedTarget()
 		pendingTeleportToSelectedPlayer = false
 	end
 	end)
-	
 	task.spawn(function()
 		local steppedConn
 		steppedConn = RunService.Stepped:Connect(function()
@@ -7573,7 +7409,6 @@ do
 				return
 			end
 			if _G.SafeTeleportLock == true then return end
-			
 			local function fastPerform(target)
 				local character = player.Character
 				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
@@ -7591,7 +7426,6 @@ do
 					end
 				end
 			end
-
 			if autoTpEnabled then
 				local targetModel = resolveAttackTpTarget()
 				if isValidAttackTpTarget(targetModel) then
@@ -7638,23 +7472,25 @@ function startIntroUi()
 	local nothingX = Instance.new("TextLabel")
 	nothingX.Name = "NothingX"
 	nothingX.AnchorPoint = Vector2.new(0.5, 0.5)
-	nothingX.Position = UDim2.fromScale(0.5, 0.45)
-	nothingX.Size = UDim2.fromScale(1, 0.3)
+	nothingX.Position = UDim2.fromScale(0.5, 0.4)
+	nothingX.Size = UDim2.fromScale(1, 0.4)
 	nothingX.BackgroundTransparency = 1
 	nothingX.Text = "NOTHING X"
 	nothingX.TextColor3 = Color3.fromRGB(0, 0, 0)
-	nothingX.Font = Enum.Font.GothamBlack
+	nothingX.Font = Enum.Font.GothamBold
+	nothingX.TextSize = 80
 	nothingX.TextScaled = true
 	nothingX.Parent = introContent
 	local subtitle = Instance.new("TextLabel")
 	subtitle.Name = "SubTitle"
 	subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
-	subtitle.Position = UDim2.fromScale(0.5, 0.6)
-	subtitle.Size = UDim2.fromScale(0.4, 0.1)
+	subtitle.Position = UDim2.fromScale(0.5, 0.65)
+	subtitle.Size = UDim2.fromScale(1, 0.2)
 	subtitle.BackgroundTransparency = 1
 	subtitle.Text = "_X"
 	subtitle.TextColor3 = Color3.fromRGB(0, 0, 0)
 	subtitle.Font = Enum.Font.GothamBold
+	subtitle.TextSize = 40
 	subtitle.TextScaled = true
 	subtitle.Parent = introContent
 	task.spawn(function()
@@ -7673,9 +7509,7 @@ function startIntroUi()
 	end)
 	task.delay(4, function()
 		local fadeInfo = TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		TweenService:Create(background, fadeInfo, {
-			BackgroundTransparency = 1,
-		}):Play()
+		background.BackgroundTransparency = 1
 		for _, child in ipairs(introContent:GetDescendants()) do
 			if child:IsA("TextLabel") then
 				TweenService:Create(child, fadeInfo, { TextTransparency = 1 }):Play()
@@ -7683,27 +7517,13 @@ function startIntroUi()
 				TweenService:Create(child, fadeInfo, { BackgroundTransparency = 1 }):Play()
 			end
 		end
-		task.wait(1.5)
+		task.wait(0.05) 
 		introContent:Destroy()
 		background:Destroy()
 		introFinished = true
 		keybindFrame.Visible = true
 		targetFrame.Visible = false
 		updateTargetDisplay()
-		TweenService:Create(keybindFrame, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 0.5,
-		}):Play()
-		TweenService:Create(leftStroke, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 0.1,
-		}):Play()
-		TweenService:Create(
-			leftStroke,
-			TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-			{
-				Thickness = 5,
-				Transparency = 0.35,
-			}
-		):Play()
 		if pendingInfoCall then
 			local queuedInfo = pendingInfoCall
 			pendingInfoCall = nil
@@ -7717,187 +7537,170 @@ if game.GameId ~= 3808081382 then
     return
 end
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
-local alreadyDestroyed = {}
-local function destroyOnce(obj)
-    if not obj or alreadyDestroyed[obj] then return end
-    pcall(function()
-        if obj and obj.Parent then
-            alreadyDestroyed[obj] = true
-            obj:Destroy()
-        end
-    end)
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local NORMAL_TRANSPARENCY = 0.66
+local ULT_TRANSPARENCY = 0.55
+local function Hide(Object)
+	if not Object then
+		return
+	end
+	pcall(function()
+		if Object.Visible then
+			Object.Visible = false
+		end
+	end)
 end
-local function findPath(timeout, ...)
-    local path = {...}
-    local start = tick()
-    while tick() - start < timeout do
-        local obj = path[1]
-        local failed = false
-        for i = 2, #path do
-            obj = obj and obj:FindFirstChild(path[i])
-            if not obj then
-                failed = true
-                break
-            end
-        end
-        if not failed and obj then
-            return obj
-        end
-        task.wait(0.25)
-    end
-    return nil
+local BLACK = Color3.fromRGB(0,0,0)
+local function SetBlack(Object)
+	if not Object then
+		return
+	end
+	pcall(function()
+		if Object:IsA("Frame") then
+			if Object.BackgroundColor3 ~= BLACK then
+				Object.BackgroundColor3 = BLACK
+			end
+		end
+	end)
+	pcall(function()
+		if Object.ImageColor3 ~= BLACK then
+			Object.ImageColor3 = BLACK
+		end
+	end)
 end
-local function destroyAllByName(parent, name)
-    if not parent then return end
-    for _, v in ipairs(parent:GetDescendants()) do
-        if v.Name == name then
-            destroyOnce(v)
-        end
-    end
+local Cooldowns = {}
+local function RegisterHotbar(Hotbar)
+	for _,v in ipairs(Hotbar:GetDescendants()) do
+		if v.Name == "Cooldown" then
+			Cooldowns[v] = true
+			SetBlack(v)
+		end
+	end
+	Hotbar.DescendantAdded:Connect(function(v)
+		if v.Name == "Cooldown" then
+			Cooldowns[v] = true
+			SetBlack(v)
+		end
+	end)
 end
-local toDestroy = {
-    function()
-        local emotes = findPath(20, playerGui, "Emotes", "ImageLabel")
-        if emotes then
-            destroyAllByName(emotes, "fake")
-        end
-    end,
-    function()
-        local emotes = findPath(20, playerGui, "Emotes", "ImageLabel")
-        if emotes then
-            destroyAllByName(emotes, "GamepassTwo")
-        end
-    end,
-    function()
-        return findPath(20, playerGui, "Emotes", "ImageLabel", "Switch")
-    end,
-    function()
-        return findPath(20, playerGui, "Emotes", "ImageLabel", "Gamepass")
-    end,
-    function()
-        return findPath(20, playerGui, "Emotes", "ImageLabel", "Limited")
-    end,
-    function()
-        return findPath(20, playerGui, "Emotes", "ImageLabel", "Bulk")
-    end,
-    function()
-        return findPath(20, playerGui, "Version")
-    end,
-    function()
-        local topbar = findPath(20, playerGui, "TopbarPlus", "TopbarContainer")
-        if topbar then
-            return topbar:GetChildren()[10]
-        end
-    end,
-    function()
-        local cosmetics = findPath(20, playerGui, "Cosmetics", "Frame")
-        if cosmetics then
-            destroyAllByName(cosmetics, "fake")
-        end
-    end,
-    function()
-        return findPath(20, playerGui, "Cosmetics", "Frame", "Bulk")
-    end,
-    function()
-        return findPath(20, playerGui, "Gifting")
-    end,
-}
-for _, getObj in ipairs(toDestroy) do
-    local obj = getObj()
-    if not obj then
-    else
-        destroyOnce(obj)
-    end
+local HiddenObjects = {}
+local function AddHide(Object)
+	if Object then
+		table.insert(HiddenObjects,Object)
+		Hide(Object)
+	end
 end
-local currentHotbar = playerGui:WaitForChild("Hotbar", 5)
-local currentBar = playerGui:WaitForChild("Bar", 5)
-local function hasAnyToolInBackpack()
-    if not player.Backpack then return false end
-    return #player.Backpack:GetChildren() > 0
+local function RegisterGui()
+	pcall(function()
+		AddHide(PlayerGui.Bar.MagicHealth.ImageButton)
+		AddHide(PlayerGui.Bar.MagicHealth.TextLabel)
+		AddHide(PlayerGui.Bar.MagicHealth.Ult)
+		AddHide(PlayerGui.Gifting)
+		AddHide(PlayerGui.MobileJunk)
+		AddHide(PlayerGui.Version)
+		AddHide(PlayerGui.Emotes.ImageLabel.GamepassTwo)
+		AddHide(PlayerGui.Emotes.ImageLabel.Gamepass)
+		AddHide(PlayerGui.Emotes.ImageLabel.Limited)
+		AddHide(PlayerGui.Emotes.ImageLabel.Bulk)
+		AddHide(PlayerGui.Cosmetics.Frame.Bulk)
+	end)
+	pcall(function()
+		for _,v in ipairs(PlayerGui.Emotes.ImageLabel:GetDescendants()) do
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end
+		PlayerGui.Emotes.ImageLabel.DescendantAdded:Connect(function(v)
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end)
+	end)
+	pcall(function()
+		for _,v in ipairs(PlayerGui.Cosmetics.Frame:GetDescendants()) do
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end
+		PlayerGui.Cosmetics.Frame.DescendantAdded:Connect(function(v)
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end)
+	end)
+	pcall(function()
+		local Container = PlayerGui.TopbarPlus.TopbarContainer
+		local function Check(v)
+			if v.Name ~= "UnnamedIcon" then
+				return
+			end
+			local IconButton = v:FindFirstChild("IconButton")
+			if not IconButton then
+				return
+			end
+			local IconImage = IconButton:FindFirstChild("IconImage")
+			if not IconImage then
+				return
+			end
+			if string.find(tostring(IconImage.Image),"14471730934") then
+				AddHide(v)
+			end
+		end
+		for _,v in ipairs(Container:GetDescendants()) do
+			Check(v)
+		end
+		Container.DescendantAdded:Connect(Check)
+	end)
 end
-local mainLoopConnection = nil
-local function startMainLoop()
-    if mainLoopConnection then return end
-    mainLoopConnection = RunService.Heartbeat:Connect(function()
-        if isWaitingForNewGui then
-            return
-        end
-        if not hasAnyToolInBackpack() or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-            if mainLoopConnection then
-                mainLoopConnection:Disconnect()
-                mainLoopConnection = nil
-            end
-            return
-        end
-
-        local magicHealth = currentBar and currentBar:FindFirstChild("MagicHealth")
-        if not magicHealth then return end
-
-        local magicUlt    = magicHealth:FindFirstChild("Ult")
-        local magicText   = magicHealth:FindFirstChild("TextLabel")
-        local magicButton = magicHealth:FindFirstChild("ImageButton")
-        
-        if magicUlt    then destroyOnce(magicUlt) end
-        if magicText   then destroyOnce(magicText) end
-        if magicButton then destroyOnce(magicButton) end
-        
-        if magicUlt and (magicUlt:IsA("ImageLabel") or magicUlt:IsA("ImageButton")) then
-            local ultimateValue = player:GetAttribute("Ultimate") or 0
-            magicUlt.ImageTransparency = (ultimateValue == 100) and 0.33 or 0.5
-        end
-        
-        local healthSection = magicHealth:FindFirstChild("Health")
-        local specialBar = healthSection and healthSection:FindFirstChild("Bar") 
-            and healthSection.Bar:FindFirstChild("Bar")
-        
-        if specialBar and (specialBar:IsA("ImageLabel") or specialBar:IsA("ImageButton")) then
-            local ultimateValue = player:GetAttribute("Ultimate") or 0
-            specialBar.ImageTransparency = (ultimateValue == 100) and 0.1 or 0.5
-            specialBar.ImageColor3 = Color3.new(0, 0, 0)
-        end
-        
-        local cooldown = currentHotbar and currentHotbar:FindFirstChild("Backpack")
-            and currentHotbar.Backpack:FindFirstChild("LocalScript")
-            and currentHotbar.Backpack.LocalScript:FindFirstChild("Cooldown")
-        
-        if cooldown then
-            cooldown.BackgroundColor3 = Color3.new(0, 0, 0)
-            cooldown.BackgroundTransparency = 0.45
-        end
-    end)
+local function UpdateBar()
+	pcall(function()
+		local Bar = PlayerGui.Bar.MagicHealth.Health.Bar.Bar
+		if Bar.ImageColor3 ~= BLACK then
+			Bar.ImageColor3 = BLACK
+		end
+		local NeedTransparency =
+			LocalPlayer:GetAttribute("Ultimate") == 100
+			and ULT_TRANSPARENCY
+			or NORMAL_TRANSPARENCY
+		if Bar.ImageTransparency ~= NeedTransparency then
+			Bar.ImageTransparency = NeedTransparency
+		end
+	end)
 end
-local function updateCurrentGui()
-    isWaitingForNewGui = true
-    task.wait(0.5)
-    currentHotbar = playerGui:WaitForChild("Hotbar", 5)
-    currentBar = playerGui:WaitForChild("Bar", 5)
-    isWaitingForNewGui = false
-end
-playerGui.ChildRemoved:Connect(function(child)
-    if child.Name == "Hotbar" or child.Name == "Bar" then
-        updateCurrentGui()
-    end
-end)
-player.CharacterAdded:Connect(function()
-    updateCurrentGui()
-end)
 task.spawn(function()
-    while true do
-        syncPlacesKeybindDisplay()
-        syncGetTrashKeybindDisplay()
-        syncMovementDisplay()
-        task.wait(1)
-    end
+	pcall(function()
+		RegisterHotbar(PlayerGui:WaitForChild("Hotbar"))
+	end)
+	RegisterGui()
+	UpdateBar()
 end)
+PlayerGui.ChildAdded:Connect(function(v)
+	task.wait(0.1)
+	if v.Name == "Hotbar" then
+		RegisterHotbar(v)
+	end
+	RegisterGui()
+	UpdateBar()
+end)
+LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
 task.spawn(function()
-    while true do
-        if hasAnyToolInBackpack() then
-            startMainLoop()
-        end
-        task.wait(0.2) 
-    end
+	while true do
+		task.wait(0)
+		for _,v in ipairs(HiddenObjects) do
+			pcall(function()
+				if v.Visible then
+					v.Visible = false
+				end
+			end)
+		end
+		for v,_ in pairs(Cooldowns) do
+			if v and v.Parent then
+				SetBlack(v)
+			end
+		end
+		UpdateBar()
+	end
 end)
-updateCurrentGui()
 end)
