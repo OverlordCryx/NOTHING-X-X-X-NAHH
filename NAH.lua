@@ -560,7 +560,6 @@ task.spawn(function()
         end
     end
 end)
-workspace.FallenPartsDestroyHeight = 0/0
 print("✅")
 end)
 keybindEntries = {}
