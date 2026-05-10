@@ -3820,6 +3820,7 @@ task.spawn(function()
     makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
     makeHubTog(row2, "No Dash CD", function(v) 
         workspace:SetAttribute("NoDashCooldown", v)
+        workspace:SetAttribute("EffectAffects", v and 1 or 0)
         player:SetAttribute("NoDashCooldown", v)
         if player.Character then player.Character:SetAttribute("NoDashCooldown", v) end
     end, "NoDashCD", false)
