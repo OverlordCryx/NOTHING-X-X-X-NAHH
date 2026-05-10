@@ -996,54 +996,72 @@ local function syncVoidDeadKeybindDisplay()
 	keybindEntries.VoidDead = {
 		name = "Void Dead",
 		keybind = encodeKeybindValue(voidDeadKeybind),
-		hideState = true,
+		enabled = voidDeadActive,
 	}
 	updateKeybindText()
 end
 local VoidDeadToggle = nil
 local function toggleVoidDead(state)
-	if state == false then
-		voidDeadActive = false
-		return
+	local targetState = state
+	if targetState == nil then
+		targetState = not voidDeadActive
 	end
+
+	if voidDeadActive == targetState then return end
+	
 	local plr = game:GetService("Players").LocalPlayer
 	local character = plr.Character
+
+	if targetState == false then
+		voidDeadActive = false
+		if voidDeadConn then 
+			voidDeadConn:Disconnect() 
+			voidDeadConn = nil
+		end
+		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
+		
+		if voidDeadLastCF and character and character:FindFirstChild("HumanoidRootPart") then
+			applyTeleportRootState(character.HumanoidRootPart, voidDeadLastCF)
+		end
+		
+		pcall(function()
+			workspace.Camera.CameraType = Enum.CameraType.Custom
+			workspace.Camera.CameraSubject = character:FindFirstChild("Humanoid") or character
+		end)
+		
+		syncVoidDeadKeybindDisplay()
+		return
+	end
+
 	if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid")) then
 		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
 		return
 	end
-	if voidDeadActive then return end 
+
 	voidDeadActive = true
 	syncVoidDeadKeybindDisplay()
 	if VoidDeadToggle then VoidDeadToggle:SetValue(true, true) end
+	
 	voidDeadLastCF = character.HumanoidRootPart.CFrame
+	
 	pcall(function()
 		workspace.FallenPartsDestroyHeight = 0/0
 		workspace.Camera.CameraType = Enum.CameraType.Scriptable
 	end)
+
 	local hrp = character.HumanoidRootPart
-	local conn
-	conn = game:GetService("RunService").Heartbeat:Connect(function()
+	if voidDeadConn then voidDeadConn:Disconnect() end
+	voidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
 		if not voidDeadActive or not hrp.Parent then
-			if conn then conn:Disconnect() end
+			if voidDeadConn then 
+				voidDeadConn:Disconnect() 
+				voidDeadConn = nil
+			end
 			return
 		end
 		hrp.CFrame = CFrame.new(hrp.Position.X, -700, hrp.Position.Z)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
-	end)
-	task.delay(1.5, function()
-		voidDeadActive = false
-		if conn then conn:Disconnect() end
-		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
-		if voidDeadLastCF and character and character:FindFirstChild("HumanoidRootPart") then
-			applyTeleportRootState(character.HumanoidRootPart, voidDeadLastCF)
-		end
-		pcall(function()
-			workspace.Camera.CameraType = Enum.CameraType.Custom
-			workspace.Camera.CameraSubject = character:FindFirstChild("Humanoid") or character
-		end)
-		syncVoidDeadKeybindDisplay()
 	end)
 end
 local function syncFlyKeybindDisplay()
