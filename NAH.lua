@@ -1067,7 +1067,6 @@ local function toggleVoidDead(state)
 	syncVoidDeadKeybindDisplay()
 	if VoidDeadToggle then VoidDeadToggle:SetValue(true, true) end
 	pcall(function()
-		workspace.FallenPartsDestroyHeight = 0/0
 		workspace.Camera.CameraType = Enum.CameraType.Scriptable
 	end)
 	if voidDeadConn then voidDeadConn:Disconnect() end
@@ -1082,7 +1081,7 @@ local function toggleVoidDead(state)
 			end
 			return
 		end
-		hrp.CFrame = CFrame.new(hrp.Position.X, -700, hrp.Position.Z)
+		hrp.CFrame = CFrame.new(hrp.Position.X, -850, hrp.Position.Z)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end)
@@ -2538,7 +2537,7 @@ local function hasLiveStoredTarget(model)
 end
 _G.lastValidTrashTime = 0
 function isTpBlocked()
-	if not trashBlockEnabled then
+	if not trashBlockEnabled or _G.SafeTeleportLock then
 		return false
 	end
 	local character = player.Character
@@ -4000,6 +3999,7 @@ do
 	local LocalPlayer = Players.LocalPlayer
 	pcall(function()
 		Workspace.FallenPartsDestroyHeight = 0/0
+		Workspace.FallenPartsDestroyHeight = 0/0
 	end)
 	local BOUNDARY_X = 200000
 	local BOUNDARY_Z = 200000
@@ -4047,8 +4047,9 @@ do
 				end
 			end
 		end
-		local outOfBounds = math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z or pos.Y <= BOUNDARY_Y_DOWN
-		if outOfBounds and alive then
+		local isFar = math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z
+		local isVoid = pos.Y <= BOUNDARY_Y_DOWN
+		if ((isFar and not _G.SafeTeleportLock) or isVoid) and alive then
 			for i = 1, #safePositions do
 				local targetCF = safePositions[i]
 				if targetCF then
