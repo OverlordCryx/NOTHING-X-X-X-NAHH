@@ -6728,7 +6728,7 @@ task.spawn(function()
 		if seriousModeState == "strong" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 0, 0),
+				outline = Color3.fromRGB(200, 200, 200),
 				enabled = true,
 			}
 		end
