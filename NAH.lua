@@ -580,6 +580,10 @@ camLockKeybind = Enum.KeyCode.Z
 attackTpKeybind = Enum.KeyCode.T
 targetSelectKeybind = Enum.KeyCode.C
 setBackKeybind = Enum.KeyCode.N
+voidDeadActive = false
+voidDeadKeybind = Enum.KeyCode.V
+local voidDeadLastCF = nil
+local voidDeadConn = nil
 local getTrashState = {
 	keybind = Enum.KeyCode.LeftControl,
 	running = false,
@@ -869,7 +873,7 @@ function parseEnabledValue(value)
 end
 function updateKeybindText()
 	local lines = {}
-	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "Custom", "Places" }
+	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places" }
 	local function appendEntry(entry)
 		if not entry then
 			return
@@ -987,6 +991,52 @@ local function syncSpeedKeybindDisplay()
 		enabled = active,
 	}
 	updateKeybindText()
+end
+local function syncVoidDeadKeybindDisplay()
+	keybindEntries.VoidDead = {
+		name = "Void Dead",
+		keybind = encodeKeybindValue(voidDeadKeybind),
+		enabled = voidDeadActive,
+	}
+	updateKeybindText()
+end
+local function toggleVoidDead()
+	local plr = game:GetService("Players").LocalPlayer
+	local character = plr.Character
+	if not (character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid")) then
+		return
+	end
+	voidDeadActive = not voidDeadActive
+	if voidDeadActive then
+		voidDeadLastCF = character.HumanoidRootPart.CFrame
+		pcall(function()
+			workspace.FallenPartsDestroyHeight = 0/0
+			workspace.Camera.CameraType = Enum.CameraType.Scriptable
+		end)
+		if voidDeadConn then voidDeadConn:Disconnect() end
+		voidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
+			local current = plr.Character
+			local hrp = current and current:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				hrp.CFrame = CFrame.new(hrp.Position.X, -700, hrp.Position.Z)
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+			end
+		end)
+	else
+		if voidDeadConn then
+			voidDeadConn:Disconnect()
+			voidDeadConn = nil
+		end
+		if voidDeadLastCF and character and character:FindFirstChild("HumanoidRootPart") then
+			applyTeleportRootState(character.HumanoidRootPart, voidDeadLastCF)
+		end
+		pcall(function()
+			workspace.Camera.CameraType = Enum.CameraType.Custom
+			workspace.Camera.CameraSubject = character:FindFirstChild("Humanoid") or character
+		end)
+	end
+	syncVoidDeadKeybindDisplay()
 end
 local function syncFlyKeybindDisplay()
 	keybindEntries.Fly = {
@@ -3906,505 +3956,129 @@ task.spawn(function()
         end
     end)
 end)
-function initProtectionRuntime()
+do
 	local Workspace = game:GetService("Workspace")
-	local player = game:GetService("Players").LocalPlayer
-	local protection = _G.NOTHINGX_Protection or {}
-	_G.NOTHINGX_Protection = protection
-	protection.Enabled = true
-	protection.boundarySize = Vector3.new(200000, 0, 200000)
-	protection.Y_BOUNDARY_UP = 200000
-	protection.EXTREME_LOW_OFFSET = -1000
-	protection.VOID_BUFFER = 90
-	protection.MAX_SAFE_POSITIONS = 10
-	protection.SAVE_INTERVAL = 0.12
-	protection.MIN_DISTANCE_TO_SAVE = 6
-	protection.MAX_SAVE_HEIGHT_FROM_GROUND = 5.5
-	protection.MAX_AIR_SAVE_VERTICAL_SPEED = 4
-	protection.MIN_GROUND_NORMAL_Y = 0.35
-	protection.GROUND_CHECK_UP = 6
-	protection.GROUND_CHECK_DOWN = 45
-	protection.RESCUE_HEIGHT = 6
-	protection.RESCUE_PROBE_HEIGHT = 12
-	protection.FALLBACK_CAST_HEIGHT = 1500
-	protection.FALLBACK_CAST_DEPTH = 4000
-	protection.SEARCH_OFFSETS = {
-		Vector3.new(0, 0, 0),
-		Vector3.new(6, 0, 0),
-		Vector3.new(-6, 0, 0),
-		Vector3.new(0, 0, 6),
-		Vector3.new(0, 0, -6),
-		Vector3.new(6, 0, 6),
-		Vector3.new(6, 0, -6),
-		Vector3.new(-6, 0, 6),
-		Vector3.new(-6, 0, -6),
-	}
-	protection.safePositionHistory = protection.safePositionHistory or {}
-	protection.safePositionEntries = protection.safePositionEntries or {}
-	protection.lastSafePosition = protection.lastSafePosition or nil
-	protection.lastSafeEntry = protection.lastSafeEntry or nil
-	protection.lastSaveTime = protection.lastSaveTime or 0
-	protection.rescueInProgress = false
-	protection.detectVoidY = function()
-		local official = Workspace.FallenPartsDestroyHeight
-		if official and official > -500000 and official < 10000 then
-			protection.VOID_Y = official
-		else
-			local lowest = 200
-			for _ = 1, 6 do
-				local probe = Instance.new("Part")
-				probe.Size = Vector3.new(8, 8, 8)
-				probe.Position = Vector3.new(0, 600, 0)
-				probe.Anchored = false
-				probe.CanCollide = false
-				probe.Transparency = 1
-				probe.Parent = Workspace
-				task.wait(1.8)
-				if probe.Parent then
-					lowest = math.min(lowest, probe.Position.Y)
-					probe:Destroy()
+	local Players = game:GetService("Players")
+	local StarterPack = game:GetService("StarterPack")
+	local RunService = game:GetService("RunService")
+	local LocalPlayer = Players.LocalPlayer
+
+	pcall(function()
+		Workspace.FallenPartsDestroyHeight = 0/0
+	end)
+
+	local BOUNDARY_X = 200000
+	local BOUNDARY_Z = 200000
+	local BOUNDARY_Y_DOWN = -10000
+	local CLIENT_MOVE_Y = -450
+	local safePositions = {}
+	local MAX_SAFE_POSITIONS = 10
+	local displacedClient = nil
+	local originalParent = nil
+
+	local function forceClientDisplace(char, pos)
+		if pos.Y <= CLIENT_MOVE_Y then
+			local charHandler = char:FindFirstChild("CharacterHandler")
+			local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
+			
+			if clientModule then
+				if not displacedClient then
+					originalParent = clientModule.Parent
+					displacedClient = clientModule
 				end
-				task.wait(0.3)
-			end
-			protection.VOID_Y = lowest - 90
-		end
-		protection.EXTREME_LOW_Y = protection.VOID_Y + protection.EXTREME_LOW_OFFSET
-	end
-	protection.getReferenceCFrame = function()
-		local isMainPlace = game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
-		local map = Workspace:FindFirstChild("Map")
-		local main = isMainPlace and map and map:FindFirstChild("MainPart")
-		if main then
-			return main.CFrame
-		end
-		local character = player.Character
-		local hrp = character and character:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			return CFrame.new(hrp.Position.X, 200, hrp.Position.Z)
-		end
-		return protection.defaultCFrame or CFrame.new(0, 200, 0)
-	end
-	protection.isOutsideBoundary = function(pos)
-		local cf = protection.getReferenceCFrame()
-		local localPos = cf:PointToObjectSpace(pos)
-		local half = protection.boundarySize / 2
-		return math.abs(localPos.X) > half.X
-			or math.abs(localPos.Z) > half.Z
-			or pos.Y > protection.Y_BOUNDARY_UP
-	end
-	protection.isAnyObjectBelow = function(hrp)
-		if not hrp or not hrp.Parent then
-			return false
-		end
-		local params = RaycastParams.new()
-		params.FilterDescendantsInstances = { hrp.Parent }
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		return Workspace:Raycast(hrp.Position + Vector3.new(0, 6, 0), Vector3.new(0, -35, 0), params) ~= nil
-	end
-	protection.makeGroundParams = function(character)
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = character and { character } or {}
-		params.IgnoreWater = false
-		return params
-	end
-	protection.getGroundHitAt = function(position, character, castUp, castDown)
-		local up = castUp or protection.GROUND_CHECK_UP
-		local down = castDown or protection.GROUND_CHECK_DOWN
-		local origin = position + Vector3.new(0, up, 0)
-		local direction = Vector3.new(0, -(up + down), 0)
-		return Workspace:Raycast(origin, direction, protection.makeGroundParams(character))
-	end
-	protection.getGroundHitAround = function(position, character, castUp, castDown)
-		for _, offset in ipairs(protection.SEARCH_OFFSETS) do
-			local samplePosition = position + offset
-			local hit = protection.getGroundHitAt(samplePosition, character, castUp, castDown)
-			if hit and hit.Normal.Y >= protection.MIN_GROUND_NORMAL_Y and not protection.isOutsideBoundary(hit.Position) then
-				return hit, samplePosition
+				pcall(function()
+					for _ = 1, 5 do
+						clientModule.Parent = StarterPack
+					end
+				end)
 			end
 		end
-		return nil
 	end
-	protection.buildRescueCFrame = function(hitPosition, hitNormal, referenceCFrame)
-		local lookVector = referenceCFrame and referenceCFrame.LookVector or Vector3.new(0, 0, -1)
-		local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
-		if flatLook.Magnitude < 0.001 then
-			flatLook = Vector3.new(0, 0, -1)
-		else
-			flatLook = flatLook.Unit
-		end
-		local rescuePosition = hitPosition + hitNormal * protection.RESCUE_HEIGHT
-		return CFrame.lookAt(rescuePosition, rescuePosition + flatLook)
-	end
-	protection.createSafeEntry = function(char, hrp, humanoid)
-		if not char or not hrp or protection.isOutsideBoundary(hrp.Position) then
-			return nil
-		end
-		local hit = protection.getGroundHitAt(hrp.Position, char)
-		if not hit or hit.Normal.Y < protection.MIN_GROUND_NORMAL_Y then
-			return nil
-		end
-		local heightFromGround = hrp.Position.Y - hit.Position.Y
-		local grounded = humanoid and humanoid.FloorMaterial ~= Enum.Material.Air
-		if not grounded then
-			local verticalSpeed = math.abs(hrp.AssemblyLinearVelocity.Y)
-			if heightFromGround > protection.MAX_SAVE_HEIGHT_FROM_GROUND or verticalSpeed > protection.MAX_AIR_SAVE_VERTICAL_SPEED then
-				return nil
-			end
-		end
-		return {
-			cframe = hrp.CFrame,
-			position = hrp.Position,
-			groundPosition = hit.Position,
-			groundNormal = hit.Normal,
-			part = hit.Instance,
-			savedAt = tick(),
-		}
-	end
-	protection.pushSafeEntry = function(entry)
-		if not entry or not entry.cframe then
+
+	local function updateMonitoring()
+		local char = LocalPlayer.Character
+		if not char then
+			displacedClient = nil
+			originalParent = nil
 			return
 		end
-		protection.lastSafeEntry = entry
-		protection.lastSafePosition = entry.cframe
-		table.insert(protection.safePositionEntries, 1, entry)
-		table.insert(protection.safePositionHistory, 1, entry.cframe)
-		if #protection.safePositionEntries > protection.MAX_SAFE_POSITIONS then
-			table.remove(protection.safePositionEntries)
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+		local pos = hrp.Position
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		local alive = humanoid and humanoid.Health > 0
+
+		if alive and humanoid.FloorMaterial ~= Enum.Material.Air and pos.Y > CLIENT_MOVE_Y then
+			local lastSafe = safePositions[1]
+			if not lastSafe or (lastSafe.Position - pos).Magnitude > 5 then
+				table.insert(safePositions, 1, hrp.CFrame)
+				if #safePositions > MAX_SAFE_POSITIONS then
+					table.remove(safePositions, #safePositions)
+				end
+			end
 		end
-		if #protection.safePositionHistory > protection.MAX_SAFE_POSITIONS then
-			table.remove(protection.safePositionHistory)
+
+		local outOfBounds = math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z or pos.Y <= BOUNDARY_Y_DOWN
+		if outOfBounds and alive then
+			for i = 1, #safePositions do
+				local targetCF = safePositions[i]
+				if targetCF then
+					pcall(function()
+						for _ = 1, 5 do
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.AssemblyAngularVelocity = Vector3.zero
+							hrp.CFrame = targetCF
+						end
+					end)
+					break
+				end
+			end
+		end
+
+		forceClientDisplace(char, pos)
+
+		if pos.Y > CLIENT_MOVE_Y and displacedClient and originalParent then
+			pcall(function()
+				if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
+					displacedClient.Parent = originalParent
+				end
+			end)
+			displacedClient = nil
+			originalParent = nil
+		end
+
+		if not alive and displacedClient then
+			pcall(function()
+				if displacedClient.Parent == StarterPack then
+					displacedClient:Destroy()
+				end
+			end)
+			displacedClient = nil
+			originalParent = nil
 		end
 	end
-	protection.saveSafePosition = function(char, hrp, humanoid)
-		local entry = protection.createSafeEntry(char, hrp, humanoid)
-		if not entry then
-			return
+
+	local function setupHrpListeners(hrp, char)
+		if not hrp then return end
+		local function fastCheck()
+			forceClientDisplace(char, hrp.Position)
 		end
-		local now = tick()
-		if now - (protection.lastSaveTime or 0) < protection.SAVE_INTERVAL then
-			return
-		end
-		local lastEntry = protection.lastSafeEntry
-		if lastEntry and (lastEntry.position - entry.position).Magnitude < protection.MIN_DISTANCE_TO_SAVE then
-			return
-		end
-		protection.lastSaveTime = now
-		protection.pushSafeEntry(entry)
+		hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
+		hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
 	end
-	protection.resolveEntryRescueCFrame = function(entry, character)
-		if not entry or not entry.cframe then
-			return nil
-		end
-		local entryPosition = entry.position or entry.cframe.Position
-		local hit = protection.getGroundHitAround(
-			entryPosition,
-			character,
-			protection.RESCUE_PROBE_HEIGHT,
-			protection.GROUND_CHECK_DOWN + protection.RESCUE_PROBE_HEIGHT
-		)
-		if not hit then
-			return nil
-		end
-		return protection.buildRescueCFrame(hit.Position, hit.Normal, entry.cframe)
-	end
-	protection.getFallbackRescueCFrame = function(character)
-		local referenceCFrame = protection.getReferenceCFrame()
-		for _, offset in ipairs(protection.SEARCH_OFFSETS) do
-			local samplePosition = referenceCFrame.Position + offset
-			local origin = samplePosition + Vector3.new(0, protection.FALLBACK_CAST_HEIGHT, 0)
-			local direction = Vector3.new(0, -protection.FALLBACK_CAST_DEPTH, 0)
-			local hit = Workspace:Raycast(origin, direction, protection.makeGroundParams(character))
-			if hit and hit.Normal.Y >= protection.MIN_GROUND_NORMAL_Y and not protection.isOutsideBoundary(hit.Position) then
-				return protection.buildRescueCFrame(hit.Position, hit.Normal, referenceCFrame)
-			end
-		end
-		return referenceCFrame + Vector3.new(0, 180, 0)
-	end
-	protection.isCurrentSpotSafe = function(char, hrp, humanoid)
-		if not char or not hrp or protection.isOutsideBoundary(hrp.Position) then
-			return false
-		end
-		if humanoid and humanoid.FloorMaterial ~= Enum.Material.Air then
-			return true
-		end
-		local hit = protection.getGroundHitAt(hrp.Position, char, 4, 18)
-		return hit ~= nil and hit.Normal.Y >= protection.MIN_GROUND_NORMAL_Y
-	end
-	protection.tpBack = function(char, hrp)
-		if protection.rescueInProgress or not char or not hrp then
-			return
-		end
-		protection.rescueInProgress = true
-		_G.SafeTeleportLock = true
-		local skippedEntries = {}
-		for _ = 1, protection.MAX_SAFE_POSITIONS + 2 do
-			local liveChar = player.Character
-			local liveRoot = liveChar and liveChar:FindFirstChild("HumanoidRootPart")
-			local liveHumanoid = liveChar and liveChar:FindFirstChildOfClass("Humanoid")
-			if not liveChar or not liveRoot then
-				break
-			end
-			local target, entryIndex = protection.getRescueCFrame(liveChar, skippedEntries)
-			if not target then
-				break
-			end
-			skippedEntries[entryIndex] = true
-			for _ = 1, 6 do
-				liveRoot.AssemblyLinearVelocity = Vector3.zero
-				liveRoot.AssemblyAngularVelocity = Vector3.zero
-				liveChar:PivotTo(target)
-				applyTeleportRootState(liveRoot, target)
-				nextFrame()
-			end
-			if protection.isCurrentSpotSafe(liveChar, liveRoot, liveHumanoid) then
-				protection.saveSafePosition(liveChar, liveRoot, liveHumanoid)
-				break
-			end
-		end
-		local liveChar = player.Character
-		local liveRoot = liveChar and liveChar:FindFirstChild("HumanoidRootPart")
-		if liveRoot then
-			liveRoot.AssemblyLinearVelocity = Vector3.zero
-			liveRoot.AssemblyAngularVelocity = Vector3.zero
-		end
-		nextFrame()
-		_G.SafeTeleportLock = false
-		protection.rescueInProgress = false
-	end
-	protection.detectVoidY()
-	if protection.runtimeStarted then
-		return
-	end
-	protection.runtimeStarted = true
-	task.spawn(function()
-		while true do
-			nextFrame()
-			if not protection.Enabled then
-				continue
-			end
-			local char = player.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-			if not hrp then
-				continue
-			end
-			protection.saveSafePosition(char, hrp, humanoid)
-			if _G.NOTHINGX_FlyActive == true then
-				continue
-			end
-			local y = hrp.Position.Y
-			if protection.isOutsideBoundary(hrp.Position) or y < protection.EXTREME_LOW_Y then
-				protection.tpBack(char, hrp)
-				continue
-			end
-			local minSafeY = protection.VOID_Y and (protection.VOID_Y + protection.VOID_BUFFER) or -999999
-			if y < minSafeY then
-				protection.tpBack(char, hrp)
-			end
-		end
+
+	LocalPlayer.CharacterAdded:Connect(function(char)
+		local hrp = char:WaitForChild("HumanoidRootPart", 5)
+		setupHrpListeners(hrp, char)
 	end)
-	print("(-) " .. tostring(protection.VOID_Y) .. " (-)")
-end
-initProtectionRuntime()
-local ANTI_VOID_SAVE_SLOTS = 10
-local ANTI_VOID_DUPE_RADIUS = 3            
-local antiVoidState = {
-	saveSlots           = {},               
-	saveIndex           = 0,                
-	lastFrameY          = nil,
-	rescuing            = false,
-	holdActive          = false,
-	holdCFrame          = nil,
-	VOID_BUFFER              = 200,
-	EXTREME_DROP_INSTANT     = 3000,
-	KILL_VOID_ABSOLUTE       = -2500,
-	SUDDEN_DROP_THRESHOLD    = 400,
-	SUDDEN_DROP_VOID_MARGIN  = 900,
-	MAX_DOWN_VELOCITY        = -450,
-	DANGER_ZONE_ABOVE_VOID   = 600,
-	SAFE_SAVE_MIN_ABOVE_VOID = 200,
-	HOLD_DURATION            = 3.0,
-}
-local function getVoidY()
-	local p = _G.NOTHINGX_Protection
-	if p and type(p.VOID_Y) == "number" then
-		return p.VOID_Y
+
+	if LocalPlayer.Character then
+		setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
 	end
-	return -500
+
+	RunService.Stepped:Connect(updateMonitoring)
+	RunService.Heartbeat:Connect(updateMonitoring)
 end
-local antiVoidRayParams = RaycastParams.new()
-antiVoidRayParams.FilterType = Enum.RaycastFilterType.Exclude
-antiVoidRayParams.IgnoreWater = true
-local function isStandingOnPart(char, hrp)
-	antiVoidRayParams.FilterDescendantsInstances = { char }
-	local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -6, 0), antiVoidRayParams)
-	return hit ~= nil and hit.Instance ~= nil
-end
-local function isDuplicatePosition(pos)
-	local s = antiVoidState
-	for _, cf in ipairs(s.saveSlots) do
-		if (cf.Position - pos).Magnitude < ANTI_VOID_DUPE_RADIUS then
-			return true
-		end
-	end
-	return false
-end
-local function pushGroundedSave(cframe)
-	local s = antiVoidState
-	s.saveIndex = (s.saveIndex % ANTI_VOID_SAVE_SLOTS) + 1
-	s.saveSlots[s.saveIndex] = cframe
-end
-local function getBestRescueCFrame()
-	local s = antiVoidState
-	for i = 0, ANTI_VOID_SAVE_SLOTS - 1 do
-		local idx = ((s.saveIndex - 1 - i) % ANTI_VOID_SAVE_SLOTS) + 1
-		local cf = s.saveSlots[idx]
-		if cf and cf.Position.Y >= 0 then
-			return cf
-		end
-	end
-	local p = _G.NOTHINGX_Protection
-	if p and p.lastSafePosition then return p.lastSafePosition end
-	local isMainPlace = game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
-	local map = Workspace:FindFirstChild("Map")
-	local main = isMainPlace and map and map:FindFirstChild("MainPart")
-	if main then return main.CFrame + Vector3.new(0, 180, 0) end
-	return CFrame.new(139, 620, 32)
-end
-RunService.Heartbeat:Connect(function()
-	local s = antiVoidState
-	if s.rescuing or s.holdActive then return end
-	local char     = player.Character
-	local hrp      = char and char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-	if not hrp or not humanoid or humanoid.Health <= 0 then return end
-	local y = hrp.Position.Y
-	if humanoid.FloorMaterial ~= Enum.Material.Air
-		and y >= 0
-		and y > getVoidY() + s.SAFE_SAVE_MIN_ABOVE_VOID
-		and isStandingOnPart(char, hrp)
-		and not isDuplicatePosition(hrp.Position)
-	then
-		pushGroundedSave(hrp.CFrame)
-	end
-end)
-local holdConnection = nil
-local function startHold(targetCFrame, duration)
-	local s = antiVoidState
-	s.holdActive = true
-	s.holdCFrame = targetCFrame
-	if holdConnection then
-		pcall(function() holdConnection:Disconnect() end)
-		holdConnection = nil
-	end
-	local elapsed = 0
-	holdConnection = RunService.Heartbeat:Connect(function(dt)
-		elapsed = elapsed + dt
-		local char = player.Character
-		local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp and hrp.Parent then
-			hrp.AssemblyLinearVelocity  = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-			hrp.CFrame = s.holdCFrame
-		end
-		if elapsed >= duration then
-			if holdConnection then
-				holdConnection:Disconnect()
-				holdConnection = nil
-			end
-			s.holdActive  = false
-			s.holdCFrame  = nil
-			s.rescuing    = false
-			s.lastFrameY  = nil
-		end
-	end)
-end
-local function doRescue(hrp, ignoreLock)
-	local s = antiVoidState
-	if s.rescuing then return end
-	if (not ignoreLock) and _G.SafeTeleportLock then return end
-	local target = getBestRescueCFrame()
-	if not target then return end
-	s.rescuing          = true
-	_G.SafeTeleportLock = true
-	s.lastFrameY        = target.Position.Y
-	for _ = 1, 3 do
-		if hrp and hrp.Parent then
-			hrp.AssemblyLinearVelocity  = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-			hrp.CFrame = target
-		end
-	end
-	task.defer(function()
-		if hrp and hrp.Parent then
-			hrp.AssemblyLinearVelocity  = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-			hrp.CFrame = target
-		end
-	end)
-	task.defer(function()
-		task.defer(function()
-			if hrp and hrp.Parent then
-				hrp.AssemblyLinearVelocity  = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
-				hrp.CFrame = target
-			end
-		end)
-	end)
-	task.delay(0.4, function()
-		_G.SafeTeleportLock = false
-		s.rescuing = false
-	end)
-	startHold(target, s.HOLD_DURATION)
-end
-local function initFastAntiVoid()
-	local s = antiVoidState
-	RunService.Heartbeat:Connect(function()
-		if s.holdActive then return end
-		local char     = player.Character
-		local hrp      = char and char:FindFirstChild("HumanoidRootPart")
-		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		if not hrp or not humanoid or humanoid.Health <= 0 then
-			s.lastFrameY = nil
-			return
-		end
-		local y     = hrp.Position.Y
-		local voidY = getVoidY()
-		local extremeDrop = s.lastFrameY and (s.lastFrameY - y) >= s.EXTREME_DROP_INSTANT
-		local absoluteKill = y < s.KILL_VOID_ABSOLUTE
-		if (extremeDrop or absoluteKill) and not s.rescuing then
-			s.lastFrameY = y
-			doRescue(hrp, true)
-			return
-		end
-		if s.rescuing or _G.SafeTeleportLock then
-			s.lastFrameY = y
-			return
-		end
-		local needsRescue = false
-		if y < voidY + s.VOID_BUFFER then
-			needsRescue = true
-		end
-		if not needsRescue and s.lastFrameY and not flying then
-			local drop = s.lastFrameY - y
-			if drop >= s.SUDDEN_DROP_THRESHOLD and y < voidY + s.SUDDEN_DROP_VOID_MARGIN then
-				needsRescue = true
-			end
-		end
-		if not needsRescue and not flying then
-			local velY = hrp.AssemblyLinearVelocity.Y
-			if velY < s.MAX_DOWN_VELOCITY and y < voidY + s.DANGER_ZONE_ABOVE_VOID then
-				needsRescue = true
-			end
-		end
-		s.lastFrameY = y
-		if needsRescue then
-			doRescue(hrp, false)
-		end
-	end)
-end
-initFastAntiVoid()
 function Keybind_add(text)
 	if text == nil then
 		return keybindEntries.Custom and keybindEntries.Custom.name or ""
@@ -6410,6 +6084,7 @@ if game.GameId == 3808081382 then
 	})
 	placesDropdown.Frame.LayoutOrder = 999998
 end
+syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
@@ -7085,6 +6760,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		setSettingsVisible(not settingsOpen)
 		return
 	end
+	if key == voidDeadKeybind then
+		toggleVoidDead()
+		return
+	end
 	if key == speedKeybind then
 		toggleSpeed()
 		return
@@ -7170,6 +6849,9 @@ player.CharacterRemoving:Connect(function(removingChar)
 	end
 	velocity = Vector3.new()
 	currentVel = Vector3.new()
+	if voidDeadActive then
+		toggleVoidDead()
+	end
 	char = nil
 	hum = nil
 	root = nil
