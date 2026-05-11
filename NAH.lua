@@ -2471,34 +2471,6 @@ local function bindLocalCharacter(newChar)
 	end
 end
 function isTargetSafe(model)
-	if not model then
-		return false
-	end
-	if model:GetAttribute("HasTrashcan") == true then
-		return false
-	end
-	local modelRoot = model:FindFirstChild("HumanoidRootPart")
-	if not modelRoot then
-		return false
-	end
-	local map = Workspace:FindFirstChild("Map")
-	local trashFolder = map and map:FindFirstChild("Trash")
-	if trashFolder then
-		for _, trashcan in ipairs(trashFolder:GetChildren()) do
-			if trashcan:IsA("Model") and not trashcan:GetAttribute("Broken") then
-				local part = trashcan:FindFirstChildWhichIsA("BasePart", true)
-				if part and (part.Position - modelRoot.Position).Magnitude < 9.5 then
-					return false
-				end
-			end
-		end
-	end
-	if modelRoot.Position.Y > 2500 then
-		return false
-	end
-	if modelRoot.Position.Y < -50 then
-		return false
-	end
 	return true
 end
 function isValidCamLockTarget(model)
@@ -3633,6 +3605,35 @@ task.spawn(function()
             end
         end)
     end
+    local autoFixCamEnabled = false
+    local lastKillsCount = 0
+    local function runAutoFixCamCheck()
+        local currentKills = 0
+        local ls = player:FindFirstChild("leaderstats")
+        local kVal = ls and ls:FindFirstChild("Kills")
+        if kVal then
+            currentKills = kVal.Value
+        else
+            currentKills = player:GetAttribute("Kills") or 0
+        end
+        if currentKills ~= lastKillsCount then
+            if autoFixCamEnabled then
+                fixCamera()
+            end
+        end
+        lastKillsCount = currentKills
+    end
+    task.spawn(function()
+        local ls = player:WaitForChild("leaderstats", 10)
+        local kVal = ls and ls:WaitForChild("Kills", 10)
+        if kVal then
+            lastKillsCount = kVal.Value
+            kVal.Changed:Connect(runAutoFixCamCheck)
+        else
+            lastKillsCount = player:GetAttribute("Kills") or 0
+            player:GetAttributeChangedSignal("Kills"):Connect(runAutoFixCamCheck)
+        end
+    end)
     local function layCharacter()
         local character = player.Character
         if not character then
@@ -3853,9 +3854,10 @@ task.spawn(function()
     makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
     makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
     local row4 = makeRow(134)
-    makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
-    makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
-    makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+    makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/4)
+    makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/4)
+    makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
+    makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
     if player.Character then
         setupCharacter(player.Character)
     end
@@ -4700,10 +4702,15 @@ function Dropdown(data)
 		for item, button in pairs(optionButtons) do
 			local isOn = selected[item] == true
 			local display = itemDisplayNames[item] or item
-			button.BackgroundColor3 = isOn and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.BackgroundTransparency = 0.5
+			button.BackgroundColor3 = isOn and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
+			button.BackgroundTransparency = isOn and 0.3 or 0.5
 			button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
-			button.Text = isOn and ("[x] " .. display) or ("[ ] " .. display)
+			button.Text = isOn and ("> " .. display .. " <") or ("  " .. display)
+			local stroke = button:FindFirstChild("UIStroke") or Instance.new("UIStroke")
+			stroke.Thickness = isOn and 1.5 or 0
+			stroke.Color = Color3.fromRGB(255, 255, 255)
+			stroke.Transparency = isOn and 0.2 or 1
+			stroke.Parent = button
 		end
 	end
 	local function clearOptionButtons()
@@ -4738,11 +4745,7 @@ function Dropdown(data)
 				if multi then
 					setSelectedValue(item, not selected[item])
 				else
-					if selected[item] then
-						setSelectedValue(item, false)
-					else
-						setSelectedValue(item, true)
-					end
+					setSelectedValue(item, true)
 				end
 				refreshLabels()
 				saveDropdownSelection()
@@ -4807,14 +4810,16 @@ function Dropdown(data)
 		items = normalizedItems
 		rebuildItemLookup()
 		pruneSelectedValues()
-		if #getSelectedList() == 0 and preferredValue ~= nil then
+		if preferredValue ~= nil then
 			if multi then
+				table.clear(selected)
 				for _, entry in ipairs(normalizeDefaultValues(preferredValue)) do
 					setSelectedValue(entry, true)
 				end
 			else
 				local normalizedDefaults = normalizeDefaultValues(preferredValue)
 				if normalizedDefaults[1] ~= nil then
+					table.clear(selected)
 					setSelectedValue(normalizedDefaults[1], true)
 				end
 			end
