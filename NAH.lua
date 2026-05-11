@@ -2477,6 +2477,9 @@ function isValidCamLockTarget(model)
 	if not model or model == char then
 		return false
 	end
+	if isTargetBlacklisted and isTargetBlacklisted(model, Players:GetPlayerFromCharacter(model)) then
+		return false
+	end
 	if not isTargetSafe(model) then
 		return false
 	end
@@ -2746,32 +2749,37 @@ local function getSelectableTargetModels()
 	local currentCharacter = player.Character
 	local models = {}
 	local seenModels = {}
+	-- All players (alive with HRP)
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= player and p.Character then
 			local model = p.Character
 			local modelRoot = model:FindFirstChild("HumanoidRootPart")
 			local hum = model:FindFirstChildOfClass("Humanoid")
-			if modelRoot and hum and hum.Health > 0 and isTargetSafe(model) then
+			if modelRoot and hum and hum.Health > 0 then
 				seenModels[model] = true
 				models[#models + 1] = model
 			end
 		end
 	end
-	if now - lastWorkspaceScan > 2.5 then
+	-- Workspace NPC scan (refresh every 3s to avoid FPS drops)
+	if now - lastWorkspaceScan > 3 then
 		lastWorkspaceScan = now
 		task.spawn(function()
 			local newModels = {}
-			local targetFolder = Workspace:FindFirstChild("Live") or Workspace
-			local children = targetFolder:GetChildren()
-			for _, model in ipairs(children) do
-				if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
-					local hum = model:FindFirstChildOfClass("Humanoid")
-					local modelRoot = model:FindFirstChild("HumanoidRootPart")
-					if hum and hum.Health > 0 and modelRoot and isTargetSafe(model) then
-						newModels[#newModels + 1] = model
+			local function scanFolder(folder)
+				if not folder then return end
+				for _, model in ipairs(folder:GetChildren()) do
+					if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
+						local hum = model:FindFirstChildOfClass("Humanoid")
+						local modelRoot = model:FindFirstChild("HumanoidRootPart")
+						if hum and hum.Health > 0 and modelRoot then
+							newModels[#newModels + 1] = model
+						end
 					end
 				end
 			end
+			scanFolder(Workspace:FindFirstChild("Live"))
+			scanFolder(Workspace:FindFirstChild("Map"))
 			for _, m in ipairs(newModels) do
 				if not seenModels[m] then
 					seenModels[m] = true
@@ -2782,9 +2790,12 @@ local function getSelectableTargetModels()
 		end)
 	else
 		for _, m in ipairs(cachedSelectableModels) do
-			if not seenModels[m] and m.Parent and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0 then
-				seenModels[m] = true
-				models[#models + 1] = m
+			if not seenModels[m] and m.Parent and not Players:GetPlayerFromCharacter(m) then
+				local hum = m:FindFirstChildOfClass("Humanoid")
+				if hum and hum.Health > 0 then
+					seenModels[m] = true
+					models[#models + 1] = m
+				end
 			end
 		end
 		cachedSelectableModels = models
@@ -2800,12 +2811,14 @@ local function getClosestAlivePlayerTarget()
 	local bestModel = nil
 	local bestDistance = math.huge
 	for _, model in ipairs(getSelectableTargetModels()) do
-		local modelRoot = model:FindFirstChild("HumanoidRootPart")
-		if modelRoot and model ~= currentCharacter then
-			local distance = (modelRoot.Position - currentRoot.Position).Magnitude
-			if distance < bestDistance then
-				bestDistance = distance
-				bestModel = model
+		if not (isTargetBlacklisted and isTargetBlacklisted(model, Players:GetPlayerFromCharacter(model))) then
+			local modelRoot = model:FindFirstChild("HumanoidRootPart")
+			if modelRoot and model ~= currentCharacter then
+				local distance = (modelRoot.Position - currentRoot.Position).Magnitude
+				if distance < bestDistance then
+					bestDistance = distance
+					bestModel = model
+				end
 			end
 		end
 	end
@@ -4702,25 +4715,25 @@ function Dropdown(data)
 		for item, button in pairs(optionButtons) do
 			local isOn = selected[item] == true
 			local display = itemDisplayNames[item] or item
-			button.BackgroundColor3 = isOn and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.BackgroundTransparency = isOn and 0.3 or 0.5
+			button.BackgroundColor3 = isOn and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+			button.BackgroundTransparency = 0.5
 			button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
-			button.Text = isOn and ("> " .. display .. " <") or ("  " .. display)
-			local stroke = button:FindFirstChild("UIStroke") or Instance.new("UIStroke")
-			stroke.Thickness = isOn and 1.5 or 0
-			stroke.Color = Color3.fromRGB(255, 255, 255)
-			stroke.Transparency = isOn and 0.2 or 1
-			stroke.Parent = button
+			button.Text = isOn and ("> " .. display) or display
 		end
 	end
 	local function clearOptionButtons()
+		local toDestroy = {}
 		for item, button in pairs(optionButtons) do
-			optionButtons[item] = nil
-			if button then
-				button:Destroy()
+			toDestroy[#toDestroy + 1] = {item = item, button = button}
+		end
+		for _, entry in ipairs(toDestroy) do
+			optionButtons[entry.item] = nil
+			if entry.button then
+				entry.button:Destroy()
 			end
 		end
 	end
+	local setExpanded
 	local function rebuildOptionButtons()
 		clearOptionButtons()
 		for _, item in ipairs(items) do
@@ -4746,6 +4759,9 @@ function Dropdown(data)
 					setSelectedValue(item, not selected[item])
 				else
 					setSelectedValue(item, true)
+					if setExpanded then
+						setExpanded(false)
+					end
 				end
 				refreshLabels()
 				saveDropdownSelection()
@@ -4756,7 +4772,7 @@ function Dropdown(data)
 		end
 		refreshLabels()
 	end
-	local function setExpanded(nextState)
+	setExpanded = function(nextState)
 		local wasExpanded = expanded
 		expanded = nextState == true
 		optionsFrame.Visible = expanded
@@ -4806,20 +4822,18 @@ function Dropdown(data)
 		local previousSelectedList = getSelectedList()
 		local normalizedItems = normalizeValues(newItems)
 		local itemsChanged = not areListsEqual(items, normalizedItems)
-		local previousCanvasPosition = choiceFrame.CanvasPosition
 		items = normalizedItems
 		rebuildItemLookup()
 		pruneSelectedValues()
-		if preferredValue ~= nil then
+		-- Only apply preferredValue if nothing is currently selected
+		if #getSelectedList() == 0 and preferredValue ~= nil then
 			if multi then
-				table.clear(selected)
 				for _, entry in ipairs(normalizeDefaultValues(preferredValue)) do
 					setSelectedValue(entry, true)
 				end
 			else
 				local normalizedDefaults = normalizeDefaultValues(preferredValue)
 				if normalizedDefaults[1] ~= nil then
-					table.clear(selected)
 					setSelectedValue(normalizedDefaults[1], true)
 				end
 			end
@@ -4886,7 +4900,18 @@ end
 dropdown = Dropdown
 modelDropdownLookup = {}
 modelDropdownControl = nil
+blPlayersDropdownControl = nil
+blacklistedTargets = {}
 applyModelDropdownSelection = nil
+isTargetBlacklisted = function(model, targetPlayer)
+	if not model and not targetPlayer then return false end
+	for label, mappedTarget in pairs(modelDropdownLookup) do
+		if (targetPlayer and mappedTarget.player == targetPlayer) or (mappedTarget.player == nil and mappedTarget.model == model) then
+			return blacklistedTargets[label] == true
+		end
+	end
+	return false
+end
 do
 	isSelectablePlayerDropdownTarget = function(targetPlayer)
 		return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
@@ -4919,8 +4944,18 @@ do
 		local modelEntries = {}
 		local seenModels = {}
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
-			if isSelectablePlayerDropdownTarget(targetPlayer) then
+			if targetPlayer ~= player and targetPlayer.Parent == Players then
 				local targetModel = getTrackedPlayerTargetModel(targetPlayer)
+				-- Always mark the actual character as seen too
+				if targetPlayer.Character then
+					seenModels[targetPlayer.Character] = true
+				end
+				if not targetModel and targetPlayer.Character then
+					local hum = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+					if hum and hum.Health > 0 then
+						targetModel = targetPlayer.Character
+					end
+				end
 				if targetModel then
 					seenModels[targetModel] = true
 				end
@@ -4960,7 +4995,8 @@ do
 		end)
 		table.clear(modelDropdownLookup)
 		local usedLabels = {}
-		local items = {}
+		local allItems = {}
+		local selectableItems = {}
 		local function appendEntries(entries, prefix)
 			for _, entry in ipairs(entries) do
 				local label = string.format("%s %s", prefix, entry.baseName)
@@ -4970,7 +5006,10 @@ do
 					label = string.format("%s %s (%d)", prefix, entry.baseName, suffix)
 				end
 				usedLabels[label] = true
-				items[#items + 1] = label
+				allItems[#allItems + 1] = label
+				if not blacklistedTargets[label] then
+					selectableItems[#selectableItems + 1] = label
+				end
 				modelDropdownLookup[label] = {
 					player = entry.player,
 					model = entry.model,
@@ -4979,7 +5018,7 @@ do
 		end
 		appendEntries(playerEntries, "[P]")
 		appendEntries(modelEntries, "[M]")
-		return items
+		return allItems, selectableItems
 	end
 	applyModelDropdownSelection = function(selectedValue)
 		local resolvedValue = tostring(selectedValue or "")
@@ -5010,14 +5049,17 @@ do
 		if not modelDropdownControl or not modelDropdownControl.SetItems then
 			return
 		end
-		local items = buildPlayerModelDropdownItems()
+		local allItems, selectableItems = buildPlayerModelDropdownItems()
+		if blPlayersDropdownControl then
+			blPlayersDropdownControl.SetItems(allItems, nil, true)
+		end
 		local nextPreferredValue = preferredValue
 		if hasManualAttackTpSelection() then
 			nextPreferredValue = getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer)
 		elseif nextPreferredValue == nil and modelDropdownControl.GetValue then
 			nextPreferredValue = modelDropdownControl.GetValue()
 		end
-		modelDropdownControl.SetItems(items, nextPreferredValue)
+		modelDropdownControl.SetItems(selectableItems, nextPreferredValue)
 		syncModelDropdownSelectionToManualTarget()
 	end
 end
@@ -5982,12 +6024,29 @@ Slider({
 })
 modelDropdownControl = Dropdown({
 	namedropdown = "Players",
-	saveKey = "model",
+	saveKey = "",
 	inside = {},
 	multi = false,
 	deffultin = nil,
 	fun = function(value)
 		applyModelDropdownSelection(value)
+	end,
+})
+blPlayersDropdownControl = Dropdown({
+	namedropdown = "BL Players",
+	saveKey = "",
+	inside = {},
+	multi = true,
+	deffultin = nil,
+	fun = function(value)
+		local newBlacklist = {}
+		if type(value) == "table" then
+			for _, label in ipairs(value) do
+				newBlacklist[label] = true
+			end
+		end
+		blacklistedTargets = newBlacklist
+		refreshModelDropdown()
 	end,
 })
 targetActionControls = _G["3tog_on_one_one_button"]({
@@ -6674,7 +6733,7 @@ task.spawn(function()
 end)
 parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
 syncFlingModeControls()
-refreshModelDropdown(getSavedControlValue("model"))
+refreshModelDropdown()
 task.spawn(function()
 	while screenGui.Parent do
 		task.wait(2)
