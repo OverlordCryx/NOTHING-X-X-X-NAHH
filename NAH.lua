@@ -4902,14 +4902,12 @@ modelDropdownLookup = {}
 modelDropdownControl = nil
 blPlayersDropdownControl = nil
 blacklistedTargets = {}
+blacklistedPlayers = {}
+blacklistedModels = {}
 applyModelDropdownSelection = nil
 isTargetBlacklisted = function(model, targetPlayer)
-	if not model and not targetPlayer then return false end
-	for label, mappedTarget in pairs(modelDropdownLookup) do
-		if (targetPlayer and mappedTarget.player == targetPlayer) or (mappedTarget.player == nil and mappedTarget.model == model) then
-			return blacklistedTargets[label] == true
-		end
-	end
+	if targetPlayer and blacklistedPlayers[targetPlayer] then return true end
+	if model and blacklistedModels[model] then return true end
 	return false
 end
 do
@@ -6039,13 +6037,27 @@ blPlayersDropdownControl = Dropdown({
 	multi = true,
 	deffultin = nil,
 	fun = function(value)
+		-- Rebuild blacklist sets from label-to-player/model lookup
 		local newBlacklist = {}
+		local newBLPlayers = {}
+		local newBLModels = {}
 		if type(value) == "table" then
 			for _, label in ipairs(value) do
 				newBlacklist[label] = true
+				local entry = modelDropdownLookup[label]
+				if entry then
+					if entry.player then
+						newBLPlayers[entry.player] = true
+					end
+					if entry.model then
+						newBLModels[entry.model] = true
+					end
+				end
 			end
 		end
 		blacklistedTargets = newBlacklist
+		blacklistedPlayers = newBLPlayers
+		blacklistedModels = newBLModels
 		refreshModelDropdown()
 	end,
 })
