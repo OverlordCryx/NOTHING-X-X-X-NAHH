@@ -1,0 +1,280 @@
+local function initCharacterCleanupRuntime()
+local Players = game:GetService("Players")
+local speaker = Players.LocalPlayer
+local speed = 25.66
+local jpower = 50.66
+local ModConnections = {}
+local function SetupHumanoid(Char, Human)
+	if not Human or not Human.Parent then return end
+	if ModConnections.wsLoop then ModConnections.wsLoop:Disconnect() end
+	if ModConnections.jpLoop then ModConnections.jpLoop:Disconnect() end
+	local function UpdateWalkSpeed()
+		if Human and Human.Parent then
+			Human.WalkSpeed = speed
+		end
+	end
+	UpdateWalkSpeed()
+	ModConnections.wsLoop = Human:GetPropertyChangedSignal("WalkSpeed"):Connect(UpdateWalkSpeed)
+	local function UpdateJumpPower()
+		if Human and Human.Parent then
+			if Human.UseJumpPower then
+				Human.JumpPower = jpower
+			else
+				Human.JumpHeight = jpower
+			end
+		end
+	end
+	UpdateJumpPower()
+	local propertyToWatch = Human.UseJumpPower and "JumpPower" or "JumpHeight"
+	ModConnections.jpLoop = Human:GetPropertyChangedSignal(propertyToWatch):Connect(UpdateJumpPower)
+	task.spawn(function()
+		local hrp = Char:WaitForChild("HumanoidRootPart", 5)
+		if hrp then
+			if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect() end
+			local function unanchor()
+				hrp.Anchored = false
+			end
+			unanchor()
+			ModConnections.hrpLoop = hrp:GetPropertyChangedSignal("Anchored"):Connect(unanchor)
+		end
+	end)
+end
+local function isCounter(acc)
+	if not acc or not acc:IsA("Accessory") then return false end
+	return acc.Name:lower():find("counter") ~= nil
+end
+local function isSmallDebris(acc)
+	if not acc or not acc:IsA("Accessory") then return false end
+	return acc.Name:lower():find("small debris") ~= nil
+end
+local function usunPusteAccessory(char)
+	if not char then return end
+	for _, obj in ipairs(char:GetChildren()) do
+		if obj:IsA("Accessory") then
+			if isCounter(obj) or isSmallDebris(obj) then
+				continue
+			end
+			if #obj:GetChildren() == 0 then
+				pcall(function()
+					obj:Destroy()
+				end)
+			end
+		end
+	end
+end
+local function OnCharacterAdded(Char)
+	local Human = Char:WaitForChild("Humanoid", 5)
+	if Human then
+		SetupHumanoid(Char, Human)
+	end
+	task.wait(0.25)
+	usunPusteAccessory(Char)
+end
+if speaker.Character then
+	OnCharacterAdded(speaker.Character)
+end
+ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
+task.spawn(function()
+	while speaker.Parent do
+		task.wait()
+		local char = speaker.Character
+		if char then
+			usunPusteAccessory(char)
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then hrp.Anchored = false end
+		end
+	end
+end)
+end
+initCharacterCleanupRuntime()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+task.spawn(function()
+if game.GameId ~= 3808081382 then
+    return
+end
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local NORMAL_TRANSPARENCY = 0.66
+local ULT_TRANSPARENCY = 0.55
+local function Hide(Object)
+	if not Object then
+		return
+	end
+	pcall(function()
+		if Object.Visible then
+			Object.Visible = false
+		end
+	end)
+end
+local BLACK = Color3.fromRGB(0,0,0)
+local function SetBlack(Object)
+	if not Object then
+		return
+	end
+	pcall(function()
+		if Object:IsA("Frame") then
+			if Object.BackgroundColor3 ~= BLACK then
+				Object.BackgroundColor3 = BLACK
+			end
+		end
+	end)
+	pcall(function()
+		if Object.ImageColor3 ~= BLACK then
+			Object.ImageColor3 = BLACK
+		end
+	end)
+end
+local Cooldowns = {}
+local function RegisterHotbar(Hotbar)
+	for _,v in ipairs(Hotbar:GetDescendants()) do
+		if v.Name == "Cooldown" then
+			Cooldowns[v] = true
+			SetBlack(v)
+		end
+	end
+	Hotbar.DescendantAdded:Connect(function(v)
+		if v.Name == "Cooldown" then
+			Cooldowns[v] = true
+			SetBlack(v)
+		end
+	end)
+end
+local HiddenObjects = {}
+local function AddHide(Object)
+	if Object then
+		table.insert(HiddenObjects,Object)
+		Hide(Object)
+	end
+end
+local function RegisterGui()
+	pcall(function()
+		AddHide(PlayerGui.Bar.MagicHealth.ImageButton)
+		AddHide(PlayerGui.Bar.MagicHealth.TextLabel)
+		AddHide(PlayerGui.Bar.MagicHealth.Ult)
+		AddHide(PlayerGui.Gifting)
+		AddHide(PlayerGui.MobileJunk)
+		AddHide(PlayerGui.Version)
+		AddHide(PlayerGui.Emotes.ImageLabel.GamepassTwo)
+		AddHide(PlayerGui.Emotes.ImageLabel.Gamepass)
+		AddHide(PlayerGui.Emotes.ImageLabel.Limited)
+		AddHide(PlayerGui.Emotes.ImageLabel.Bulk)
+		AddHide(PlayerGui.Cosmetics.Frame.Bulk)
+	end)
+	pcall(function()
+		for _,v in ipairs(PlayerGui.Emotes.ImageLabel:GetDescendants()) do
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end
+		PlayerGui.Emotes.ImageLabel.DescendantAdded:Connect(function(v)
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end)
+	end)
+	pcall(function()
+		for _,v in ipairs(PlayerGui.Cosmetics.Frame:GetDescendants()) do
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end
+		PlayerGui.Cosmetics.Frame.DescendantAdded:Connect(function(v)
+			if v.Name == "fake" then
+				AddHide(v)
+			end
+		end)
+	end)
+	pcall(function()
+		local Container = PlayerGui.TopbarPlus.TopbarContainer
+		local function Check(v)
+			if v.Name ~= "UnnamedIcon" then
+				return
+			end
+			local IconButton = v:FindFirstChild("IconButton")
+			if not IconButton then
+				return
+			end
+			local IconImage = IconButton:FindFirstChild("IconImage")
+			if not IconImage then
+				return
+			end
+			if string.find(tostring(IconImage.Image),"14471730934") then
+				AddHide(v)
+			end
+		end
+		for _,v in ipairs(Container:GetDescendants()) do
+			Check(v)
+		end
+		Container.DescendantAdded:Connect(Check)
+	end)
+end
+local function UpdateBar()
+	pcall(function()
+		local Bar = PlayerGui.Bar.MagicHealth.Health.Bar.Bar
+		if Bar.ImageColor3 ~= BLACK then
+			Bar.ImageColor3 = BLACK
+		end
+		local NeedTransparency =
+			LocalPlayer:GetAttribute("Ultimate") == 100
+			and ULT_TRANSPARENCY
+			or NORMAL_TRANSPARENCY
+		if Bar.ImageTransparency ~= NeedTransparency then
+			Bar.ImageTransparency = NeedTransparency
+		end
+	end)
+end
+task.spawn(function()
+	pcall(function()
+		RegisterHotbar(PlayerGui:WaitForChild("Hotbar"))
+	end)
+	RegisterGui()
+	UpdateBar()
+end)
+PlayerGui.ChildAdded:Connect(function(v)
+	task.wait(0.1)
+	if v.Name == "Hotbar" then
+		RegisterHotbar(v)
+	end
+	RegisterGui()
+	UpdateBar()
+end)
+LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
+task.spawn(function()
+	while true do
+		task.wait(0)
+		for _,v in ipairs(HiddenObjects) do
+			pcall(function()
+				if v.Visible then
+					v.Visible = false
+				end
+			end)
+		end
+		for v,_ in pairs(Cooldowns) do
+			if v and v.Parent then
+				SetBlack(v)
+			end
+		end
+		UpdateBar()
+	end
+end)
+end)
