@@ -12,62 +12,6 @@ CoreGui = game:GetService("CoreGui")
 function nextFrame()
 	return RunService.Heartbeat:Wait()
 end
-task.spawn(function()
-    local Lighting = game:GetService("Lighting")
-    Lighting.GlobalShadows = false
-    Lighting.FogEnd = 9e9
-    Lighting.Brightness = 2 
-    for _, effect in ipairs(Lighting:GetChildren()) do
-        if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") then
-            effect.Enabled = false
-        end
-    end
-end)
-function overpowerRootState(rootPart, targetCFrame, linearVelocity, angularVelocity)
-	if not rootPart or not rootPart.Parent or not targetCFrame then
-		return
-	end
-	local resolvedLinearVelocity = linearVelocity or Vector3.zero
-	local resolvedAngularVelocity = angularVelocity or Vector3.zero
-	local function apply()
-		if not rootPart or not rootPart.Parent then
-			return
-		end
-		rootPart.CFrame = targetCFrame
-		rootPart.AssemblyLinearVelocity = resolvedLinearVelocity
-		rootPart.AssemblyAngularVelocity = resolvedAngularVelocity
-	end
-	apply()
-	task.defer(apply)
-	task.defer(function()
-		task.defer(apply)
-	end)
-	task.spawn(function()
-		if not rootPart or not rootPart.Parent then
-			return
-		end
-		RunService.Stepped:Wait()
-		apply()
-		if not rootPart or not rootPart.Parent then
-			return
-		end
-		RunService.RenderStepped:Wait()
-		apply()
-		for _ = 1, 2 do
-			if not rootPart or not rootPart.Parent then
-				return
-			end
-			nextFrame()
-			apply()
-		end
-	end)
-end
-local function applyTeleportRootState(rootPart, targetCFrame, linearVelocity, angularVelocity)
-	if not rootPart or not rootPart.Parent or not targetCFrame then
-		return
-	end
-	overpowerRootState(rootPart, targetCFrame, linearVelocity or Vector3.zero, angularVelocity or Vector3.zero)
-end
 local player = Players.LocalPlayer
 local espOverlayConfig = {
     showCharacter = false,
@@ -166,13 +110,8 @@ task.spawn(function()
 	updateGlobalScale()
 	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateGlobalScale)
 end)
-local background = Instance.new("Frame")
-background.Name = "Background"
-background.Size = UDim2.fromScale(1, 1)
-background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-background.BorderSizePixel = 1
-background.BorderColor3 = Color3.fromRGB(255, 0, 0)
-background.Parent = screenGui
+introFinished = true
+local keybindFrame = Instance.new("Frame")
 local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
@@ -184,7 +123,7 @@ keybindFrame.BorderSizePixel = 0
 keybindFrame.ClipsDescendants = true 
 do
 end
-keybindFrame.Visible = false
+keybindFrame.Visible = true
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
 do
 	local keybindSizeConstraint = Instance.new("UISizeConstraint")
@@ -211,6 +150,7 @@ keybindText.TextStrokeTransparency = 1
 keybindText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 keybindText.Font = Enum.Font.GothamBold
 keybindText.TextSize = 16
+keybindText.Text = ""
 keybindText.LineHeight = 1.5
 keybindText.TextScaled = false
 keybindText.TextWrapped = true
@@ -524,46 +464,69 @@ do
 	settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	settingsLayout.Parent = uiX
 end
-task.spawn(function()
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local connection = nil
-local function startAntiFling()
-    if connection then
-        connection:Disconnect()
+local otherPartsCache = {}
+local friendCache = {}
+local function updateFriendCache()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and friendCache[p.UserId] == nil then
+            task.spawn(function()
+                pcall(function()
+                    friendCache[p.UserId] = player:IsFriendsWith(p.UserId)
+                end)
+            end)
+        end
     end
-    connection = RunService.Heartbeat:Connect(function()
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                for _, part in ipairs(player.Character:GetChildren()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                        if part.CustomPhysicalProperties then
-                            part.CustomPhysicalProperties = PhysicalProperties.new(0, 0.3, 0.5, 0, 0)
-                        end
-                    end
+end
+local function updateAntiFlingCache()
+    local newCache = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            for _, part in ipairs(p.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    table.insert(newCache, part)
+                    part.CanCollide = false
                 end
             end
         end
-    end)
+    end
+    otherPartsCache = newCache
 end
-startAntiFling()
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.6)           
-    startAntiFling()
-end)
 task.spawn(function()
-    while task.wait(5) do
-        if not connection or connection.Connected == false then
-            startAntiFling()
+    updateAntiFlingCache()
+    Players.PlayerAdded:Connect(function(p)
+        task.spawn(function()
+            pcall(function()
+                friendCache[p.UserId] = player:IsFriendsWith(p.UserId)
+            end)
+        end)
+        p.CharacterAdded:Connect(function()
+            task.wait(0.5) 
+            updateAntiFlingCache()
+        end)
+    end)
+    updateFriendCache()
+    for _, p in ipairs(Players:GetPlayers()) do
+        p.CharacterAdded:Connect(function()
+            task.wait(0.5)
+            updateAntiFlingCache()
+        end)
+    end
+    RunService.Heartbeat:Connect(function()
+        for i = 1, #otherPartsCache do
+            local part = otherPartsCache[i]
+            if part and part.Parent then
+                part.CanCollide = false
+            else
+            end
         end
+    end)
+    while task.wait(5) do
+        updateAntiFlingCache()
+        updateFriendCache()
     end
 end)
-print("✅")
-end)
 keybindEntries = {}
-introFinished = false
+introFinished = true
 pendingInfoCall = nil
 settingsOpen = false
 draggingWindow = false
@@ -648,7 +611,7 @@ local syncModelDropdownSelectionToManualTarget
 local stopView
 local startView
 local toggleView
-attackTpBehindDistance = 1.15
+attackTpBehindDistance = 2.0
 attackTpAirBehindDistance = 0.85
 attackTpLeadTime = 0.012
 attackTpAirLeadTime = 0.025
@@ -705,11 +668,11 @@ local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
-	Vector3.new(9e9, 9e9, 9e9),
-	Vector3.new(-9e9, 9e9, 9e9),
-	Vector3.new(9e9, 9e9, -9e9),
-	Vector3.new(-9e9, 9e9, -9e9),
-	Vector3.new(0, 9e9, 0)
+	Vector3.new(9e9, -750, 9e9),
+	Vector3.new(-9e9, -750, 9e9),
+	Vector3.new(9e9, -750, -9e9),
+	Vector3.new(-9e9, -750, -9e9),
+	Vector3.new(0, -750, 0)
 }
 autoTpEnabled = false
 trashBlockEnabled = false
@@ -756,6 +719,15 @@ function resolveAttackTpTarget() end
 function zeroLocalPlayerRoot() end
 function syncFlingModeControls() end
 function runGetTrash() end
+function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
+	if not rootPart then return end
+	if cframe then rootPart.CFrame = cframe end
+	if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
+	if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
+end
+function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
+	applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
+end
 function encodeKeybindValue(keyCode)
 	if not keyCode then
 		return ""
@@ -838,6 +810,9 @@ if type(controlSaveData.AttackTpMode) == "string" then
 end
 if tonumber(controlSaveData.AutoCustomDistance) then
 	autoCustomDistance = tonumber(controlSaveData.AutoCustomDistance)
+end
+if tonumber(controlSaveData.BehindDistance) then
+	attackTpBehindDistance = tonumber(controlSaveData.BehindDistance)
 end
 if type(controlSaveData.CustomOffsets) == "table" then
 	for k, v in pairs(controlSaveData.CustomOffsets) do
@@ -1311,22 +1286,23 @@ function setAuraFlingEnabled(enabled)
 					local savedCFrame = myRoot.CFrame
 					local myPosition = myRoot.Position
 					local touchedAny = false
-					for _, otherPlayer in ipairs(getOtherPlayers()) do
-						local targetModel = otherPlayer.Character
-						local targetRoot = getRootUniversal(targetModel)
-						if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
-							touchedAny = true
-							overpowerRootState(myRoot, targetRoot.CFrame, Vector3.zero, Vector3.zero)
-							nextFrame()
-							if not auraFlingEnabled or not myRoot.Parent then
-								break
+					for _, targetModel in ipairs(getSelectableTargetModels()) do
+						if not isTargetBlacklisted(targetModel, Players:GetPlayerFromCharacter(targetModel)) then
+							local targetRoot = getRootUniversal(targetModel)
+							if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
+								touchedAny = true
+								overpowerRootState(myRoot, targetRoot.CFrame, Vector3.zero, Vector3.zero)
+								nextFrame()
+								if not auraFlingEnabled or not myRoot.Parent then
+									break
+								end
+								overpowerRootState(
+									myRoot,
+									targetRoot.CFrame,
+									(targetRoot.CFrame.Position - myPosition).Unit * flingPower + Vector3.new(0, flingPower * 0.5, 0),
+									Vector3.new(flingPower, flingPower, flingPower)
+								)
 							end
-							overpowerRootState(
-								myRoot,
-								targetRoot.CFrame,
-								(targetRoot.CFrame.Position - myPosition).Unit * flingPower + Vector3.new(0, flingPower * 0.5, 0),
-								Vector3.new(flingPower, flingPower, flingPower)
-							)
 						end
 					end
 					if touchedAny and myRoot.Parent then
@@ -1341,7 +1317,7 @@ function setAuraFlingEnabled(enabled)
 	syncFlingModeControls()
 	return auraFlingEnabled and "ON" or "OFF"
 end
-function clickFlingTargetPlayer(targetPlayer)
+function clickFlingTargetModel(targetModel)
 	if clickFlingBusy then
 		return
 	end
@@ -1360,8 +1336,7 @@ function clickFlingTargetPlayer(targetPlayer)
 			if not clickFlingEnabled then
 				break
 			end
-			local targetCharacter = targetPlayer and targetPlayer.Character
-			local targetRoot = getRootUniversal(targetCharacter)
+			local targetRoot = getRootUniversal(targetModel)
 			if not targetRoot or not targetRoot.Parent or not myRoot.Parent then
 				break
 			end
@@ -1378,13 +1353,14 @@ function clickFlingTargetPlayer(targetPlayer)
 		clickFlingBusy = false
 	end)
 end
-function getPlayerFromClickedPart(part)
+function getTargetModelFromClickedPart(part)
 	local current = part
 	while current do
 		if current:IsA("Model") then
-			local targetPlayer = Players:GetPlayerFromCharacter(current)
-			if targetPlayer and targetPlayer ~= player then
-				return targetPlayer
+			if current == player.Character then return nil end
+			local hum = current:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then
+				return current
 			end
 		end
 		current = current.Parent
@@ -1404,9 +1380,9 @@ function setClickFlingEnabled(enabled)
 			if not clickFlingEnabled then
 				return
 			end
-			local targetPlayer = getPlayerFromClickedPart(mouse.Target)
-			if targetPlayer then
-				clickFlingTargetPlayer(targetPlayer)
+			local targetModel = getTargetModelFromClickedPart(mouse.Target)
+			if targetModel then
+				clickFlingTargetModel(targetModel)
 			end
 		end)
 	else
@@ -1439,11 +1415,12 @@ function setFlingAllEnabled(enabled)
 				return
 			end
 			local targetRoots = {}
-			for _, otherPlayer in ipairs(getOtherPlayers()) do
-				local targetModel = otherPlayer.Character
-				local targetRoot = getRootUniversal(targetModel)
-				if targetRoot then
-					targetRoots[#targetRoots + 1] = targetRoot
+			for _, targetModel in ipairs(getSelectableTargetModels()) do
+				if not isTargetBlacklisted(targetModel, Players:GetPlayerFromCharacter(targetModel)) then
+					local targetRoot = getRootUniversal(targetModel)
+					if targetRoot then
+						targetRoots[#targetRoots + 1] = targetRoot
+					end
 				end
 			end
 			if #targetRoots == 0 then
@@ -2148,9 +2125,9 @@ runGetTrash = function()
 			if hasTrashcanAfterChecks(11, 0.05) then
 				continue
 			end
-			ignoredModels[targetEntry.model] = tick() + 1.5
+			ignoredModels[targetEntry.model] = tick() + 0.5
 			switchedTargets += 1
-			task.wait(0.1)
+			task.wait()
 		end
 		if getTrashState.token == runToken and getTrashState.running then
 			getTrashState.returning = true
@@ -2749,20 +2726,18 @@ local function getSelectableTargetModels()
 	local currentCharacter = player.Character
 	local models = {}
 	local seenModels = {}
-	-- All players (alive with HRP)
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= player and p.Character then
 			local model = p.Character
 			local modelRoot = model:FindFirstChild("HumanoidRootPart")
 			local hum = model:FindFirstChildOfClass("Humanoid")
-			if modelRoot and hum and hum.Health > 0 then
+			if modelRoot and hum then
 				seenModels[model] = true
 				models[#models + 1] = model
 			end
 		end
 	end
-	-- Workspace NPC scan (refresh every 3s to avoid FPS drops)
-	if now - lastWorkspaceScan > 3 then
+	if now - lastWorkspaceScan > 5 then
 		lastWorkspaceScan = now
 		task.spawn(function()
 			local newModels = {}
@@ -2772,14 +2747,16 @@ local function getSelectableTargetModels()
 					if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
 						local hum = model:FindFirstChildOfClass("Humanoid")
 						local modelRoot = model:FindFirstChild("HumanoidRootPart")
-						if hum and hum.Health > 0 and modelRoot then
+						if hum and modelRoot then
 							newModels[#newModels + 1] = model
 						end
 					end
 				end
 			end
 			scanFolder(Workspace:FindFirstChild("Live"))
-			scanFolder(Workspace:FindFirstChild("Map"))
+			if #newModels < 5 then
+				scanFolder(Workspace:FindFirstChild("Map"))
+			end
 			for _, m in ipairs(newModels) do
 				if not seenModels[m] then
 					seenModels[m] = true
@@ -2943,8 +2920,15 @@ local function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
 			or getHorizontalUnit(targetRoot.CFrame.LookVector)
 			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
 			or Vector3.new(0, 0, -1)
-		local dist = isRagdoll and 1.2 or attackTpBehindDistance
-		if useAirTracking then dist = attackTpAirBehindDistance end
+		local dist = isRagdoll and 1.2 or 1.15
+		if useAirTracking then dist = 0.85 end
+		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+	elseif mode == "Behind Custom" then
+		local followDirection = getHorizontalUnit(targetVelocity)
+			or getHorizontalUnit(targetRoot.CFrame.LookVector)
+			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+			or Vector3.new(0, 0, -1)
+		local dist = isRagdoll and (attackTpBehindDistance * 0.8) or attackTpBehindDistance
 		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Aggressive" then
 		local followDirection = getHorizontalUnit(targetVelocity)
@@ -2952,20 +2936,6 @@ local function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
 			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
 			or Vector3.new(0, 0, -1)
 		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * 0.6) + Vector3.new(0, 1.2 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
-	elseif mode == "Auto Closet" then
-		local followDirection = getHorizontalUnit(targetVelocity)
-			or getHorizontalUnit(targetRoot.CFrame.LookVector)
-			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
-			or Vector3.new(0, 0, -1)
-		local dist = isRagdoll and 0.2 or 0.5
-		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, 0.8 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
-	elseif mode == "Auto Far" then
-		local followDirection = getHorizontalUnit(targetVelocity)
-			or getHorizontalUnit(targetRoot.CFrame.LookVector)
-			or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
-			or Vector3.new(0, 0, -1)
-		local dist = isRagdoll and 2.5 or 4.0
-		finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, 1.5 + verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	elseif mode == "Auto" then
 		local followDirection = getHorizontalUnit(targetVelocity)
 			or getHorizontalUnit(targetRoot.CFrame.LookVector)
@@ -3619,6 +3589,68 @@ task.spawn(function()
         end)
     end
     local autoFixCamEnabled = false
+    local antiDeathEnabled = false
+    local isProcessingAntiDeath = false
+    local function isDeathCounterActive()
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                if track.Animation and track.Animation.AnimationId == "rbxassetid://11343250001" then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    local function bypassDeathCounter()
+        if isProcessingAntiDeath then return end
+        isProcessingAntiDeath = true
+        local character = player.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChild("Humanoid")
+        if not (hrp and humanoid) then
+            isProcessingAntiDeath = false
+            return
+        end
+        local savedCFrame = hrp.CFrame
+        workspace.Camera.CameraType = Enum.CameraType.Scriptable
+        workspace.Camera.CameraSubject = nil
+        local startTime = tick()
+        local connection
+        connection = game:GetService("RunService").Heartbeat:Connect(function()
+            if not hrp or not hrp.Parent then return end
+            hrp.CFrame = CFrame.new(savedCFrame.X, -850, savedCFrame.Z)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end)
+        repeat
+            task.wait()
+        until (tick() - startTime) > 2.8 or not isDeathCounterActive()
+        if connection then connection:Disconnect() end
+        if hrp and hrp.Parent then
+            hrp.CFrame = savedCFrame
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+        workspace.Camera.CameraType = Enum.CameraType.Custom
+        workspace.Camera.CameraSubject = humanoid
+        task.wait(0.1)
+        if humanoid and humanoid.Parent then
+            workspace.Camera.CameraSubject = humanoid
+        end
+        isProcessingAntiDeath = false
+    end
+    task.spawn(function()
+        while true do
+            task.wait()
+            if not antiDeathEnabled or isProcessingAntiDeath then continue end
+            if isDeathCounterActive() then
+                bypassDeathCounter()
+            end
+        end
+    end)
     local lastKillsCount = 0
     local function runAutoFixCamCheck()
         local currentKills = 0
@@ -3754,10 +3786,14 @@ task.spawn(function()
                 communicate = child
             end
         end)
+        if _G.NoDashCD_Enabled then
+            player:SetAttribute("NoDashCooldown", true)
+            char:SetAttribute("NoDashCooldown", true)
+        end
     end
     local supportsDashBlock = game.GameId == 3808081382
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(180) 
+    local movementHub = makeControlFrame(214) 
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -3855,10 +3891,20 @@ task.spawn(function()
     makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
     makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
     makeHubTog(row2, "No Dash CD", function(v) 
+        _G.NoDashCD_Enabled = v
         workspace:SetAttribute("NoDashCooldown", v)
         workspace:SetAttribute("EffectAffects", v and 1 or 0)
         player:SetAttribute("NoDashCooldown", v)
-        if player.Character then player.Character:SetAttribute("NoDashCooldown", v) end
+        if player.Character then 
+            player.Character:SetAttribute("NoDashCooldown", v) 
+        end
+        if v then
+            task.spawn(function()
+                workspace:SetAttribute("EffectAffects", 1)
+                task.wait()
+                workspace:SetAttribute("EffectAffects", 0)
+            end)
+        end
     end, "NoDashCD", false)
     makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
     local row3 = makeRow(100)
@@ -3871,6 +3917,8 @@ task.spawn(function()
     makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/4)
     makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
     makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
+    local row5 = makeRow(168)
+    makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1)
     if player.Character then
         setupCharacter(player.Character)
     end
@@ -4019,7 +4067,7 @@ do
 	local BOUNDARY_X = 200000
 	local BOUNDARY_Z = 200000
 	local BOUNDARY_Y_DOWN = -10000
-	local CLIENT_MOVE_Y = -450
+	local CLIENT_MOVE_Y = -480
 	local safePositions = {}
 	local MAX_SAFE_POSITIONS = 10
 	local displacedClient = nil
@@ -4755,14 +4803,7 @@ function Dropdown(data)
 			optionButton.Parent = choiceFrame
 			optionButtons[item] = optionButton
 			optionButton.MouseButton1Click:Connect(function()
-				if multi then
-					setSelectedValue(item, not selected[item])
-				else
-					setSelectedValue(item, true)
-					if setExpanded then
-						setExpanded(false)
-					end
-				end
+				setSelectedValue(item, not selected[item])
 				refreshLabels()
 				saveDropdownSelection()
 				if callback then
@@ -4825,7 +4866,6 @@ function Dropdown(data)
 		items = normalizedItems
 		rebuildItemLookup()
 		pruneSelectedValues()
-		-- Only apply preferredValue if nothing is currently selected
 		if #getSelectedList() == 0 and preferredValue ~= nil then
 			if multi then
 				for _, entry in ipairs(normalizeDefaultValues(preferredValue)) do
@@ -4906,22 +4946,26 @@ blacklistedPlayers = {}
 blacklistedModels = {}
 applyModelDropdownSelection = nil
 isTargetBlacklisted = function(model, targetPlayer)
-	if targetPlayer and blacklistedPlayers[targetPlayer] then return true end
-	if model and blacklistedModels[model] then return true end
-	return false
+	if blacklistedTargets["Friends"] and targetPlayer and friendCache[targetPlayer.UserId] then
+		return true
+	end
+	if targetPlayer then
+		return blacklistedPlayers[targetPlayer] == true
+	end
+	return blacklistedModels[model] == true
 end
 do
 	isSelectablePlayerDropdownTarget = function(targetPlayer)
 		return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
 	end
 	isSelectableModelDropdownTarget = function(model)
-		if not model or model == char then
+		if not model or model == player.Character then
 			return false
 		end
 		if Players:GetPlayerFromCharacter(model) == player then
 			return false
 		end
-		return isValidAttackTpTarget(model)
+		return model:FindFirstChild("HumanoidRootPart") ~= nil
 	end
 	getModelDropdownLabelForSelection = function(model, targetPlayer)
 		if not model and not targetPlayer then
@@ -4944,7 +4988,6 @@ do
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
 			if targetPlayer ~= player and targetPlayer.Parent == Players then
 				local targetModel = getTrackedPlayerTargetModel(targetPlayer)
-				-- Always mark the actual character as seen too
 				if targetPlayer.Character then
 					seenModels[targetPlayer.Character] = true
 				end
@@ -4993,7 +5036,7 @@ do
 		end)
 		table.clear(modelDropdownLookup)
 		local usedLabels = {}
-		local allItems = {}
+		local allItems = { "Friends" }
 		local selectableItems = {}
 		local function appendEntries(entries, prefix)
 			for _, entry in ipairs(entries) do
@@ -5005,7 +5048,8 @@ do
 				end
 				usedLabels[label] = true
 				allItems[#allItems + 1] = label
-				if not blacklistedTargets[label] then
+				local isFriend = entry.player and friendCache[entry.player.UserId]
+				if not blacklistedTargets[label] and not isFriend then
 					selectableItems[#selectableItems + 1] = label
 				end
 				modelDropdownLookup[label] = {
@@ -6037,7 +6081,6 @@ blPlayersDropdownControl = Dropdown({
 	multi = true,
 	deffultin = nil,
 	fun = function(value)
-		-- Rebuild blacklist sets from label-to-player/model lookup
 		local newBlacklist = {}
 		local newBLPlayers = {}
 		local newBLModels = {}
@@ -6058,7 +6101,19 @@ blPlayersDropdownControl = Dropdown({
 		blacklistedTargets = newBlacklist
 		blacklistedPlayers = newBLPlayers
 		blacklistedModels = newBLModels
-		refreshModelDropdown()
+		local currentTargetLabel = getModelDropdownLabelForSelection(manualAttackTpTarget, manualAttackTpPlayer)
+		if currentTargetLabel and blacklistedTargets[currentTargetLabel] then
+			setManualAttackTpTarget(nil)
+			if modelDropdownControl and modelDropdownControl.SetValue then
+				modelDropdownControl.SetValue(nil, true)
+			end
+		end
+		if blacklistedTargets["Friends"] and manualAttackTpPlayer and friendCache[manualAttackTpPlayer.UserId] then
+			setManualAttackTpTarget(nil)
+			if modelDropdownControl and modelDropdownControl.SetValue then
+				modelDropdownControl.SetValue(nil, true)
+			end
+		end
 	end,
 })
 targetActionControls = _G["3tog_on_one_one_button"]({
@@ -6197,15 +6252,16 @@ end
 local tpModesDropdown = nil
 do
 	function getTPModeCleanItems()
-		local items = { "Above", "Under", "Behind", "Middle", "Aggressive", "Auto", "Auto Closet", "Auto Far", "Auto Custom" }
+		local items = { "Above", "Under", "Behind", "Behind Custom", "Middle", "Aggressive", "Auto", "Auto Custom" }
 		for i = 1, 10 do
-			table.insert(items, "Custom " .. i)
+			items[#items + 1] = "Custom " .. i
 		end
 		return items
 	end
 	function getTPModeDisplayNames()
 		local names = {
-			["Auto Custom"] = string.format("Auto Custom (%s)", tostring(autoCustomDistance))
+			["Auto Custom"] = string.format("Auto Custom (%s)", tostring(autoCustomDistance)),
+			["Behind Custom"] = string.format("Behind Custom (%s)", tostring(attackTpBehindDistance))
 		}
 		for i = 1, 10 do
 			names["Custom " .. i] = getCustomDisplayName(i)
@@ -6267,12 +6323,66 @@ do
 	end
 	autoCustomInput = createAutoCustomInput("Distance", 0.375)
 	autoCustomFrame.LayoutOrder = 1001
+	local behindCustomFrame = makeControlFrame(45)
+	behindCustomFrame.Visible = false
+	local function createBehindCustomInput(label)
+		local labelObj = Instance.new("TextLabel")
+		labelObj.BackgroundTransparency = 1
+		labelObj.Position = UDim2.fromScale(0.05, 0)
+		labelObj.Size = UDim2.fromScale(0.4, 1)
+		labelObj.Font = Enum.Font.GothamBold
+		labelObj.Text = label
+		labelObj.TextColor3 = Color3.fromRGB(255, 0, 0)
+		labelObj.TextSize = 13
+		labelObj.TextXAlignment = Enum.TextXAlignment.Left
+		labelObj.Parent = behindCustomFrame
+		local box = Instance.new("TextBox")
+		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		box.BackgroundTransparency = 0.5
+		box.BorderSizePixel = 0
+		box.Position = UDim2.fromScale(0.55, 0.15)
+		box.Size = UDim2.fromScale(0.35, 0.7)
+		box.Font = Enum.Font.GothamMedium
+		box.TextColor3 = Color3.fromRGB(255, 0, 0)
+		box.TextSize = 13
+		box.ClearTextOnFocus = false
+		box.Text = tostring(attackTpBehindDistance)
+		box.Parent = behindCustomFrame
+		box.Focused:Connect(function() box.Text = "" end)
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = box.Text
+			local filtered = text:gsub("[^-0-9%.]", "")
+			if filtered ~= text then box.Text = filtered end
+		end)
+		box.FocusLost:Connect(function()
+			local val = tonumber(box.Text)
+			if val ~= nil then
+				attackTpBehindDistance = val
+				setSavedControlValue("BehindDistance", val)
+				if tpModesDropdown then
+					tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+					tpModesDropdown.SetValue(attackTpMode, true)
+				end
+			else
+				box.Text = tostring(attackTpBehindDistance)
+			end
+			if tpModesDropdown then
+				tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+				tpModesDropdown.SetValue(attackTpMode, true)
+			end
+		end)
+		return box
+	end
+	local behindCustomInput = createBehindCustomInput("Distance")
+	behindCustomFrame.LayoutOrder = 1002
 	function updateCustomUI()
 		local currentMode = tostring(attackTpMode)
 		local isAutoCustom = (currentMode == "Auto Custom")
-		local isCustom = (string.find(currentMode, "Custom") ~= nil) and not isAutoCustom
+		local isBehindCustom = (currentMode == "Behind Custom")
+		local isCustom = (string.find(currentMode, "Custom") ~= nil) and not isAutoCustom and not isBehindCustom
 		customOffsetFrame.Visible = isCustom
 		autoCustomFrame.Visible = isAutoCustom
+		behindCustomFrame.Visible = isBehindCustom
 		if isCustom then
 			local cleanMode = tostring(attackTpMode):match("Custom %d+")
 			local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
@@ -6280,8 +6390,11 @@ do
 			yInput.Text = tostring(off.y)
 			xInput.Text = tostring(off.x)
 		end
-		if isAutoCustom or true then
+		if isAutoCustom then
 			autoCustomInput.Text = tostring(autoCustomDistance)
+		end
+		if isBehindCustom then
+			behindCustomInput.Text = tostring(attackTpBehindDistance)
 		end
 	end
 	function createOffsetInput(label, axis, position)
@@ -6341,6 +6454,7 @@ do
 	yInput = createOffsetInput("Y", "y", 0.375)
 	xInput = createOffsetInput("X", "x", 0.7)
 	autoCustomFrame.Parent = uiX
+	behindCustomFrame.Parent = uiX
 	tpModesDropdown = Dropdown({
 		namedropdown = "TP Modes",
 		inside = getTPModeCleanItems(),
@@ -7259,77 +7373,6 @@ UserInputService.InputEnded:Connect(function(input)
 		holdingD = false
 	end
 end)
-function startIntroUi()
-	local introContent = Instance.new("Frame")
-	introContent.Name = "IntroContent"
-	introContent.AnchorPoint = Vector2.new(0.5, 0.5)
-	introContent.Position = UDim2.fromScale(0.5, 0.5)
-	introContent.Size = UDim2.fromScale(0.8, 0.4)
-	introContent.BackgroundTransparency = 1
-	introContent.Parent = background
-	local nothingX = Instance.new("TextLabel")
-	nothingX.Name = "NothingX"
-	nothingX.AnchorPoint = Vector2.new(0.5, 0.5)
-	nothingX.Position = UDim2.fromScale(0.5, 0.4)
-	nothingX.Size = UDim2.fromScale(1, 0.4)
-	nothingX.BackgroundTransparency = 1
-	nothingX.Text = "NOTHING X"
-	nothingX.TextColor3 = Color3.fromRGB(0, 0, 0)
-	nothingX.Font = Enum.Font.GothamBold
-	nothingX.TextSize = 80
-	nothingX.TextScaled = true
-	nothingX.Parent = introContent
-	local subtitle = Instance.new("TextLabel")
-	subtitle.Name = "SubTitle"
-	subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
-	subtitle.Position = UDim2.fromScale(0.5, 0.65)
-	subtitle.Size = UDim2.fromScale(1, 0.2)
-	subtitle.BackgroundTransparency = 1
-	subtitle.Text = "_X"
-	subtitle.TextColor3 = Color3.fromRGB(0, 0, 0)
-	subtitle.Font = Enum.Font.GothamBold
-	subtitle.TextSize = 40
-	subtitle.TextScaled = true
-	subtitle.Parent = introContent
-	task.spawn(function()
-		task.wait(0.5)
-		local colorTweenInfo = TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		TweenService:Create(nothingX, colorTweenInfo, { TextColor3 = Color3.fromRGB(255, 0, 0) }):Play()
-		TweenService:Create(subtitle, colorTweenInfo, { TextColor3 = Color3.fromRGB(255, 30, 30) }):Play()
-		for _ = 1, 6 do
-			task.wait(math.random(1, 5) * 0.1)
-			nothingX.TextTransparency = 0.3
-			subtitle.TextTransparency = 0.3
-			task.wait(0.05)
-			nothingX.TextTransparency = 0
-			subtitle.TextTransparency = 0
-		end
-	end)
-	task.delay(4, function()
-		local fadeInfo = TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		background.BackgroundTransparency = 1
-		for _, child in ipairs(introContent:GetDescendants()) do
-			if child:IsA("TextLabel") then
-				TweenService:Create(child, fadeInfo, { TextTransparency = 1 }):Play()
-			elseif child:IsA("Frame") then
-				TweenService:Create(child, fadeInfo, { BackgroundTransparency = 1 }):Play()
-			end
-		end
-		task.wait(0.05) 
-		introContent:Destroy()
-		background:Destroy()
-		introFinished = true
-		keybindFrame.Visible = true
-		targetFrame.Visible = false
-		updateTargetDisplay()
-		if pendingInfoCall then
-			local queuedInfo = pendingInfoCall
-			pendingInfoCall = nil
-			showInfo(queuedInfo.title, queuedInfo.text, queuedInfo.time)
-		end
-	end)
-end
-startIntroUi()
 task.spawn(function()
 if game.GameId ~= 3808081382 then
     return
