@@ -3876,14 +3876,12 @@ task.spawn(function()
         return btn
     end
     local row1 = makeRow(32)
-    StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
+    StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false, isTSB and 1/4 or 1/3)
     if isTSB then
-        DashToggle = makeHubTog(row1, "Dash Block", setDashBlockRuntime, "DashBlockEnabled", false)
-    else
-        makeHubTog(row1, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
+        DashToggle = makeHubTog(row1, "Dash Block", setDashBlockRuntime, "DashBlockEnabled", false, 1/4)
     end
-    makeHubBtn(row1, "Fix Cam", fixCamera)
-    makeHubBtn(row1, "Lay", layCharacter)
+    makeHubBtn(row1, "Fix Cam", fixCamera, isTSB and 1/4 or 1/3)
+    makeHubBtn(row1, "Lay", layCharacter, isTSB and 1/4 or 1/3)
     if isTSB then
         local row2 = makeRow(66)
         makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
