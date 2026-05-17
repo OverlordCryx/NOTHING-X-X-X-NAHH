@@ -12,7 +12,6 @@ CoreGui = game:GetService("CoreGui")
 function nextFrame()
 	return RunService.Heartbeat:Wait()
 end
-
 local player = Players.LocalPlayer
 local espOverlayConfig = {
     showCharacter = false,
@@ -223,7 +222,6 @@ targetValueText.ClipsDescendants = false
 targetValueText.TextYAlignment = Enum.TextYAlignment.Center
 targetValueText.LayoutOrder = 3
 targetValueText.Parent = targetFrame
-
 targetHPText = Instance.new("TextLabel")
 targetHPText.Name = "TargetHPText"
 targetHPText.BackgroundTransparency = 1
@@ -427,7 +425,6 @@ do
 	uiTitle.TextXAlignment = Enum.TextXAlignment.Left
 	uiTitle.ZIndex = 11
 	uiTitle.Parent = settingsWindow
-
 	local divider = Instance.new("Frame")
 	divider.Name = "Divider"
 	divider.AnchorPoint = Vector2.new(0.5, 0)
@@ -465,7 +462,6 @@ do
 end
 local otherPartsCache = {}
 local friendCache = {}
-
 local function updateFriendCache()
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and friendCache[p.UserId] == nil then
@@ -477,7 +473,6 @@ local function updateFriendCache()
         end
     end
 end
-
 local function updateAntiFlingCache()
     local newCache = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -492,12 +487,8 @@ local function updateAntiFlingCache()
     end
     otherPartsCache = newCache
 end
-
 task.spawn(function()
-    -- Initial cache
     updateAntiFlingCache()
-    
-    -- Listen for new players and characters
     Players.PlayerAdded:Connect(function(p)
         task.spawn(function()
             pcall(function()
@@ -505,34 +496,26 @@ task.spawn(function()
             end)
         end)
         p.CharacterAdded:Connect(function()
-            task.wait(0.5) -- Wait for character to fully load
+            task.wait(0.5) 
             updateAntiFlingCache()
         end)
     end)
-    
     updateFriendCache()
-    
     for _, p in ipairs(Players:GetPlayers()) do
         p.CharacterAdded:Connect(function()
             task.wait(0.5)
             updateAntiFlingCache()
         end)
     end
-
-    -- Fast Heartbeat loop to enforce CanCollide = false
     RunService.Heartbeat:Connect(function()
         for i = 1, #otherPartsCache do
             local part = otherPartsCache[i]
             if part and part.Parent then
                 part.CanCollide = false
             else
-                -- If parts are being destroyed, refresh cache soon
-                -- (Alternatively, we could remove them here, but table.remove is slow)
             end
         end
     end)
-    
-    -- Refresh cache periodically just in case
     while task.wait(5) do
         updateAntiFlingCache()
         updateFriendCache()
@@ -732,14 +715,12 @@ function resolveAttackTpTarget() end
 function zeroLocalPlayerRoot() end
 function syncFlingModeControls() end
 function runGetTrash() end
-
 function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
 	if not rootPart then return end
 	if cframe then rootPart.CFrame = cframe end
 	if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
 	if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
 end
-
 function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
 	applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
 end
@@ -2662,7 +2643,6 @@ local function updateTargetDisplay()
 	local displayedTarget = getDisplayedTargetModel()
 	local displayName = displayedTarget and displayedTarget.Name or (manualAttackTpPlayer and manualAttackTpPlayer.Name or "")
 	targetValueText.Text = displayName
-
 	local isHPEnabled = getSavedControlValue("TargetHPEnabled") == true
 	if isHPEnabled and displayedTarget then
 		local hum = displayedTarget:FindFirstChildOfClass("Humanoid")
@@ -2742,7 +2722,6 @@ local function getSelectableTargetModels()
 	local currentCharacter = player.Character
 	local models = {}
 	local seenModels = {}
-	-- All players (alive with HRP)
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= player and p.Character then
 			local model = p.Character
@@ -2754,7 +2733,6 @@ local function getSelectableTargetModels()
 			end
 		end
 	end
-	-- Workspace NPC scan (refresh every 5s to avoid FPS drops)
 	if now - lastWorkspaceScan > 5 then
 		lastWorkspaceScan = now
 		task.spawn(function()
@@ -3609,7 +3587,6 @@ task.spawn(function()
     local autoFixCamEnabled = false
     local antiDeathEnabled = false
     local isProcessingAntiDeath = false
-
     local function isDeathCounterActive()
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -3623,7 +3600,6 @@ task.spawn(function()
         end
         return false
     end
-
     local function bypassDeathCounter()
         if isProcessingAntiDeath then return end
         isProcessingAntiDeath = true
@@ -3671,7 +3647,6 @@ task.spawn(function()
             end
         end
     end)
-
     local lastKillsCount = 0
     local function runAutoFixCamCheck()
         local currentKills = 0
@@ -3807,15 +3782,11 @@ task.spawn(function()
                 communicate = child
             end
         end)
-        -- Re-apply No Dash CD if enabled
-        if _G.NoDashCD_Enabled then
-            player:SetAttribute("NoDashCooldown", true)
-            char:SetAttribute("NoDashCooldown", true)
-        end
     end
     local supportsDashBlock = game.GameId == 3808081382
+    local isTSB = supportsDashBlock
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(214) 
+    local movementHub = makeControlFrame(isTSB and 214 or 112) 
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -3906,43 +3877,41 @@ task.spawn(function()
     end
     local row1 = makeRow(32)
     StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false)
-    DashToggle = makeHubTog(row1, supportsDashBlock and "Dash Block" or "Dash", supportsDashBlock and setDashBlockRuntime or nil, "DashBlockEnabled", false)
+    if isTSB then
+        DashToggle = makeHubTog(row1, "Dash Block", setDashBlockRuntime, "DashBlockEnabled", false)
+    else
+        makeHubTog(row1, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
+    end
     makeHubBtn(row1, "Fix Cam", fixCamera)
     makeHubBtn(row1, "Lay", layCharacter)
-    local row2 = makeRow(66)
-    makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
-    makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
-    makeHubTog(row2, "No Dash CD", function(v) 
-        _G.NoDashCD_Enabled = v
-        workspace:SetAttribute("NoDashCooldown", v)
-        workspace:SetAttribute("EffectAffects", v and 1 or 0)
-        player:SetAttribute("NoDashCooldown", v)
-        if player.Character then 
-            player.Character:SetAttribute("NoDashCooldown", v) 
-        end
-        -- Instant trigger to reset current cooldown
-        if v then
-            task.spawn(function()
-                workspace:SetAttribute("EffectAffects", 1)
-                task.wait()
-                workspace:SetAttribute("EffectAffects", 0)
-            end)
-        end
-    end, "NoDashCD", false)
-    makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
-    local row3 = makeRow(100)
-    makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
-    makeHubTog(row3, "Names", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false)
-    makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
-    makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
-    local row4 = makeRow(134)
-    makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/4)
-    makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/4)
-    makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
-    makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
-    local row5 = makeRow(168)
-    makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1)
-
+    if isTSB then
+        local row2 = makeRow(66)
+        makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
+        makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
+        makeHubTog(row2, "No Dash CD", function(v) 
+            _G.NoDashCD_Enabled = v
+            workspace:SetAttribute("EffectAffects", v and 1 or 0)
+            workspace:SetAttribute("NoDashCooldown", v)
+        end, "NoDashCD", false)
+        makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
+        local row3 = makeRow(100)
+        makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
+        makeHubTog(row3, "Names", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false)
+        makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
+        makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
+        local row4 = makeRow(134)
+        makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/4)
+        makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/4)
+        makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
+        makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
+        local row5 = makeRow(168)
+        makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1)
+    else
+        local row2 = makeRow(66)
+        makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
+        makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
+        makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+    end
     if player.Character then
         setupCharacter(player.Character)
     end
@@ -4890,7 +4859,6 @@ function Dropdown(data)
 		items = normalizedItems
 		rebuildItemLookup()
 		pruneSelectedValues()
-		-- Only apply preferredValue if nothing is currently selected
 		if #getSelectedList() == 0 and preferredValue ~= nil then
 			if multi then
 				for _, entry in ipairs(normalizeDefaultValues(preferredValue)) do
@@ -5013,7 +4981,6 @@ do
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
 			if targetPlayer ~= player and targetPlayer.Parent == Players then
 				local targetModel = getTrackedPlayerTargetModel(targetPlayer)
-				-- Always mark the actual character as seen too
 				if targetPlayer.Character then
 					seenModels[targetPlayer.Character] = true
 				end
@@ -5086,7 +5053,6 @@ do
 		end
 		appendEntries(playerEntries, "[P]")
 		appendEntries(modelEntries, "[M]")
-		
 		return allItems, selectableItems
 	end
 	applyModelDropdownSelection = function(selectedValue)
@@ -6108,7 +6074,6 @@ blPlayersDropdownControl = Dropdown({
 	multi = true,
 	deffultin = nil,
 	fun = function(value)
-		-- Rebuild blacklist sets from label-to-player/model lookup
 		local newBlacklist = {}
 		local newBLPlayers = {}
 		local newBLModels = {}
@@ -6129,8 +6094,6 @@ blPlayersDropdownControl = Dropdown({
 		blacklistedTargets = newBlacklist
 		blacklistedPlayers = newBLPlayers
 		blacklistedModels = newBLModels
-		
-		-- If current target is now blacklisted, clear it
 		local currentTargetLabel = getModelDropdownLabelForSelection(manualAttackTpTarget, manualAttackTpPlayer)
 		if currentTargetLabel and blacklistedTargets[currentTargetLabel] then
 			setManualAttackTpTarget(nil)
@@ -6138,7 +6101,6 @@ blPlayersDropdownControl = Dropdown({
 				modelDropdownControl.SetValue(nil, true)
 			end
 		end
-		-- Also check Friends case
 		if blacklistedTargets["Friends"] and manualAttackTpPlayer and friendCache[manualAttackTpPlayer.UserId] then
 			setManualAttackTpTarget(nil)
 			if modelDropdownControl and modelDropdownControl.SetValue then
@@ -7404,7 +7366,6 @@ UserInputService.InputEnded:Connect(function(input)
 		holdingD = false
 	end
 end)
--- startIntroUi()
 task.spawn(function()
 if game.GameId ~= 3808081382 then
     return
@@ -7415,7 +7376,6 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local NORMAL_TRANSPARENCY = 0.66
 local ULT_TRANSPARENCY = 0.55
-
 local function Hide(Object)
 	if not Object then
 		return
