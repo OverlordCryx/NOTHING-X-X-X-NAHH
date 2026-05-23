@@ -561,7 +561,8 @@ local getTrashState = {
 	blockSetBack = false,
 }
 local function setTrashBlockEnabled(v)
-    getTrashState.blockSetBack = v
+	getTrashState.blockSetBack = v
+	trashBlockEnabled = v
 end
 setBackSavedCFrame = nil
 setBackCollisionState = nil
@@ -2567,7 +2568,7 @@ local function hasLiveStoredTarget(model)
 	return model ~= nil and model.Parent ~= nil
 end
 _G.lastValidTrashTime = 0
-function isTpBlocked()
+function isTpBlocked(targetModel)
 	if not trashBlockEnabled or _G.SafeTeleportLock then
 		return false
 	end
@@ -2602,6 +2603,27 @@ function isTpBlocked()
 	end
 	if tick() - (_G.lastValidTrashTime or 0) < 1.1 then
 		return true
+	end
+	if targetModel and trashFolder then
+		local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
+		if targetRoot then
+			local isTargetNormal = true
+			if targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll") then
+				isTargetNormal = false
+			elseif targetModel:GetAttribute("Ragdolled") or targetModel:GetAttribute("Downed") or targetModel:GetAttribute("Lie") then
+				isTargetNormal = false
+			end
+			if isTargetNormal then
+				for _, trashcan in ipairs(trashFolder:GetChildren()) do
+					if trashcan:IsA("Model") and not trashcan:GetAttribute("Broken") then
+						local part = trashcan:FindFirstChildWhichIsA("BasePart", true)
+						if part and (part.Position - targetRoot.Position).Magnitude < 12.0 then
+							return true
+						end
+					end
+				end
+			end
+		end
 	end
 	return false
 end
@@ -5334,7 +5356,7 @@ function teleportToSelectedTarget(modeOverride)
 	local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 	local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local targetModel = resolveAttackTpTarget()
-	if not characterRoot or not isAliveHumanoid(characterHumanoid) or isTpBlocked() then
+	if not characterRoot or not isAliveHumanoid(characterHumanoid) or isTpBlocked(targetModel) then
 		return
 	end
 	if not isValidAttackTpTarget(targetModel) then
@@ -7380,7 +7402,7 @@ do
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
+		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked(target) then
 			local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, target)
 			if targetCFrame then
 				local amFlinging = allowFling and (walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled)
@@ -7439,7 +7461,7 @@ do
 			local function fastPerform(target, allowFling)
 				local character = player.Character
 				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
-				if characterRoot and not isTpBlocked() then
+				if characterRoot and not isTpBlocked(target) then
 					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, target)
 					if targetCFrame then
 						local amFlinging = allowFling and (walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled)
