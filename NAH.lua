@@ -4049,6 +4049,107 @@ task.spawn(function()
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
     end
+    
+    local fakerPingHub = makeControlFrame(68)
+    fakerPingHub.Parent = uiX
+    fakerPingHub.LayoutOrder = 2
+    fakerPingHub.ClipsDescendants = true
+    
+    local fpTitle = Instance.new("TextLabel")
+    fpTitle.BackgroundTransparency = 1
+    fpTitle.Position = UDim2.new(0, 16, 0, 8)
+    fpTitle.Size = UDim2.new(1, -32, 0, 18)
+    fpTitle.Font = Enum.Font.GothamBold
+    fpTitle.Text = "Faker Ping"
+    fpTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+    fpTitle.TextStrokeTransparency = 1
+    fpTitle.TextSize = 14
+    fpTitle.TextXAlignment = Enum.TextXAlignment.Left
+    fpTitle.Parent = fakerPingHub
+    
+    local fpLabel = Instance.new("TextLabel")
+    fpLabel.BackgroundTransparency = 1
+    fpLabel.Position = UDim2.new(0, 16, 0, 32)
+    fpLabel.Size = UDim2.new(0.5, -16, 0, 24)
+    fpLabel.Font = Enum.Font.GothamBold
+    fpLabel.Text = "Ping"
+    fpLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    fpLabel.TextStrokeTransparency = 1
+    fpLabel.TextSize = 13
+    fpLabel.TextXAlignment = Enum.TextXAlignment.Left
+    fpLabel.Parent = fakerPingHub
+
+    local fpBox = Instance.new("TextBox")
+    fpBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    fpBox.BackgroundTransparency = 0.5
+    fpBox.BorderSizePixel = 0
+    fpBox.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    fpBox.Position = UDim2.new(0.5, 0, 0, 32)
+    fpBox.Size = UDim2.new(0.45, -16, 0, 24)
+    fpBox.ClearTextOnFocus = false
+    fpBox.Font = Enum.Font.GothamBold
+    fpBox.PlaceholderText = "Ping (0-5000)"
+    fpBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
+    fpBox.Text = ""
+    fpBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+    fpBox.TextStrokeTransparency = 1
+    fpBox.TextSize = 13
+    fpBox.Parent = fakerPingHub
+    
+    local fpBoxConstraint = Instance.new("UITextSizeConstraint")
+    fpBoxConstraint.MinTextSize = 10
+    fpBoxConstraint.MaxTextSize = 14
+    fpBoxConstraint.Parent = fpBox
+    
+    fpBox:GetPropertyChangedSignal("Text"):Connect(function()
+        local text = fpBox.Text
+        local filtered = text:gsub("[^0-9]", "")
+        if filtered ~= text then fpBox.Text = filtered end
+    end)
+
+    local lastValidPing = getSavedControlValue("FakerPingValue")
+    if lastValidPing ~= nil then
+        fpBox.Text = tostring(lastValidPing)
+    end
+    
+    fpBox.Focused:Connect(function()
+        fpBox.Text = ""
+    end)
+
+    fpBox.FocusLost:Connect(function()
+        local rawText = fpBox.Text
+        if rawText == "" then
+            lastValidPing = nil
+            setSavedControlValue("FakerPingValue", nil)
+            return
+        end
+        local num = tonumber(rawText)
+        if num then
+            num = math.clamp(num, 0, 5000)
+            fpBox.Text = tostring(num)
+            lastValidPing = num
+            setSavedControlValue("FakerPingValue", num)
+        else
+            fpBox.Text = ""
+            lastValidPing = nil
+            setSavedControlValue("FakerPingValue", nil)
+        end
+    end)
+    
+    task.spawn(function()
+        while true do
+            if lastValidPing ~= nil then
+                local comm = player.Character and player.Character:FindFirstChild("Communicate")
+                if comm then
+                    pcall(function()
+                        comm:FireServer({ Goal = "ReportPing", ms = lastValidPing })
+                    end)
+                end
+            end
+            task.wait(0.5)
+        end
+    end)
+
     if player.Character then
         setupCharacter(player.Character)
     end
@@ -4378,6 +4479,13 @@ function Slider(data)
 	editConstraint.MinTextSize = 10
 	editConstraint.MaxTextSize = 14
 	editConstraint.Parent = editBox
+	
+	editBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local text = editBox.Text
+		local filtered = text:gsub("[^-0-9%.]", "")
+		if filtered ~= text then editBox.Text = filtered end
+	end)
+
 	local bar = Instance.new("Frame")
 	bar.BackgroundColor3 = Color3.fromRGB(35, 0, 0)
 	bar.Position = UDim2.fromScale(0.05, 0.68)
@@ -4484,6 +4592,13 @@ function Textbox(data)
 	inputConstraint.MinTextSize = 12
 	inputConstraint.MaxTextSize = 16
 	inputConstraint.Parent = inputBox
+	
+	inputBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local text = inputBox.Text
+		local filtered = text:gsub("[^-0-9%.]", "")
+		if filtered ~= text then inputBox.Text = filtered end
+	end)
+
 	inputBox.FocusLost:Connect(function(enterPressed)
 		if callback then
 			callback(inputBox.Text, enterPressed)
