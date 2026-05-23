@@ -960,7 +960,8 @@ function updateKeybindText()
 	keybindText.Text = table.concat(lines, "\n")
 end
 function hasMapMainPart()
-	return game.PlaceId == 10449761463 or game.PlaceId == 131048399685555
+	if game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555 then return false end
+	return workspace:FindFirstChild("Map") ~= nil
 end
 local mapDependentControls = {}
 function syncMapDependentVisibility()
@@ -2330,13 +2331,13 @@ function startSetBackTravel()
 			applyTeleportRootState(rootPart, destCF, Vector3.zero, Vector3.zero)
 		else
 			applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.25), Vector3.zero, Vector3.zero)
-			task.wait(getTrashState.stepDelay)
+			task.wait(0.15)
 			if setBackTravelToken ~= runToken then return end
 			applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.50), Vector3.zero, Vector3.zero)
-			task.wait(getTrashState.stepDelay)
+			task.wait(0.15)
 			if setBackTravelToken ~= runToken then return end
 			applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.75), Vector3.zero, Vector3.zero)
-			task.wait(getTrashState.stepDelay)
+			task.wait(0.15)
 			if setBackTravelToken ~= runToken then return end
 			applyTeleportRootState(rootPart, destCF, Vector3.zero, Vector3.zero)
 		end
@@ -7207,11 +7208,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 					applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
 				else
 					applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.25), Vector3.zero, Vector3.zero)
-					task.wait(getTrashState.stepDelay)
+					task.wait(0.15)
 					applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.50), Vector3.zero, Vector3.zero)
-					task.wait(getTrashState.stepDelay)
+					task.wait(0.15)
 					applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.75), Vector3.zero, Vector3.zero)
-					task.wait(getTrashState.stepDelay)
+					task.wait(0.15)
 					applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
 				end
 			end
