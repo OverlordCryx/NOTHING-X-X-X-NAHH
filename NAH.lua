@@ -634,22 +634,100 @@ local function getCustomDisplayName(i)
 	return string.format("Custom %s (%s,%s,%s)", tostring(i), tostring(off.z), tostring(off.y), tostring(off.x))
 end
 local worldUpVector = Vector3.new(0, 1, 0)
+local function getMountainViewCF(index)
+	local map = workspace:FindFirstChild("Map")
+	local summer = map and map:FindFirstChild("Summer")
+	if not summer then return nil end
+	local views = {}
+	for _, obj in ipairs(summer:GetChildren()) do
+		if obj.Name == "ViewingBlock" then
+			table.insert(views, obj)
+		end
+	end
+	local function getTopGrass(model)
+		local best = nil
+		for _, part in ipairs(model:GetChildren()) do
+			if part.Name == "Grass" then
+				if best == nil or part.Position.Y > best.Position.Y then
+					best = part
+				end
+			end
+		end
+		return best
+	end
+	local grasses = {}
+	for _, model in ipairs(views) do
+		local grass = getTopGrass(model)
+		if grass then
+			table.insert(grasses, grass)
+		end
+	end
+	table.sort(grasses, function(a, b)
+		return a.Position.Y > b.Position.Y
+	end)
+	local grass = grasses[index]
+	if grass then
+		return CFrame.new(grass.Position + Vector3.new(0, 5, 0))
+	end
+	return nil
+end
 local placesTPs = {
 	["Middle Of Map"] = CFrame.new(139, 440, 32),
-	["Prison"] = CFrame.new(438, 439, -376),
-	["Montain 1"] = CFrame.new(-15, 653, -388),
-	["Montain 2"] = CFrame.new(322, 671, 446),
-	["Montain 2 Left"] = CFrame.new(240, 699, 465),
-	["Montain 2 Right"] = CFrame.new(398, 699, 404),
-	["Counter"] = CFrame.new(-68, 39, 20346),
-	["Counter Up"] = CFrame.new(-78, 94, 20354),
-	["Atomic Base"] = CFrame.new(1063, 40, 23006),
-	["Atomic Base Up"] = CFrame.new(1063, 415, 23006),
-	["Atomic Slash"] = CFrame.new(1063, 141, 23006),
-	["Atomic Slash Up"] = CFrame.new(1063, 190, 23006),
+	["Montain 1 Left"] = CFrame.new(-351, 619, -81),
+	["Montain 1 Right"] = CFrame.new(190, 650, -515),
+	["Montain 2"] = CFrame.new(297, 671, 397),
+	["Montain 2 Left"] = CFrame.new(201, 684, 439),
+	["Montain 2 Right"] = CFrame.new(379, 699, 360),
 }
+local function resolvePlaceCF(name)
+	if not name or name == "" or name == "/\\" then
+		return nil
+	end
+	local cf = placesTPs[name]
+	if cf then
+		return cf
+	end
+	if name:find("^Montain %d View$") then
+		local num = tonumber(name:match("%d+"))
+		if num then
+			return getMountainViewCF(num)
+		end
+	end
+	local success, result = pcall(function()
+		local cutscenes = workspace:FindFirstChild("Cutscenes")
+		if not cutscenes then return nil end
+		if name == "Counter" then
+			local model = cutscenes:FindFirstChild("Death Cutscene")
+			return model and (model:GetPivot() * CFrame.new(0, 0, 0))
+		elseif name == "Counter Up" then
+			local model = cutscenes:FindFirstChild("Death Cutscene")
+			return model and (model:GetPivot() * CFrame.new(-20, 55, -33))
+		elseif name == "Atomic Base" then
+			local model = cutscenes:FindFirstChild("Atoms")
+			return model and (model:GetPivot() * CFrame.new(0, -187, 0))
+		elseif name == "Atomic Base Up" then
+			local model = cutscenes:FindFirstChild("Atoms")
+			return model and (model:GetPivot() * CFrame.new(0, 199, 0))
+		elseif name == "Atomic Slash" then
+			local atoms = cutscenes:FindFirstChild("Atoms")
+			local model = atoms and atoms:FindFirstChild("sphere")
+			return model and (model:GetPivot() * CFrame.new(0, 0, 0))
+		elseif name == "Atomic Slash Up" then
+			local atoms = cutscenes:FindFirstChild("Atoms")
+			local model = atoms and atoms:FindFirstChild("sphere")
+			return model and (model:GetPivot() * CFrame.new(0, 45, 0))
+		end
+	end)
+	if success and result then
+		return result
+	end
+	return nil
+end
 local placesOrder = {
-	"/\\", "Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right",
+	"/\\", "Middle Of Map",
+	"Montain 1 Left", "Montain 1 Right",
+	"Montain 2", "Montain 2 Left", "Montain 2 Right",
+	"Montain 1 View", "Montain 2 View", "Montain 3 View", "Montain 4 View",
 	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
 	"Atomic Slash", "Atomic Slash Up"
 }
@@ -898,7 +976,7 @@ function syncPlacesKeybindDisplay()
 	local hasMain = hasMapMainPart()
 	if hasMain ~= lastHasMainState then
 		lastHasMainState = hasMain
-		local mapPlaces = { 	"Middle Of Map", "Prison", "Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right", }
+		local mapPlaces = { 	"Middle Of Map", "Montain 1 Left", "Montain 1 Right", "Montain 2", "Montain 2 Left", "Montain 2 Right", "Montain 1 View", "Montain 2 View", "Montain 3 View", "Montain 4 View", }
 		local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
 		local currentItems = { "/\\" }
 		for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
@@ -2245,17 +2323,14 @@ function startSetBackTravel()
 	local startCF = rootPart.CFrame
 	local destCF = setBackSavedCFrame
 	task.spawn(function()
+		local distance = (destCF.Position - startCF.Position).Magnitude
+		local stepCount = math.max(1, math.ceil(distance / getTrashState.stepDistance))
+		for i = 1, stepCount do
+			if setBackTravelToken ~= runToken then return end
+			applyTeleportRootState(rootPart, startCF:Lerp(destCF, i / stepCount), Vector3.zero, Vector3.zero)
+			task.wait(getTrashState.stepDelay)
+		end
 		if setBackTravelToken ~= runToken then return end
-		applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.25))
-		task.wait(0.03)
-		if setBackTravelToken ~= runToken then return end
-		applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.5))
-		task.wait(0.03)
-		if setBackTravelToken ~= runToken then return end
-		applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.75))
-		task.wait(0.03)
-		if setBackTravelToken ~= runToken then return end
-		applyTeleportRootState(rootPart, destCF)
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			humanoid.PlatformStand = false
@@ -3545,6 +3620,35 @@ task.spawn(function()
 			if hrp then hrp.Anchored = false end
 		end
 	end
+end)
+task.spawn(function()
+	local folder = workspace.Map.InvisibleBorder
+local function fixPart(v)
+	if v:IsA("BasePart") then
+		if v.CanCollide ~= false then v.CanCollide = false end
+		if v.CanTouch ~= false then v.CanTouch = false end
+		if v.CanQuery ~= false then v.CanQuery = false end
+	end
+end
+for _, v in pairs(folder:GetDescendants()) do
+	fixPart(v)
+end
+folder.DescendantAdded:Connect(function(v)
+	fixPart(v)
+end)
+folder.DescendantAdded:Connect(function(v)
+	if v:IsA("BasePart") then
+		v:GetPropertyChangedSignal("CanCollide"):Connect(function()
+			if v.CanCollide ~= false then v.CanCollide = false end
+		end)
+		v:GetPropertyChangedSignal("CanTouch"):Connect(function()
+			if v.CanTouch ~= false then v.CanTouch = false end
+		end)
+		v:GetPropertyChangedSignal("CanQuery"):Connect(function()
+			if v.CanQuery ~= false then v.CanQuery = false end
+		end)
+	end
+end)
 end)
 end
 initCharacterCleanupRuntime()
@@ -6936,23 +7040,24 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
 			return
 		end
-		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1" or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
+		local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Montain 1 Left" or selectedPlace == "Montain 1 Right" or selectedPlace:find("^Montain %d View") or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
 		if isMapLocation then
 			if game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555 then
 				return
 			end
 		end
-		local cf = placesTPs[selectedPlace]
+		local cf = resolvePlaceCF(selectedPlace)
 		if cf then
 			local character = player.Character
 			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 			if characterRoot then
 				local startCF = characterRoot.CFrame
-				applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.33))
-				task.wait(0.05)
-				applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.66))
-				task.wait(0.05)
-				applyTeleportRootState(characterRoot, cf)
+				local distance = (cf.Position - startCF.Position).Magnitude
+				local stepCount = math.max(1, math.ceil(distance / getTrashState.stepDistance))
+				for i = 1, stepCount do
+					applyTeleportRootState(characterRoot, startCF:Lerp(cf, i / stepCount), Vector3.zero, Vector3.zero)
+					task.wait(getTrashState.stepDelay)
+				end
 			end
 		end
 		return
