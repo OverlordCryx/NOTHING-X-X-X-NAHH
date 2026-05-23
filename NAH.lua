@@ -2323,14 +2323,22 @@ function startSetBackTravel()
 	local startCF = rootPart.CFrame
 	local destCF = setBackSavedCFrame
 	task.spawn(function()
-		local distance = (destCF.Position - startCF.Position).Magnitude
-		local stepCount = math.max(1, math.ceil(distance / getTrashState.stepDistance))
-		for i = 1, stepCount do
-			if setBackTravelToken ~= runToken then return end
-			applyTeleportRootState(rootPart, startCF:Lerp(destCF, i / stepCount), Vector3.zero, Vector3.zero)
-			task.wait(getTrashState.stepDelay)
-		end
 		if setBackTravelToken ~= runToken then return end
+		local dist = (destCF.Position - startCF.Position).Magnitude
+		if dist < 250 then
+			applyTeleportRootState(rootPart, destCF, Vector3.zero, Vector3.zero)
+		else
+			applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.25), Vector3.zero, Vector3.zero)
+			task.wait(getTrashState.stepDelay)
+			if setBackTravelToken ~= runToken then return end
+			applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.50), Vector3.zero, Vector3.zero)
+			task.wait(getTrashState.stepDelay)
+			if setBackTravelToken ~= runToken then return end
+			applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.75), Vector3.zero, Vector3.zero)
+			task.wait(getTrashState.stepDelay)
+			if setBackTravelToken ~= runToken then return end
+			applyTeleportRootState(rootPart, destCF, Vector3.zero, Vector3.zero)
+		end
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			humanoid.PlatformStand = false
@@ -7052,11 +7060,17 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 			if characterRoot then
 				local startCF = characterRoot.CFrame
-				local distance = (cf.Position - startCF.Position).Magnitude
-				local stepCount = math.max(1, math.ceil(distance / getTrashState.stepDistance))
-				for i = 1, stepCount do
-					applyTeleportRootState(characterRoot, startCF:Lerp(cf, i / stepCount), Vector3.zero, Vector3.zero)
+				local dist = (cf.Position - startCF.Position).Magnitude
+				if dist < 250 then
+					applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
+				else
+					applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.25), Vector3.zero, Vector3.zero)
 					task.wait(getTrashState.stepDelay)
+					applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.50), Vector3.zero, Vector3.zero)
+					task.wait(getTrashState.stepDelay)
+					applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.75), Vector3.zero, Vector3.zero)
+					task.wait(getTrashState.stepDelay)
+					applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
 				end
 			end
 		end
