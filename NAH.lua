@@ -3587,19 +3587,24 @@ local function isCounter(acc)
 	if not acc or not acc:IsA("Accessory") then return false end
 	return acc.Name:lower():find("counter") ~= nil
 end
-local function isSmallDebris(acc)
-	if not acc or not acc:IsA("Accessory") then return false end
-	return acc.Name:lower():find("small debris") ~= nil
-end
+
 local function usunPusteAccessory(char)
 	if not char then return end
 	for _, obj in ipairs(char:GetChildren()) do
 		if obj:IsA("Accessory") then
-			if isCounter(obj) or isSmallDebris(obj) then
+			if isCounter(obj) then
 				continue
 			end
 			if #obj:GetChildren() == 0 then
 				pcall(function()
+					for attrName, attrValue in pairs(obj:GetAttributes()) do
+						if type(attrValue) == "boolean" then
+							obj:SetAttribute(attrName, false)
+						elseif type(attrValue) == "number" then
+							obj:SetAttribute(attrName, 0)
+						end
+						obj:SetAttribute(attrName, nil)
+					end
 					obj:Destroy()
 				end)
 			end
@@ -7371,14 +7376,14 @@ do
 	if isTeleportLocked then
 		return
 	end
-	local function performGodTP(target)
+	local function performGodTP(target, allowFling)
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if characterRoot and isAliveHumanoid(characterHumanoid) and not isTpBlocked() then
 			local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, target)
 			if targetCFrame then
-				local amFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled
+				local amFlinging = allowFling and (walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled)
 				local resolvedLinear = targetVelocity or Vector3.zero
 				local resolvedAngular = Vector3.zero
 				if amFlinging then
@@ -7397,7 +7402,7 @@ do
 	if autoTpEnabled then
 		local targetModel = resolveAttackTpTarget()
 		if isValidAttackTpTarget(targetModel) then
-			performGodTP(targetModel)
+			performGodTP(targetModel, true)
 		end
 	end
 	if attackTpEnabled and attackTpHolding then
@@ -7415,7 +7420,7 @@ do
 			attackTpTarget = preferredTarget
 		end
 		if isValidAttackTpTarget(attackTpTarget) then
-			performGodTP(attackTpTarget)
+			performGodTP(attackTpTarget, false)
 		end
 	end
 	if pendingTeleportToSelectedPlayer and isValidAttackTpTarget(resolveAttackTpTarget()) then
@@ -7431,13 +7436,13 @@ do
 				return
 			end
 			if _G.SafeTeleportLock == true then return end
-			local function fastPerform(target)
+			local function fastPerform(target, allowFling)
 				local character = player.Character
 				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 				if characterRoot and not isTpBlocked() then
 					local targetCFrame, targetVelocity = getAttackTpPlacement(characterRoot, target)
 					if targetCFrame then
-						local amFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled
+						local amFlinging = allowFling and (walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled)
 						local resolvedLinear = targetVelocity or Vector3.zero
 						local resolvedAngular = Vector3.zero
 						if amFlinging then
@@ -7451,13 +7456,13 @@ do
 			if autoTpEnabled then
 				local targetModel = resolveAttackTpTarget()
 				if isValidAttackTpTarget(targetModel) then
-					fastPerform(targetModel)
+					fastPerform(targetModel, true)
 				end
 			end
 			if attackTpEnabled and attackTpHolding then
 				local attackTarget = resolveAttackTpTarget()
 				if isValidAttackTpTarget(attackTarget) then
-					fastPerform(attackTarget)
+					fastPerform(attackTarget, false)
 				end
 			end
 		end)
