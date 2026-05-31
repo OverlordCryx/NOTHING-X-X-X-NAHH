@@ -1,4 +1,4 @@
-task.wait(1.5)
+task.wait(1)
 warn("NOTHING _X -X_X-")
 repeat
     task.wait();
@@ -558,7 +558,9 @@ task.spawn(function()
         for i = 1, #otherPartsCache do
             local part = otherPartsCache[i]
             if part and part.Parent then
-                part.CanCollide = false
+                if part.CanCollide then
+                    part.CanCollide = false
+                end
             else
             end
         end
@@ -664,18 +666,10 @@ attackTpVerticalLead = 0.015
 attackTpMaxVerticalLead = 3.0
 attackTpGroundVerticalOffset = 0
 attackTpAirVerticalOffset = 0.25
-local customOffsets = {
-	["Custom 1"] = { x = 0, y = 0, z = 0 },
-	["Custom 2"] = { x = 0, y = 0, z = 0 },
-	["Custom 3"] = { x = 0, y = 0, z = 0 },
-	["Custom 4"] = { x = 0, y = 0, z = 0 },
-	["Custom 5"] = { x = 0, y = 0, z = 0 },
-	["Custom 6"] = { x = 0, y = 0, z = 0 },
-	["Custom 7"] = { x = 0, y = 0, z = 0 },
-	["Custom 8"] = { x = 0, y = 0, z = 0 },
-	["Custom 9"] = { x = 0, y = 0, z = 0 },
-	["Custom 10"] = { x = 0, y = 0, z = 0 },
-}
+local customOffsets = {}
+for i = 1, 25 do
+	customOffsets["Custom " .. tostring(i)] = { x = 0, y = 0, z = 0 }
+end
 local function getCustomDisplayName(i)
 	local key = "Custom " .. tostring(i)
 	local off = customOffsets[key] or { x = 0, y = 0, z = 0 }
@@ -1805,9 +1799,10 @@ local function handleSafeZoneHP()
 	end
 
 	if safeZoneHPInSafeZone then
-		if hp < 33 then
+		if hp < 45 then
 			if safeZonePositions[safeZoneCycleIndex] then
-				hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
+				hrp.Anchored = false
+				character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
 				hrp.AssemblyLinearVelocity = Vector3.zero
 				hrp.AssemblyAngularVelocity = Vector3.zero
 			end
@@ -1833,7 +1828,7 @@ local function handleSafeZoneHP()
 			end
 			safeZoneHPSavedCFrame = nil
 		end
-	elseif hp <= 25 then
+	elseif hp <= 35 then
 		safeZoneHPInSafeZone = true
 		safeZoneHPCharacter = character
 		if getTrashState.running and getTrashState.savedCFrame then
@@ -1854,7 +1849,8 @@ local function handleSafeZoneHP()
 		end
 		_G.SafeTeleportLock = true
 		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-		hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
+		hrp.Anchored = false
+		character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end
@@ -4043,7 +4039,7 @@ task.spawn(function()
     local function setDashBlockRuntime(state)
         DashBlockRunning = state == true
         if DashThread then
-            DashThread:Disconnect()
+            task.cancel(DashThread)
             DashThread = nil
         end
         if not DashBlockRunning then
@@ -4053,16 +4049,18 @@ task.spawn(function()
             DashBlockRunning = false
             return
         end
-        DashThread = RunService.Heartbeat:Connect(function()
-            if not DashBlockRunning or not communicate then
-                return
-            end
-            for _, dashKey in ipairs(directions) do
-                communicate:FireServer({
-                    Dash = dashKey,
-                    Key = Enum.KeyCode.Q,
-                    Goal = "KeyPress"
-                })
+        DashThread = task.spawn(function()
+            while DashBlockRunning do
+                if communicate then
+                    for _, dashKey in ipairs(directions) do
+                        communicate:FireServer({
+                            Dash = dashKey,
+                            Key = Enum.KeyCode.Q,
+                            Goal = "KeyPress"
+                        })
+                    end
+                end
+                task.wait(0.05)
             end
         end)
     end
@@ -6723,7 +6721,7 @@ local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
 local function getTPModeItems()
 	local items = { "Above", "Under", "Behind", "Middle", "Aggressive" }
-	for i = 1, 10 do
+	for i = 1, 25 do
 		table.insert(items, getCustomDisplayName(i))
 	end
 	return items
@@ -6732,7 +6730,7 @@ local tpModesDropdown = nil
 do
 	function getTPModeCleanItems()
 		local items = { "Above", "Under", "Behind", "Behind Custom", "Middle", "Aggressive", "Auto", "Auto Custom" }
-		for i = 1, 10 do
+		for i = 1, 25 do
 			items[#items + 1] = "Custom " .. i
 		end
 		return items
@@ -6742,7 +6740,7 @@ do
 			["Auto Custom"] = string.format("Auto Custom (%s)", tostring(autoCustomDistance)),
 			["Behind Custom"] = string.format("Behind Custom (%s)", tostring(attackTpBehindDistance))
 		}
-		for i = 1, 10 do
+		for i = 1, 25 do
 			names["Custom " .. i] = getCustomDisplayName(i)
 		end
 		return names
@@ -7340,9 +7338,40 @@ parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or {
 syncFlingModeControls()
 refreshModelDropdown()
 task.spawn(function()
+	local updatePending = false
+	local function updateDropdownsEvent()
+		if updatePending then return end
+		updatePending = true
+		task.delay(0.1, function()
+			updatePending = false
+			if screenGui.Parent then
+				refreshModelDropdown()
+			end
+		end)
+	end
+
+	Players.PlayerAdded:Connect(function(p)
+		updateDropdownsEvent()
+		p.CharacterAdded:Connect(function(char)
+			char:WaitForChild("HumanoidRootPart", 5)
+			updateDropdownsEvent()
+		end)
+		p.CharacterRemoving:Connect(updateDropdownsEvent)
+	end)
+
+	Players.PlayerRemoving:Connect(updateDropdownsEvent)
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		p.CharacterAdded:Connect(function(char)
+			char:WaitForChild("HumanoidRootPart", 5)
+			updateDropdownsEvent()
+		end)
+		p.CharacterRemoving:Connect(updateDropdownsEvent)
+	end
+
 	while screenGui.Parent do
-		task.wait(2)
-		refreshModelDropdown()
+		task.wait(10)
+		updateDropdownsEvent()
 	end
 end)
 headerDragArea.InputBegan:Connect(function(input)
