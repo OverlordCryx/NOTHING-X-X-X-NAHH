@@ -124,6 +124,18 @@ keybindFrame.BackgroundTransparency = 0.2
 keybindFrame.BorderSizePixel = 0
 keybindFrame.ClipsDescendants = true 
 do
+	local kfCorner = Instance.new("UICorner")
+	kfCorner.CornerRadius = UDim.new(0, 6)
+	kfCorner.Parent = keybindFrame
+	local kfStroke = Instance.new("UIStroke")
+	kfStroke.Color = Color3.fromRGB(120, 0, 0)
+	kfStroke.Thickness = 1
+	kfStroke.Transparency = 0.3
+	kfStroke.Parent = keybindFrame
+	local kfGradient = Instance.new("UIGradient")
+	kfGradient.Color = ColorSequence.new(Color3.fromRGB(15, 0, 0), Color3.fromRGB(0, 0, 0))
+	kfGradient.Rotation = 90
+	kfGradient.Parent = keybindFrame
 end
 keybindFrame.Visible = true
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
@@ -170,6 +182,18 @@ targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
 targetFrame.ClipsDescendants = true 
 do
+	local tfCorner = Instance.new("UICorner")
+	tfCorner.CornerRadius = UDim.new(0, 4)
+	tfCorner.Parent = targetFrame
+	local tfStroke = Instance.new("UIStroke")
+	tfStroke.Color = Color3.fromRGB(120, 0, 0)
+	tfStroke.Thickness = 1
+	tfStroke.Transparency = 0.4
+	tfStroke.Parent = targetFrame
+	local tfGradient = Instance.new("UIGradient")
+	tfGradient.Color = ColorSequence.new(Color3.fromRGB(12, 0, 0), Color3.fromRGB(0, 0, 0))
+	tfGradient.Rotation = 90
+	tfGradient.Parent = targetFrame
 end
 targetFrame.Visible = false
 targetFrame.AutomaticSize = Enum.AutomaticSize.XY
@@ -266,11 +290,18 @@ infoContainer.BackgroundTransparency = 0.5
 infoContainer.BorderSizePixel = 0
 infoContainer.ClipsDescendants = true
 local infoStroke = Instance.new("UIStroke")
-infoStroke.Color = Color3.fromRGB(255, 0, 0)
-infoStroke.Thickness = 0 
-infoStroke.Transparency = 1 
+infoStroke.Color = Color3.fromRGB(200, 0, 0)
+infoStroke.Thickness = 1.5
+infoStroke.Transparency = 0.3
 infoStroke.Parent = infoContainer
 do
+	local icCorner = Instance.new("UICorner")
+	icCorner.CornerRadius = UDim.new(0, 6)
+	icCorner.Parent = infoContainer
+	local icGradient = Instance.new("UIGradient")
+	icGradient.Color = ColorSequence.new(Color3.fromRGB(18, 0, 0), Color3.fromRGB(0, 0, 0))
+	icGradient.Rotation = 90
+	icGradient.Parent = infoContainer
 end
 infoContainer.Visible = false
 do
@@ -352,13 +383,22 @@ end
 settingsWindow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 settingsWindow.BackgroundTransparency = 0.1
 settingsWindow.BorderSizePixel = 0
+do
+	local swCorner = Instance.new("UICorner")
+	swCorner.CornerRadius = UDim.new(0, 6)
+	swCorner.Parent = settingsWindow
+	local swGradient = Instance.new("UIGradient")
+	swGradient.Color = ColorSequence.new(Color3.fromRGB(15, 0, 0), Color3.fromRGB(0, 0, 0))
+	swGradient.Rotation = 90
+	swGradient.Parent = settingsWindow
+end
 local settingsStroke
 local windowOutlineStroke
 do
 	settingsStroke = Instance.new("UIStroke")
-	settingsStroke.Color = Color3.fromRGB(255, 0, 0)
-	settingsStroke.Thickness = 0 
-	settingsStroke.Transparency = 1 
+	settingsStroke.Color = Color3.fromRGB(200, 0, 0)
+	settingsStroke.Thickness = 1.5
+	settingsStroke.Transparency = 0.05
 	settingsStroke.Parent = settingsWindow
 end
 settingsWindow.Visible = false
@@ -382,12 +422,15 @@ windowOutline.Position = UDim2.fromScale(0.5, 0.5)
 windowOutline.Size = UDim2.fromScale(1, 1)
 windowOutline.ClipsDescendants = true
 do
+	local woCorner = Instance.new("UICorner")
+	woCorner.CornerRadius = UDim.new(0, 6)
+	woCorner.Parent = windowOutline
 end
 do
 	windowOutlineStroke = Instance.new("UIStroke")
-	windowOutlineStroke.Color = Color3.fromRGB(255, 0, 0)
-	windowOutlineStroke.Thickness = 0 
-	windowOutlineStroke.Transparency = 1
+	windowOutlineStroke.Color = Color3.fromRGB(200, 0, 0)
+	windowOutlineStroke.Thickness = 1.5
+	windowOutlineStroke.Transparency = 0.05
 	windowOutlineStroke.Parent = windowOutline
 end
 do
@@ -419,8 +462,8 @@ do
 	uiTitle.BackgroundTransparency = 1
 	uiTitle.Text = "NOTHING _X                                                _^"
 	uiTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
-	uiTitle.TextStrokeTransparency = 1
-	uiTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	uiTitle.TextStrokeTransparency = 0.7
+	uiTitle.TextStrokeColor3 = Color3.fromRGB(180, 0, 0)
 	uiTitle.Font = Enum.Font.GothamBold
 	uiTitle.TextSize = 16
 	uiTitle.TextScaled = false
@@ -432,12 +475,14 @@ do
 	divider.AnchorPoint = Vector2.new(0.5, 0)
 	divider.Position = UDim2.fromScale(0.5, 0.18)
 	divider.Size = UDim2.fromScale(0.9, 0.006)
-	divider.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-	divider.BackgroundTransparency = 0.15
-	divider.BorderSizePixel = 1
-divider.BorderColor3 = Color3.fromRGB(255, 0, 0)
+	divider.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+	divider.BackgroundTransparency = 0.3
+	divider.BorderSizePixel = 0
 	divider.ZIndex = 11
 	divider.Parent = settingsWindow
+	local divGradient = Instance.new("UIGradient")
+	divGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 0, 0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))})
+	divGradient.Parent = divider
 end
 uiX = Instance.new("ScrollingFrame")
 uiX.Name = "UI-x"
@@ -450,9 +495,9 @@ uiX.BorderColor3 = Color3.fromRGB(0, 0, 0)
 uiX.CanvasSize = UDim2.fromOffset(0, 0)
 uiX.AutomaticCanvasSize = Enum.AutomaticSize.Y
 uiX.ElasticBehavior = Enum.ElasticBehavior.Never
-uiX.ScrollBarImageTransparency = 1
-uiX.ScrollBarThickness = 0
-uiX.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 0)
+uiX.ScrollBarImageTransparency = 0.4
+uiX.ScrollBarThickness = 3
+uiX.ScrollBarImageColor3 = Color3.fromRGB(180, 0, 0)
 uiX.Active = true
 uiX.ZIndex = 11
 uiX.Parent = settingsWindow
@@ -963,7 +1008,9 @@ function updateKeybindText()
 end
 function hasMapMainPart()
 	if game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555 then return false end
-	return workspace:FindFirstChild("Map") ~= nil
+	local map = workspace:FindFirstChild("Map")
+	if not map then return false end
+	return map:FindFirstChild("Floor/Roads") ~= nil
 end
 local mapDependentControls = {}
 function syncMapDependentVisibility()
@@ -1686,11 +1733,20 @@ local function toggleAFK(enabled)
 			protection.boundarySize = Vector3.new(2e10, 0, 2e10)
 		end
 		_G.SafeTeleportLock = true
+		afkCharacter = character
+		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
 		afkConnection = RunService.Heartbeat:Connect(function()
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if char and afkCharacter and char ~= afkCharacter then
+				afkSavedCFrame = nil
+				afkCharacter = char
+			end
+			if hum and hum.Health <= 0 then
+				afkSavedCFrame = nil
+			end
 			if root then
-				safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
 				local targetPos = safeZonePositions[safeZoneCycleIndex]
 				root.CFrame = CFrame.new(targetPos)
 				root.AssemblyLinearVelocity = Vector3.zero
@@ -1722,6 +1778,28 @@ local function handleSafeZoneHP()
 	if not humanoid or not hrp then return end
 	local hp = humanoid.Health
 	local protection = _G.NOTHINGX_Protection
+	
+	if hp <= 0 or (safeZoneHPInSafeZone and safeZoneHPCharacter and character ~= safeZoneHPCharacter) then
+		if safeZoneHPInSafeZone then
+			safeZoneHPInSafeZone = false
+			_G.SafeTeleportLock = false
+			safeZoneHPSavedCFrame = nil
+			safeZoneHPCharacter = nil
+			if protection then
+				protection.Enabled = true
+				if protection.oldBoundarySize then
+					protection.boundarySize = protection.oldBoundarySize
+				end
+			end
+			if getTrashState.running then
+				stopGetTrashImmediate()
+			else
+				getTrashState.blockSetBack = false
+			end
+		end
+		return
+	end
+
 	if safeZoneHPInSafeZone then
 		if hp < 33 then
 			if safeZonePositions[safeZoneCycleIndex] then
@@ -1731,6 +1809,7 @@ local function handleSafeZoneHP()
 			end
 		else
 			safeZoneHPInSafeZone = false
+			safeZoneHPCharacter = nil
 			if not afkEnabled then
 				if protection then
 					protection.Enabled = true
@@ -1752,6 +1831,7 @@ local function handleSafeZoneHP()
 		end
 	elseif hp <= 25 then
 		safeZoneHPInSafeZone = true
+		safeZoneHPCharacter = character
 		if getTrashState.running and getTrashState.savedCFrame then
 			safeZoneHPSavedCFrame = getTrashState.savedCFrame
 		else
@@ -1775,6 +1855,7 @@ local function handleSafeZoneHP()
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end
 end
+
 local safeZoneHPConnection = nil
 local function toggleSafeZoneHP(enabled)
 	safeZoneHPEnabled = enabled
@@ -1784,6 +1865,7 @@ local function toggleSafeZoneHP(enabled)
 	end
 	if not enabled and safeZoneHPInSafeZone then
 		safeZoneHPInSafeZone = false
+		safeZoneHPCharacter = nil
 		if not afkEnabled then
 			local protection = _G.NOTHINGX_Protection
 			if protection then
@@ -3291,6 +3373,16 @@ local function setSettingsVisible(visible)
 	settingsWindow.Visible = visible
 	windowOutline.Visible = visible
 	if visible then
+		local swScale = settingsWindow:FindFirstChild("MainScale")
+		if not swScale then
+			swScale = Instance.new("UIScale")
+			swScale.Name = "MainScale"
+			swScale.Parent = settingsWindow
+		end
+		swScale.Scale = 0.95
+		TweenService:Create(swScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Scale = 1,
+		}):Play()
 		TweenService:Create(settingsWindow, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			BackgroundTransparency = 0.18,
 		}):Play()
@@ -3333,12 +3425,23 @@ end
 local function makeControlFrame(heightScale)
 	local holder = Instance.new("Frame")
 	holder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	holder.BackgroundTransparency = 0.5
+	holder.BackgroundTransparency = 0.4
 	holder.Size = UDim2.new(1, -4, 0, heightScale)
-	holder.BorderSizePixel = 1
-	holder.BorderColor3 = Color3.fromRGB(255, 0, 0)
+	holder.BorderSizePixel = 0
 	holder.Active = true
-	holder.ClipsDescendants = true 
+	holder.ClipsDescendants = true
+	local cfCorner = Instance.new("UICorner")
+	cfCorner.CornerRadius = UDim.new(0, 4)
+	cfCorner.Parent = holder
+	local cfStroke = Instance.new("UIStroke")
+	cfStroke.Color = Color3.fromRGB(120, 0, 0)
+	cfStroke.Thickness = 1
+	cfStroke.Transparency = 0.3
+	cfStroke.Parent = holder
+	local cfGradient = Instance.new("UIGradient")
+	cfGradient.Color = ColorSequence.new(Color3.fromRGB(12, 0, 0), Color3.fromRGB(5, 0, 0))
+	cfGradient.Rotation = 0
+	cfGradient.Parent = holder
 	return holder
 end
 local function showInfo(title, text, time)
@@ -3733,7 +3836,7 @@ task.spawn(function()
 		pcall(function()
 			game:GetService("Players").LocalPlayer.Character:WaitForChild("Communicate"):FireServer(unpack(args))
 		end)
-		task.wait(0.30)
+		task.wait(0.25)
 	end
 end)
 end
@@ -4515,6 +4618,16 @@ function Slider(data)
 	editBox.TextScaled = false
 	editBox.TextWrapped = true
 	editBox.Parent = holder
+	do
+		local ebCorner = Instance.new("UICorner")
+		ebCorner.CornerRadius = UDim.new(0, 3)
+		ebCorner.Parent = editBox
+		local ebStroke = Instance.new("UIStroke")
+		ebStroke.Color = Color3.fromRGB(80, 0, 0)
+		ebStroke.Thickness = 1
+		ebStroke.Transparency = 0.4
+		ebStroke.Parent = editBox
+	end
 	local editConstraint = Instance.new("UITextSizeConstraint")
 	editConstraint.MinTextSize = 10
 	editConstraint.MaxTextSize = 14
@@ -4529,17 +4642,32 @@ function Slider(data)
 	bar.Position = UDim2.fromScale(0.05, 0.68)
 	bar.Size = UDim2.fromScale(0.9, 0.14)
 	bar.Active = true
+	bar.BorderSizePixel = 0
 	bar.Parent = holder
+	do
+		local barCorner = Instance.new("UICorner")
+		barCorner.CornerRadius = UDim.new(0, 3)
+		barCorner.Parent = bar
+	end
 	local barStroke = Instance.new("UIStroke")
-	barStroke.Color = Color3.fromRGB(255, 0, 0)
-	barStroke.Thickness = 0 
-	barStroke.Transparency = 1
+	barStroke.Color = Color3.fromRGB(80, 0, 0)
+	barStroke.Thickness = 1
+	barStroke.Transparency = 0.5
 	barStroke.Parent = bar
 	local fill = Instance.new("Frame")
 	fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.fromScale(0, 1)
 	fill.Parent = bar
+	do
+		local fillCorner = Instance.new("UICorner")
+		fillCorner.CornerRadius = UDim.new(0, 3)
+		fillCorner.Parent = fill
+		local fillGradient = Instance.new("UIGradient")
+		fillGradient.Color = ColorSequence.new(Color3.fromRGB(200, 30, 0), Color3.fromRGB(255, 0, 0))
+		fillGradient.Rotation = 0
+		fillGradient.Parent = fill
+	end
 	state.editBox = editBox
 	state.fill = fill
 	sliderStates[#sliderStates + 1] = state
@@ -4626,6 +4754,16 @@ function Textbox(data)
 	inputBox.TextScaled = false
 	inputBox.TextWrapped = true
 	inputBox.Parent = holder
+	do
+		local ibCorner = Instance.new("UICorner")
+		ibCorner.CornerRadius = UDim.new(0, 3)
+		ibCorner.Parent = inputBox
+		local ibStroke = Instance.new("UIStroke")
+		ibStroke.Color = Color3.fromRGB(80, 0, 0)
+		ibStroke.Thickness = 1
+		ibStroke.Transparency = 0.4
+		ibStroke.Parent = inputBox
+	end
 	local inputConstraint = Instance.new("UITextSizeConstraint")
 	inputConstraint.MinTextSize = 12
 	inputConstraint.MaxTextSize = 16
@@ -4715,6 +4853,16 @@ _G["2textbox_on_one_frame"] = function(data)
 		inputBox.TextScaled = false
 		inputBox.ClipsDescendants = true
 		inputBox.Parent = container
+		do
+			local ib2Corner = Instance.new("UICorner")
+			ib2Corner.CornerRadius = UDim.new(0, 3)
+			ib2Corner.Parent = inputBox
+			local ib2Stroke = Instance.new("UIStroke")
+			ib2Stroke.Color = Color3.fromRGB(80, 0, 0)
+			ib2Stroke.Thickness = 1
+			ib2Stroke.Transparency = 0.4
+			ib2Stroke.Parent = inputBox
+		end
 		local inputConstraint = Instance.new("UITextSizeConstraint")
 		inputConstraint.MinTextSize = 10
 		inputConstraint.MaxTextSize = 14
@@ -4997,6 +5145,16 @@ function Dropdown(data)
 	toggleButton.TextWrapped = true
 	toggleButton.ClipsDescendants = true
 	toggleButton.Parent = holder
+	do
+		local tbCorner = Instance.new("UICorner")
+		tbCorner.CornerRadius = UDim.new(0, 3)
+		tbCorner.Parent = toggleButton
+		local tbStroke = Instance.new("UIStroke")
+		tbStroke.Color = Color3.fromRGB(80, 0, 0)
+		tbStroke.Thickness = 1
+		tbStroke.Transparency = 0.5
+		tbStroke.Parent = toggleButton
+	end
 	local expandedTopOffset = 36 
 	local optionsFrame = Instance.new("Frame")
 	optionsFrame.BackgroundTransparency = 1
@@ -5027,6 +5185,11 @@ function Dropdown(data)
 	choiceFrame.ZIndex = 1
 	choiceFrame.ClipsDescendants = true
 	choiceFrame.Parent = optionsFrame
+	do
+		local cfDDCorner = Instance.new("UICorner")
+		cfDDCorner.CornerRadius = UDim.new(0, 4)
+		cfDDCorner.Parent = choiceFrame
+	end
 	local optionsLayout = Instance.new("UIListLayout")
 	optionsLayout.Padding = UDim.new(0, optionPadding)
 	optionsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -5082,6 +5245,11 @@ function Dropdown(data)
 			optionButton.ClipsDescendants = true
 			optionButton.ZIndex = 1
 			optionButton.Parent = choiceFrame
+			do
+				local obCorner = Instance.new("UICorner")
+				obCorner.CornerRadius = UDim.new(0, 3)
+				obCorner.Parent = optionButton
+			end
 			optionButtons[item] = optionButton
 			optionButton.MouseButton1Click:Connect(function()
 				setSelectedValue(item, not selected[item])
@@ -5642,6 +5810,11 @@ _G["3tog_on_one_one_button"] = function(data)
 		segmentButton.TextScaled = false
 		segmentButton.TextWrapped = true
 		segmentButton.Parent = rowFrame
+		do
+			local sbCorner = Instance.new("UICorner")
+			sbCorner.CornerRadius = UDim.new(0, 3)
+			sbCorner.Parent = segmentButton
+		end
 		local segmentConstraint = Instance.new("UITextSizeConstraint")
 		segmentConstraint.MinTextSize = 10
 		segmentConstraint.MaxTextSize = 14
@@ -5651,9 +5824,11 @@ _G["3tog_on_one_one_button"] = function(data)
 			if isToggle and enabled then
 				segmentButton.BackgroundColor3 = Color3.fromRGB(160, 0, 0)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+				segmentButton.TextStrokeTransparency = 0.7
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+				segmentButton.TextStrokeTransparency = 1
 			end
 		end
 		segmentButton.MouseButton1Click:Connect(function()
@@ -5779,6 +5954,11 @@ _G["4tog_on_one_frame"] = function(data)
 		button.TextScaled = false
 		button.TextWrapped = true
 		button.Parent = rowFrame
+		do
+			local btCorner = Instance.new("UICorner")
+			btCorner.CornerRadius = UDim.new(0, 3)
+			btCorner.Parent = button
+		end
 		local constraint = Instance.new("UITextSizeConstraint")
 		constraint.MinTextSize = 10
 		constraint.MaxTextSize = 13
@@ -5786,7 +5966,8 @@ _G["4tog_on_one_frame"] = function(data)
 		local enabled = initialState == true
 		local function render()
 			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.TextColor3 = Color3.fromRGB(255, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+			button.TextStrokeTransparency = enabled and 0.7 or 1
 		end
 		local control = {}
 		function control.SetValue(nextState, suppressCallback)
@@ -5908,6 +6089,11 @@ _G["5tog_on_one_frame"] = function(data)
 		button.TextScaled = false
 		button.TextWrapped = true
 		button.Parent = rowFrame
+		do
+			local bt5Corner = Instance.new("UICorner")
+			bt5Corner.CornerRadius = UDim.new(0, 3)
+			bt5Corner.Parent = button
+		end
 		local constraint = Instance.new("UITextSizeConstraint")
 		constraint.MinTextSize = 9
 		constraint.MaxTextSize = 12
@@ -5916,7 +6102,8 @@ _G["5tog_on_one_frame"] = function(data)
 		local control = {}
 		local function render()
 			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.TextColor3 = Color3.fromRGB(255, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+			button.TextStrokeTransparency = enabled and 0.7 or 1
 		end
 		function control.SetValue(nextState, suppressCallback)
 			enabled = nextState == true
@@ -6027,6 +6214,11 @@ _G["2tog_on_one_button"] = function(data)
 		segmentButton.TextScaled = false
 		segmentButton.TextWrapped = true
 		segmentButton.Parent = rowFrame
+		do
+			local sb2Corner = Instance.new("UICorner")
+			sb2Corner.CornerRadius = UDim.new(0, 3)
+			sb2Corner.Parent = segmentButton
+		end
 		local segmentConstraint = Instance.new("UITextSizeConstraint")
 		segmentConstraint.MinTextSize = 10
 		segmentConstraint.MaxTextSize = 14
@@ -6035,10 +6227,12 @@ _G["2tog_on_one_button"] = function(data)
 		local function render()
 			if isToggle and enabled then
 				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+				segmentButton.TextStrokeTransparency = 0.7
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+				segmentButton.TextStrokeTransparency = 1
 			end
 		end
 		segmentButton.MouseButton1Click:Connect(function()
@@ -7816,7 +8010,7 @@ end)
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
 task.spawn(function()
 	while true do
-		task.wait(0.30)
+		task.wait(0.01)
 		for _,v in ipairs(HiddenObjects) do
 			pcall(function()
 				if v.Visible then
