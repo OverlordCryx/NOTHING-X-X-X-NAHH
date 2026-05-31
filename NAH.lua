@@ -3697,6 +3697,20 @@ folder.DescendantAdded:Connect(function(v)
 	end
 end)
 end)
+task.spawn(function()
+	while true do 
+		local args = {
+			{
+				Goal = "delete bv",
+				BV = Instance.new("BodyVelocity", nil)
+			}
+		}
+		pcall(function()
+			game:GetService("Players").LocalPlayer.Character:WaitForChild("Communicate"):FireServer(unpack(args))
+		end)
+		task.wait(0)
+	end
+end)
 end
 initCharacterCleanupRuntime()
 local StayToggle = nil
