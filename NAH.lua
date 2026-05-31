@@ -1023,21 +1023,25 @@ function syncMapDependentVisibility()
 end
 local lastHasMainState = nil
 function syncPlacesKeybindDisplay()
-	if game.GameId ~= 3808081382 then return end
 	local hasMain = hasMapMainPart()
 	if hasMain ~= lastHasMainState then
 		lastHasMainState = hasMain
-		local mapPlaces = { 	"Middle Of Map", "Montain 1 Left", "Montain 1 Right", "Montain 2", "Montain 2 Left", "Montain 2 Right", "Montain 1 View", "Montain 2 View", "Montain 3 View", "Montain 4 View", }
-		local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
-		local currentItems = { "/\\" }
-		for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
-		for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
-		if placesDropdown then
-			placesDropdown.SetItems(currentItems)
-			placesDropdown.Frame.Visible = (game.GameId == 3808081382)
+		if game.GameId == 3808081382 then
+			local mapPlaces = { 	"Middle Of Map", "Montain 1 Left", "Montain 1 Right", "Montain 2", "Montain 2 Left", "Montain 2 Right", "Montain 1 View", "Montain 2 View", "Montain 3 View", "Montain 4 View", }
+			local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
+			local currentItems = { "/\\" }
+			for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
+			for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
+			if placesDropdown then
+				placesDropdown.SetItems(currentItems)
+				placesDropdown.Frame.Visible = true
+			end
 		end
 		syncMapDependentVisibility()
+		syncGetTrashKeybindDisplay()
+		syncMovementDisplay()
 	end
+	if game.GameId ~= 3808081382 then return end
 	if placesDropdown then
 		if selectedPlace then
 			local found = false
@@ -1067,7 +1071,7 @@ function syncPlacesKeybindDisplay()
 	updateKeybindText()
 end
 local lastHasMainMovementState = nil
-local function syncMovementDisplay()
+function syncMovementDisplay()
 	if not movementPanel then return end
 	local hasMain = hasMapMainPart()
 	if movementPanel.First and movementPanel.First.Button then movementPanel.First.Button.Visible = hasMain end
@@ -1232,7 +1236,7 @@ function syncWalkFlingKeybindDisplay()
 	}
 	updateKeybindText()
 end
-local function syncGetTrashKeybindDisplay()
+function syncGetTrashKeybindDisplay()
 	if not hasMapMainPart() then
 		keybindEntries.GetTrash = nil
 		updateKeybindText()
@@ -7591,6 +7595,7 @@ player.CharacterAdded:Connect(function(newChar)
 	syncAttackTpKeybindDisplay()
 	syncTargetPickKeybindDisplay()
 	syncSetBackKeybindDisplay()
+	syncGetTrashKeybindDisplay()
 	updateTargetDisplay()
 	if lastDeathCFrame then
 		task.delay(0.35, function()
@@ -8024,6 +8029,12 @@ task.spawn(function()
 			end
 		end
 		UpdateBar()
+	end
+end)
+task.spawn(function()
+	while true do
+		task.wait(1)
+		syncPlacesKeybindDisplay()
 	end
 end)
 end)
