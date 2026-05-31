@@ -417,7 +417,7 @@ do
 	uiTitle.Position = UDim2.fromScale(0.05, 0.06)
 	uiTitle.Size = UDim2.fromScale(0.52, 0.1)
 	uiTitle.BackgroundTransparency = 1
-	uiTitle.Text = "NOTHING _X"
+	uiTitle.Text = "NOTHING _X                                                _^"
 	uiTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
 	uiTitle.TextStrokeTransparency = 1
 	uiTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
