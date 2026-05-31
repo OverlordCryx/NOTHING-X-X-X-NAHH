@@ -1,3 +1,5 @@
+task.wait(1.5)
+warn("NOTHING _X -X_X-")
 repeat
     task.wait();
 until game:IsLoaded();
@@ -1372,17 +1374,26 @@ function setAuraFlingEnabled(enabled)
 								if not auraFlingEnabled or not myRoot.Parent then
 									break
 								end
+								local flingDir = (targetRoot.CFrame.Position - myPosition)
+								if flingDir.Magnitude < 0.001 then
+									flingDir = targetRoot.CFrame.LookVector
+								else
+									flingDir = flingDir.Unit
+								end
 								overpowerRootState(
 									myRoot,
 									targetRoot.CFrame,
-									(targetRoot.CFrame.Position - myPosition).Unit * flingPower + Vector3.new(0, flingPower * 0.5, 0),
+									flingDir * flingPower + Vector3.new(0, flingPower * 0.5, 0),
 									Vector3.new(flingPower, flingPower, flingPower)
 								)
+								nextFrame()  -- wait for physics to process fling before next target
+								if not auraFlingEnabled or not myRoot.Parent then
+									break
+								end
 							end
 						end
 					end
 					if touchedAny and myRoot.Parent then
-						nextFrame()
 						overpowerRootState(myRoot, savedCFrame, Vector3.zero, Vector3.zero)
 					end
 				end
@@ -2819,7 +2830,7 @@ end
 local lastSelectableModelsUpdate = 0
 local lastWorkspaceScan = 0
 local cachedSelectableModels = {}
-local function getSelectableTargetModels()
+function getSelectableTargetModels()
 	local now = tick()
 	if now - lastSelectableModelsUpdate < 0.2 then
 		return cachedSelectableModels
