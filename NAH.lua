@@ -1,10 +1,8 @@
-
+task.wait(1.5)
+warn("NOTHING _X -X_X-")
 repeat
     task.wait();
 until game:IsLoaded();
-
-task.wait(1.5)
-warn("NOTHING _X -X_X-")
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
@@ -1113,8 +1111,6 @@ local function toggleVoidDead(state)
 	end
 	if canSaveSetBackPosition(character, hrp, humanoid) then
 		voidDeadLastCF = hrp.CFrame
-	elseif setBackSavedCFrame then
-		voidDeadLastCF = setBackSavedCFrame
 	else
 		voidDeadLastCF = hrp.CFrame
 	end
@@ -3737,7 +3733,7 @@ task.spawn(function()
 		pcall(function()
 			game:GetService("Players").LocalPlayer.Character:WaitForChild("Communicate"):FireServer(unpack(args))
 		end)
-		task.wait(0)
+		task.wait(0.30)
 	end
 end)
 end
@@ -7820,7 +7816,7 @@ end)
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
 task.spawn(function()
 	while true do
-		task.wait(0)
+		task.wait(0.30)
 		for _,v in ipairs(HiddenObjects) do
 			pcall(function()
 				if v.Visible then
