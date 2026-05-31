@@ -784,11 +784,11 @@ local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
-	Vector3.new(9e9, -666, 9e9),
-	Vector3.new(-9e9, -666, 9e9),
-	Vector3.new(9e9, -666, -9e9),
-	Vector3.new(-9e9, -666, -9e9),
-	Vector3.new(0, -666, 0)
+	Vector3.new(9e9, -6666, 9e9),
+	Vector3.new(-9e9, -6666, 9e9),
+	Vector3.new(9e9, -6666, -9e9),
+	Vector3.new(-9e9, -6666, -9e9),
+	Vector3.new(0, -6666, 0)
 }
 autoTpEnabled = false
 trashBlockEnabled = false
@@ -1177,7 +1177,7 @@ local function toggleVoidDead(state)
 			end
 			return
 		end
-		hrp.CFrame = CFrame.new(hrp.Position.X, -666, hrp.Position.Z)
+		hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end)
@@ -3910,7 +3910,7 @@ task.spawn(function()
         local connection
         connection = game:GetService("RunService").Heartbeat:Connect(function()
             if not hrp or not hrp.Parent then return end
-            hrp.CFrame = CFrame.new(savedCFrame.X, -666, savedCFrame.Z)
+            hrp.CFrame = CFrame.new(savedCFrame.X, -6666, savedCFrame.Z)
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
         end)
@@ -4443,7 +4443,7 @@ do
 	local BOUNDARY_X = 200000
 	local BOUNDARY_Z = 200000
 	local BOUNDARY_Y_DOWN = -10000
-	local CLIENT_MOVE_Y = -480
+	local CLIENT_MOVE_Y = -450
 	local safePositions = {}
 	local MAX_SAFE_POSITIONS = 10
 	local displacedClient = nil
@@ -6717,6 +6717,75 @@ if game.GameId == 3808081382 then
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
+
+button({
+	name = "Void All & TP Back",
+	fun = function()
+		task.spawn(function()
+			local currentCharacter = player.Character
+			local myRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+			if not myRoot then return end
+			local savedPos = myRoot.CFrame
+			
+			local targetRoots = {}
+			for _, targetModel in ipairs(getSelectableTargetModels()) do
+				if not isTargetBlacklisted(targetModel, game:GetService("Players"):GetPlayerFromCharacter(targetModel)) then
+					local targetRoot = getRootUniversal(targetModel)
+					if targetRoot then
+						targetRoots[#targetRoots + 1] = targetRoot
+					end
+				end
+			end
+
+			for _, targetRoot in ipairs(targetRoots) do
+				myRoot.CFrame = targetRoot.CFrame
+				task.wait(0.15)
+				myRoot.CFrame = CFrame.new(myRoot.Position.X, -6666, myRoot.Position.Z)
+				myRoot.AssemblyLinearVelocity = Vector3.zero
+				myRoot.AssemblyAngularVelocity = Vector3.zero
+				task.wait(0.2)
+			end
+
+			myRoot.CFrame = savedPos
+			myRoot.AssemblyLinearVelocity = Vector3.zero
+			myRoot.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end
+})
+
+button({
+	name = "Fling All & TP Back",
+	fun = function()
+		task.spawn(function()
+			local currentCharacter = player.Character
+			local myRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+			if not myRoot then return end
+			local savedPos = myRoot.CFrame
+
+			local targetRoots = {}
+			for _, targetModel in ipairs(getSelectableTargetModels()) do
+				if not isTargetBlacklisted(targetModel, game:GetService("Players"):GetPlayerFromCharacter(targetModel)) then
+					local targetRoot = getRootUniversal(targetModel)
+					if targetRoot then
+						targetRoots[#targetRoots + 1] = targetRoot
+					end
+				end
+			end
+
+			for _, targetRoot in ipairs(targetRoots) do
+				local t = tick()
+				while tick() - t < 0.25 do
+					applyOrbitFlingStep(myRoot, targetRoot, 0.016, 1e12)
+					game:GetService("RunService").Heartbeat:Wait()
+				end
+			end
+
+			myRoot.CFrame = savedPos
+			myRoot.AssemblyLinearVelocity = Vector3.zero
+			myRoot.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end
+})
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
 local function getTPModeItems()
