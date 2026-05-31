@@ -1799,7 +1799,7 @@ local function handleSafeZoneHP()
 	end
 
 	if safeZoneHPInSafeZone then
-		if hp < 45 then
+		if hp < 34 then
 			if safeZonePositions[safeZoneCycleIndex] then
 				hrp.Anchored = false
 				character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
@@ -1828,7 +1828,7 @@ local function handleSafeZoneHP()
 			end
 			safeZoneHPSavedCFrame = nil
 		end
-	elseif hp <= 35 then
+	elseif hp <= 26 then
 		safeZoneHPInSafeZone = true
 		safeZoneHPCharacter = character
 		if getTrashState.running and getTrashState.savedCFrame then
