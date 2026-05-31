@@ -177,7 +177,7 @@ targetFrame.AnchorPoint = Vector2.new(1, 0)
 targetFrame.Position = UDim2.new(1, -260, 0, 10)
 targetFrame.Size = UDim2.fromScale(0.1, 0.02)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-targetFrame.BackgroundTransparency = 0.5
+targetFrame.BackgroundTransparency = 0.3
 targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
 targetFrame.ClipsDescendants = true 
@@ -4448,8 +4448,8 @@ do
 	local MAX_SAFE_POSITIONS = 10
 	local displacedClient = nil
 	local originalParent = nil
-	local function forceClientDisplace(char, pos)
-		if pos.Y <= CLIENT_MOVE_Y then
+	local function forceClientDisplace(char, pos, isExtremeFling)
+		if pos.Y <= CLIENT_MOVE_Y or isExtremeFling then
 			local charHandler = char:FindFirstChild("CharacterHandler")
 			local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
 			if clientModule then
@@ -4486,9 +4486,15 @@ do
 				end
 			end
 		end
-		local isFar = math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z
-		local isVoid = pos.Y <= BOUNDARY_Y_DOWN
-		if ((isFar and not _G.SafeTeleportLock) or isVoid) and alive then
+		local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
+		local vel = hrp.AssemblyLinearVelocity
+		local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
+		local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+		local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
+		local isExtremeFling = isNanPos or isNanVel or isHugeVel
+		local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
+		local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
+		if ((isFar and not _G.SafeTeleportLock) or isVoid or isNanVel or isHugeVel) and alive then
 			for i = 1, #safePositions do
 				local targetCF = safePositions[i]
 				if targetCF then
@@ -4503,8 +4509,8 @@ do
 				end
 			end
 		end
-		forceClientDisplace(char, pos)
-		if pos.Y > CLIENT_MOVE_Y and displacedClient and originalParent then
+		forceClientDisplace(char, pos, isExtremeFling)
+		if not isExtremeFling and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
 			pcall(function()
 				if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
 					displacedClient.Parent = originalParent
@@ -4526,7 +4532,13 @@ do
 	local function setupHrpListeners(hrp, char)
 		if not hrp then return end
 		local function fastCheck()
-			forceClientDisplace(char, hrp.Position)
+			local pos = hrp.Position
+			local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
+			local vel = hrp.AssemblyLinearVelocity
+			local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
+			local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+			local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
+			forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
 		end
 		hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
 		hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
@@ -6717,75 +6729,6 @@ if game.GameId == 3808081382 then
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
-
-button({
-	name = "Void All & TP Back",
-	fun = function()
-		task.spawn(function()
-			local currentCharacter = player.Character
-			local myRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-			if not myRoot then return end
-			local savedPos = myRoot.CFrame
-			
-			local targetRoots = {}
-			for _, targetModel in ipairs(getSelectableTargetModels()) do
-				if not isTargetBlacklisted(targetModel, game:GetService("Players"):GetPlayerFromCharacter(targetModel)) then
-					local targetRoot = getRootUniversal(targetModel)
-					if targetRoot then
-						targetRoots[#targetRoots + 1] = targetRoot
-					end
-				end
-			end
-
-			for _, targetRoot in ipairs(targetRoots) do
-				myRoot.CFrame = targetRoot.CFrame
-				task.wait(0.15)
-				myRoot.CFrame = CFrame.new(myRoot.Position.X, -6666, myRoot.Position.Z)
-				myRoot.AssemblyLinearVelocity = Vector3.zero
-				myRoot.AssemblyAngularVelocity = Vector3.zero
-				task.wait(0.2)
-			end
-
-			myRoot.CFrame = savedPos
-			myRoot.AssemblyLinearVelocity = Vector3.zero
-			myRoot.AssemblyAngularVelocity = Vector3.zero
-		end)
-	end
-})
-
-button({
-	name = "Fling All & TP Back",
-	fun = function()
-		task.spawn(function()
-			local currentCharacter = player.Character
-			local myRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-			if not myRoot then return end
-			local savedPos = myRoot.CFrame
-
-			local targetRoots = {}
-			for _, targetModel in ipairs(getSelectableTargetModels()) do
-				if not isTargetBlacklisted(targetModel, game:GetService("Players"):GetPlayerFromCharacter(targetModel)) then
-					local targetRoot = getRootUniversal(targetModel)
-					if targetRoot then
-						targetRoots[#targetRoots + 1] = targetRoot
-					end
-				end
-			end
-
-			for _, targetRoot in ipairs(targetRoots) do
-				local t = tick()
-				while tick() - t < 0.25 do
-					applyOrbitFlingStep(myRoot, targetRoot, 0.016, 1e12)
-					game:GetService("RunService").Heartbeat:Wait()
-				end
-			end
-
-			myRoot.CFrame = savedPos
-			myRoot.AssemblyLinearVelocity = Vector3.zero
-			myRoot.AssemblyAngularVelocity = Vector3.zero
-		end)
-	end
-})
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
 local function getTPModeItems()
