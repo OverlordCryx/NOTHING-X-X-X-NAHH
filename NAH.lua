@@ -1,8 +1,10 @@
-task.wait(1.5)
-warn("NOTHING _X -X_X-")
+
 repeat
     task.wait();
 until game:IsLoaded();
+
+task.wait(1.5)
+warn("NOTHING _X -X_X-")
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
@@ -745,11 +747,11 @@ local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
-	Vector3.new(9e9, -750, 9e9),
-	Vector3.new(-9e9, -750, 9e9),
-	Vector3.new(9e9, -750, -9e9),
-	Vector3.new(-9e9, -750, -9e9),
-	Vector3.new(0, -750, 0)
+	Vector3.new(9e9, -666, 9e9),
+	Vector3.new(-9e9, -666, 9e9),
+	Vector3.new(9e9, -666, -9e9),
+	Vector3.new(-9e9, -666, -9e9),
+	Vector3.new(0, -666, 0)
 }
 autoTpEnabled = false
 trashBlockEnabled = false
@@ -1134,7 +1136,7 @@ local function toggleVoidDead(state)
 			end
 			return
 		end
-		hrp.CFrame = CFrame.new(hrp.Position.X, -850, hrp.Position.Z)
+		hrp.CFrame = CFrame.new(hrp.Position.X, -666, hrp.Position.Z)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 	end)
@@ -1386,7 +1388,7 @@ function setAuraFlingEnabled(enabled)
 									flingDir * flingPower + Vector3.new(0, flingPower * 0.5, 0),
 									Vector3.new(flingPower, flingPower, flingPower)
 								)
-								nextFrame()  -- wait for physics to process fling before next target
+								nextFrame()  
 								if not auraFlingEnabled or not myRoot.Parent then
 									break
 								end
@@ -1679,6 +1681,9 @@ local function toggleAFK(enabled)
 		else
 			afkSavedCFrame = safeZoneHPSavedCFrame
 		end
+		if voidDeadActive then
+			toggleVoidDead(false)
+		end
 		if protection then
 			protection.Enabled = false
 			protection.oldBoundarySize = protection.boundarySize
@@ -1721,37 +1726,57 @@ local function handleSafeZoneHP()
 	if not humanoid or not hrp then return end
 	local hp = humanoid.Health
 	local protection = _G.NOTHINGX_Protection
-	if hp <= 25 then
-		if not safeZoneHPInSafeZone then
-			safeZoneHPInSafeZone = true
-			safeZoneHPSavedCFrame = hrp.CFrame
-			if protection then
-				protection.Enabled = false
-				protection.oldBoundarySize = protection.boundarySize
-				protection.boundarySize = Vector3.new(2e10, 0, 2e10)
+	if safeZoneHPInSafeZone then
+		if hp < 33 then
+			if safeZonePositions[safeZoneCycleIndex] then
+				hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
 			end
-			_G.SafeTeleportLock = true
-			safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-			hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
 		else
-			safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-			hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
-		end
-	elseif safeZoneHPInSafeZone and hp >= 48 then
-		safeZoneHPInSafeZone = false
-		if not afkEnabled then
-			if protection then
-				protection.Enabled = true
-				if protection.oldBoundarySize then
-					protection.boundarySize = protection.oldBoundarySize
+			safeZoneHPInSafeZone = false
+			if not afkEnabled then
+				if protection then
+					protection.Enabled = true
+					if protection.oldBoundarySize then
+						protection.boundarySize = protection.oldBoundarySize
+					end
+				end
+				_G.SafeTeleportLock = false
+				if safeZoneHPSavedCFrame then
+					hrp.CFrame = safeZoneHPSavedCFrame
 				end
 			end
-			_G.SafeTeleportLock = false
-			if safeZoneHPSavedCFrame then
-				hrp.CFrame = safeZoneHPSavedCFrame
+			if getTrashState.running then
+				stopGetTrashImmediate()
+			else
+				getTrashState.blockSetBack = false
 			end
+			safeZoneHPSavedCFrame = nil
 		end
-		safeZoneHPSavedCFrame = nil
+	elseif hp <= 25 then
+		safeZoneHPInSafeZone = true
+		if getTrashState.running and getTrashState.savedCFrame then
+			safeZoneHPSavedCFrame = getTrashState.savedCFrame
+		else
+			safeZoneHPSavedCFrame = hrp.CFrame
+		end
+		if voidDeadActive then
+			toggleVoidDead(false)
+		end
+		if attackTpEnabled then
+			toggleAttackTp(false)
+		end
+		if protection then
+			protection.Enabled = false
+			protection.oldBoundarySize = protection.boundarySize
+			protection.boundarySize = Vector3.new(2e10, 0, 2e10)
+		end
+		_G.SafeTeleportLock = true
+		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+		hrp.CFrame = CFrame.new(safeZonePositions[safeZoneCycleIndex])
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
 	end
 end
 local safeZoneHPConnection = nil
@@ -1777,6 +1802,11 @@ local function toggleSafeZoneHP(enabled)
 			if hrp and safeZoneHPSavedCFrame then
 				hrp.CFrame = safeZoneHPSavedCFrame
 			end
+		end
+		if getTrashState.running then
+			stopGetTrashImmediate()
+		else
+			getTrashState.blockSetBack = false
 		end
 		safeZoneHPSavedCFrame = nil
 	end
@@ -3621,7 +3651,6 @@ local function isCounter(acc)
 	if not acc or not acc:IsA("Accessory") then return false end
 	return acc.Name:lower():find("counter") ~= nil
 end
-
 local function usunPusteAccessory(char)
 	if not char then return end
 	for _, obj in ipairs(char:GetChildren()) do
@@ -3782,7 +3811,7 @@ task.spawn(function()
         local connection
         connection = game:GetService("RunService").Heartbeat:Connect(function()
             if not hrp or not hrp.Parent then return end
-            hrp.CFrame = CFrame.new(savedCFrame.X, -850, savedCFrame.Z)
+            hrp.CFrame = CFrame.new(savedCFrame.X, -666, savedCFrame.Z)
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
         end)
@@ -4075,12 +4104,10 @@ task.spawn(function()
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
     end
-    
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
     fakerPingHub.LayoutOrder = 2
     fakerPingHub.ClipsDescendants = true
-    
     local fpTitle = Instance.new("TextLabel")
     fpTitle.BackgroundTransparency = 1
     fpTitle.Position = UDim2.new(0, 16, 0, 8)
@@ -4092,7 +4119,6 @@ task.spawn(function()
     fpTitle.TextSize = 14
     fpTitle.TextXAlignment = Enum.TextXAlignment.Left
     fpTitle.Parent = fakerPingHub
-    
     local fpLabel = Instance.new("TextLabel")
     fpLabel.BackgroundTransparency = 1
     fpLabel.Position = UDim2.new(0, 16, 0, 32)
@@ -4104,7 +4130,6 @@ task.spawn(function()
     fpLabel.TextSize = 13
     fpLabel.TextXAlignment = Enum.TextXAlignment.Left
     fpLabel.Parent = fakerPingHub
-
     local fpBox = Instance.new("TextBox")
     fpBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     fpBox.BackgroundTransparency = 0.5
@@ -4121,27 +4146,22 @@ task.spawn(function()
     fpBox.TextStrokeTransparency = 1
     fpBox.TextSize = 13
     fpBox.Parent = fakerPingHub
-    
     local fpBoxConstraint = Instance.new("UITextSizeConstraint")
     fpBoxConstraint.MinTextSize = 10
     fpBoxConstraint.MaxTextSize = 14
     fpBoxConstraint.Parent = fpBox
-    
     fpBox:GetPropertyChangedSignal("Text"):Connect(function()
         local text = fpBox.Text
         local filtered = text:gsub("[^0-9]", "")
         if filtered ~= text then fpBox.Text = filtered end
     end)
-
     local lastValidPing = getSavedControlValue("FakerPingValue")
     if lastValidPing ~= nil then
         fpBox.Text = tostring(lastValidPing)
     end
-    
     fpBox.Focused:Connect(function()
         fpBox.Text = ""
     end)
-
     fpBox.FocusLost:Connect(function()
         local rawText = fpBox.Text
         if rawText == "" then
@@ -4161,7 +4181,6 @@ task.spawn(function()
             setSavedControlValue("FakerPingValue", nil)
         end
     end)
-    
     task.spawn(function()
         while true do
             if lastValidPing ~= nil then
@@ -4175,7 +4194,6 @@ task.spawn(function()
             task.wait(0.5)
         end
     end)
-
     if player.Character then
         setupCharacter(player.Character)
     end
@@ -4505,13 +4523,11 @@ function Slider(data)
 	editConstraint.MinTextSize = 10
 	editConstraint.MaxTextSize = 14
 	editConstraint.Parent = editBox
-	
 	editBox:GetPropertyChangedSignal("Text"):Connect(function()
 		local text = editBox.Text
 		local filtered = text:gsub("[^-0-9%.]", "")
 		if filtered ~= text then editBox.Text = filtered end
 	end)
-
 	local bar = Instance.new("Frame")
 	bar.BackgroundColor3 = Color3.fromRGB(35, 0, 0)
 	bar.Position = UDim2.fromScale(0.05, 0.68)
@@ -4618,13 +4634,11 @@ function Textbox(data)
 	inputConstraint.MinTextSize = 12
 	inputConstraint.MaxTextSize = 16
 	inputConstraint.Parent = inputBox
-	
 	inputBox:GetPropertyChangedSignal("Text"):Connect(function()
 		local text = inputBox.Text
 		local filtered = text:gsub("[^-0-9%.]", "")
 		if filtered ~= text then inputBox.Text = filtered end
 	end)
-
 	inputBox.FocusLost:Connect(function(enterPressed)
 		if callback then
 			callback(inputBox.Text, enterPressed)
