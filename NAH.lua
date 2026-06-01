@@ -177,7 +177,7 @@ targetFrame.AnchorPoint = Vector2.new(1, 0)
 targetFrame.Position = UDim2.new(1, -260, 0, 10)
 targetFrame.Size = UDim2.fromScale(0.1, 0.02)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-targetFrame.BackgroundTransparency = 0.3
+targetFrame.BackgroundTransparency = 0.25
 targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
 targetFrame.ClipsDescendants = true 
@@ -286,7 +286,7 @@ infoContainer.AnchorPoint = Vector2.new(0.5, 0)
 infoContainer.Position = UDim2.fromScale(0.5, 0.1) 
 infoContainer.AutomaticSize = Enum.AutomaticSize.XY
 infoContainer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-infoContainer.BackgroundTransparency = 0.5
+infoContainer.BackgroundTransparency = 0.25
 infoContainer.BorderSizePixel = 0
 infoContainer.ClipsDescendants = true
 local infoStroke = Instance.new("UIStroke")
@@ -782,6 +782,9 @@ local afkConnection = nil
 local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
+local safeZoneHPCharacter = nil
+local safeZoneHPThresholdEnter = 35
+local safeZoneHPThresholdExit = 100
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
 	Vector3.new(9e9, -6666, 9e9),
@@ -1789,6 +1792,65 @@ local function toggleAFK(enabled)
 	end
 	return afkEnabled and "ON" or "OFF"
 end
+local function safeZoneRestoreProtection()
+	local protection = _G.NOTHINGX_Protection
+	if protection then
+		protection.Enabled = true
+		if protection.oldBoundarySize then
+			protection.boundarySize = protection.oldBoundarySize
+		end
+	end
+	_G.SafeTeleportLock = false
+end
+local function safeZoneDisableProtection()
+	local protection = _G.NOTHINGX_Protection
+	if protection then
+		protection.Enabled = false
+		protection.oldBoundarySize = protection.boundarySize
+		protection.boundarySize = Vector3.new(2e10, 0, 2e10)
+	end
+	_G.SafeTeleportLock = true
+end
+local function safeZoneTeleportToSafe(character, hrp)
+	safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+	hrp.Anchored = false
+	character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+end
+local function safeZoneExitCleanup(hrp)
+	safeZoneHPInSafeZone = false
+	safeZoneHPCharacter = nil
+	if not afkEnabled then
+		safeZoneRestoreProtection()
+		if hrp and safeZoneHPSavedCFrame then
+			hrp.CFrame = safeZoneHPSavedCFrame
+		end
+	end
+	if getTrashState.running then
+		stopGetTrashImmediate()
+	else
+		getTrashState.blockSetBack = false
+	end
+	safeZoneHPSavedCFrame = nil
+end
+local function safeZoneEnterSafeZone(character, hrp)
+	safeZoneHPInSafeZone = true
+	safeZoneHPCharacter = character
+	if getTrashState.running and getTrashState.savedCFrame then
+		safeZoneHPSavedCFrame = getTrashState.savedCFrame
+	else
+		safeZoneHPSavedCFrame = hrp.CFrame
+	end
+	if voidDeadActive then
+		toggleVoidDead(false)
+	end
+	if attackTpEnabled then
+		toggleAttackTp(false)
+	end
+	safeZoneDisableProtection()
+	safeZoneTeleportToSafe(character, hrp)
+end
 local function handleSafeZoneHP()
 	if not safeZoneHPEnabled or afkEnabled then return end
 	local character = player.Character
@@ -1796,20 +1858,14 @@ local function handleSafeZoneHP()
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if not humanoid or not hrp then return end
 	local hp = humanoid.Health
-	local protection = _G.NOTHINGX_Protection
-	
+	local maxHp = humanoid.MaxHealth
+
 	if hp <= 0 or (safeZoneHPInSafeZone and safeZoneHPCharacter and character ~= safeZoneHPCharacter) then
 		if safeZoneHPInSafeZone then
 			safeZoneHPInSafeZone = false
-			_G.SafeTeleportLock = false
-			safeZoneHPSavedCFrame = nil
 			safeZoneHPCharacter = nil
-			if protection then
-				protection.Enabled = true
-				if protection.oldBoundarySize then
-					protection.boundarySize = protection.oldBoundarySize
-				end
-			end
+			safeZoneHPSavedCFrame = nil
+			safeZoneRestoreProtection()
 			if getTrashState.running then
 				stopGetTrashImmediate()
 			else
@@ -1820,97 +1876,55 @@ local function handleSafeZoneHP()
 	end
 
 	if safeZoneHPInSafeZone then
-		if hp < 34 then
+		local exitHp = math.min(safeZoneHPThresholdExit, maxHp)
+		if hp >= exitHp then
+			safeZoneExitCleanup(hrp)
+		else
 			if safeZonePositions[safeZoneCycleIndex] then
 				hrp.Anchored = false
 				character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
 				hrp.AssemblyLinearVelocity = Vector3.zero
 				hrp.AssemblyAngularVelocity = Vector3.zero
 			end
-		else
-			safeZoneHPInSafeZone = false
-			safeZoneHPCharacter = nil
-			if not afkEnabled then
-				if protection then
-					protection.Enabled = true
-					if protection.oldBoundarySize then
-						protection.boundarySize = protection.oldBoundarySize
-					end
-				end
-				_G.SafeTeleportLock = false
-				if safeZoneHPSavedCFrame then
-					hrp.CFrame = safeZoneHPSavedCFrame
-				end
-			end
-			if getTrashState.running then
-				stopGetTrashImmediate()
-			else
-				getTrashState.blockSetBack = false
-			end
-			safeZoneHPSavedCFrame = nil
 		end
-	elseif hp <= 26 then
-		safeZoneHPInSafeZone = true
-		safeZoneHPCharacter = character
-		if getTrashState.running and getTrashState.savedCFrame then
-			safeZoneHPSavedCFrame = getTrashState.savedCFrame
-		else
-			safeZoneHPSavedCFrame = hrp.CFrame
+	else
+		local hpPercent = (maxHp > 0) and (hp / maxHp * 100) or 100
+		if hpPercent <= safeZoneHPThresholdEnter then
+			safeZoneEnterSafeZone(character, hrp)
 		end
-		if voidDeadActive then
-			toggleVoidDead(false)
-		end
-		if attackTpEnabled then
-			toggleAttackTp(false)
-		end
-		if protection then
-			protection.Enabled = false
-			protection.oldBoundarySize = protection.boundarySize
-			protection.boundarySize = Vector3.new(2e10, 0, 2e10)
-		end
-		_G.SafeTeleportLock = true
-		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-		hrp.Anchored = false
-		character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
-		hrp.AssemblyLinearVelocity = Vector3.zero
-		hrp.AssemblyAngularVelocity = Vector3.zero
 	end
 end
 
 local safeZoneHPConnection = nil
+local safeZoneHPCharAddedConnection = nil
 local function toggleSafeZoneHP(enabled)
 	safeZoneHPEnabled = enabled
 	if safeZoneHPConnection then
 		safeZoneHPConnection:Disconnect()
 		safeZoneHPConnection = nil
 	end
+	if safeZoneHPCharAddedConnection then
+		safeZoneHPCharAddedConnection:Disconnect()
+		safeZoneHPCharAddedConnection = nil
+	end
 	if not enabled and safeZoneHPInSafeZone then
-		safeZoneHPInSafeZone = false
-		safeZoneHPCharacter = nil
-		if not afkEnabled then
-			local protection = _G.NOTHINGX_Protection
-			if protection then
-				protection.Enabled = true
-				if protection.oldBoundarySize then
-					protection.boundarySize = protection.oldBoundarySize
-				end
-			end
-			_G.SafeTeleportLock = false
-			local character = player.Character
-			local hrp = character and character:FindFirstChild("HumanoidRootPart")
-			if hrp and safeZoneHPSavedCFrame then
-				hrp.CFrame = safeZoneHPSavedCFrame
-			end
-		end
-		if getTrashState.running then
-			stopGetTrashImmediate()
-		else
-			getTrashState.blockSetBack = false
-		end
-		safeZoneHPSavedCFrame = nil
+		local character = player.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		safeZoneExitCleanup(hrp)
 	end
 	if enabled then
 		safeZoneHPConnection = RunService.Stepped:Connect(handleSafeZoneHP)
+		safeZoneHPCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
+			safeZoneHPInSafeZone = false
+			safeZoneHPCharacter = nil
+			safeZoneHPSavedCFrame = nil
+			safeZoneRestoreProtection()
+			if getTrashState.running then
+				stopGetTrashImmediate()
+			else
+				getTrashState.blockSetBack = false
+			end
+		end)
 	end
 	return safeZoneHPEnabled and "ON" or "OFF"
 end
@@ -5555,7 +5569,7 @@ do
 				usedLabels[label] = true
 				allItems[#allItems + 1] = label
 				local isFriend = entry.player and friendCache[entry.player.UserId]
-				if not blacklistedTargets[label] and not isFriend then
+				if not blacklistedTargets[label] and not (isFriend and blacklistedTargets["Friends"]) then
 					selectableItems[#selectableItems + 1] = label
 				end
 				modelDropdownLookup[label] = {
@@ -7019,12 +7033,12 @@ task.spawn(function()
 	local ESP_HIGHLIGHT_NAME = "NOTHING-X"
 	local TextService = game:GetService("TextService")
 	local BILLBOARD_MIN_WIDTH = 72
-	local BILLBOARD_PADDING_TOP = 0
-	local BILLBOARD_PADDING_BOTTOM = 0
-	local BILLBOARD_PADDING_LEFT = 0
-	local BILLBOARD_PADDING_RIGHT = 0
+	local BILLBOARD_PADDING_TOP = 4
+	local BILLBOARD_PADDING_BOTTOM = 4
+	local BILLBOARD_PADDING_LEFT = 8
+	local BILLBOARD_PADDING_RIGHT = 8
 	local BILLBOARD_LINE_HEIGHT = 16
-	local BILLBOARD_ITEM_PADDING = 0
+	local BILLBOARD_ITEM_PADDING = 4
 	local function clampPercent(value)
 		local numericValue = tonumber(value) or 0
 		if numericValue ~= numericValue then
@@ -7076,6 +7090,7 @@ task.spawn(function()
 		line.TextScaled = false
 		line.TextSize = 14
 		line.TextWrapped = false
+		line.TextTruncate = Enum.TextTruncate.AtEnd
 		line.TextXAlignment = Enum.TextXAlignment.Left
 		line.TextYAlignment = Enum.TextYAlignment.Center
 		line.Visible = false
@@ -7105,18 +7120,27 @@ task.spawn(function()
 		local frame = Instance.new("Frame")
 		frame.Name = "Root"
 		frame.Size = UDim2.new(1, 0, 0, 0)
-		frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		frame.BackgroundTransparency = 0.3
+		frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+		frame.BackgroundTransparency = 0.2
 		frame.BorderSizePixel = 0
+		frame.ClipsDescendants = true
 		frame.Parent = billboard
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 6)
+		corner.Parent = frame
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 0, 0)
+		stroke.Transparency = 0
+		stroke.Thickness = 1
+		stroke.Parent = frame
 		local padding = Instance.new("UIPadding")
-		padding.PaddingLeft = UDim.new(0, 0)
-		padding.PaddingRight = UDim.new(0, 0)
-		padding.PaddingTop = UDim.new(0, 0)
-		padding.PaddingBottom = UDim.new(0, 0)
+		padding.PaddingLeft = UDim.new(0, 8)
+		padding.PaddingRight = UDim.new(0, 8)
+		padding.PaddingTop = UDim.new(0, 4)
+		padding.PaddingBottom = UDim.new(0, 4)
 		padding.Parent = frame
 		local list = Instance.new("UIListLayout")
-		list.Padding = UDim.new(0, 0)
+		list.Padding = UDim.new(0, 4)
 		list.FillDirection = Enum.FillDirection.Horizontal
 		list.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		list.VerticalAlignment = Enum.VerticalAlignment.Center
