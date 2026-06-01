@@ -183,7 +183,7 @@ targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
 targetFrame.Position = UDim2.new(1, -260, 0, 10)
-targetFrame.Size = UDim2.fromScale(0.1, 0.02)
+targetFrame.Size = UDim2.fromOffset(0, 30)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.25
 targetFrame.ClipsDescendants = true
@@ -207,12 +207,21 @@ targetFrame.Visible = false
 targetFrame.AutomaticSize = Enum.AutomaticSize.XY
 do
 	local targetSizeConstraint = Instance.new("UISizeConstraint")
-	targetSizeConstraint.MinSize = Vector2.new(100, 30)
-	targetSizeConstraint.MaxSize = Vector2.new(180, 50) 
+	targetSizeConstraint.MinSize = Vector2.new(0, 30)
+	targetSizeConstraint.MaxSize = Vector2.new(300, 50) 
 	targetSizeConstraint.Parent = targetFrame
 end
 local function roundToTenth(value)
 	return math.floor((value * 10) + 0.5) / 10
+end
+local function formatHPPercent(hum)
+	if not hum then return "0" end
+	local pct = (hum.Health / math.max(1, hum.MaxHealth)) * 100
+	local str = string.format("%.1f", pct)
+	if string.sub(str, -2) == ".0" then
+		return string.sub(str, 1, -3)
+	end
+	return str
 end
 local function getSavedControlValue(key)
 	if not key or key == "" then
@@ -237,6 +246,7 @@ targetFrame.Parent = screenGui
 local targetLayout = Instance.new("UIListLayout")
 targetLayout.FillDirection = Enum.FillDirection.Horizontal
 targetLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+targetLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 targetLayout.Padding = UDim.new(0, 8) 
 targetLayout.Parent = targetFrame
 targetValueText = Instance.new("TextLabel")
@@ -269,6 +279,7 @@ targetHPText.TextStrokeTransparency = 1
 targetHPText.TextSize = 13
 targetHPText.TextScaled = false
 targetHPText.TextWrapped = false 
+targetHPText.TextTruncate = Enum.TextTruncate.AtEnd
 targetHPText.ClipsDescendants = false
 targetHPText.TextXAlignment = Enum.TextXAlignment.Left
 targetHPText.LayoutOrder = 1
@@ -2909,25 +2920,31 @@ local function updateTargetDisplay()
 		syncTargetPickKeybindDisplay()
 	end
 	local displayedTarget = getDisplayedTargetModel()
-	local displayName = displayedTarget and displayedTarget.Name or (manualAttackTpPlayer and manualAttackTpPlayer.Name or "")
-	targetValueText.Text = displayName
-	local isHPEnabled = getSavedControlValue("TargetHPEnabled") == true
-	if isHPEnabled and displayedTarget then
-		local hum = displayedTarget:FindFirstChildOfClass("Humanoid")
-		if hum then
-			targetHPText.Text = math.floor(hum.Health + 0.5) .. " HP"
-			targetHPText.Visible = true
-			hpSeparator.Visible = true
-		else
-			targetHPText.Visible = false
-			hpSeparator.Visible = false
+	local displayStr = ""
+	if displayedTarget then
+		local plr = game:GetService("Players"):GetPlayerFromCharacter(displayedTarget)
+		local baseName = string.sub(plr and plr.Name or displayedTarget.Name, 1, 20)
+		
+		local isHPEnabled = getSavedControlValue("TargetHPEnabled") == true
+		local hpStr = "  "
+		if isHPEnabled then
+			local hum = displayedTarget:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hpStr = formatHPPercent(hum) .. "%   "
+			end
 		end
-	else
-		targetHPText.Visible = false
-		hpSeparator.Visible = false
-		targetValueText.Size = UDim2.fromScale(0.9, 1)
+		
+		displayStr = string.format("| %s%s", hpStr, baseName)
+	elseif manualAttackTpPlayer then
+		local baseName = string.sub(manualAttackTpPlayer.Name, 1, 20)
+		displayStr = string.format("|  %s", baseName)
 	end
-	targetFrame.Visible = displayName ~= ""
+	
+	targetValueText.Text = displayStr
+	targetHPText.Visible = false
+	hpSeparator.Visible = false
+
+	targetFrame.Visible = displayStr ~= ""
 	if targetStateChanged and not hasSelectedTargetOrPendingPlayer() then
 		if attackTpEnabled then
 			attackTpEnabled = false
@@ -4994,11 +5011,13 @@ function Dropdown(data)
 	local defaultValue = data.deffultin or data.defaultin or data.default
 	local initialDefault = defaultValue
 	local multi = data.multi == true
+	local hideSelectionText = data.hideSelectionText == true
 	local callback = data.fun
 	local saveKey = tostring(data.saveKey or data.namedropdown or data.nameDropdown or data.name or "")
 	local items = {}
 	local itemLookup = {}
 	local itemDisplayNames = data.itemDisplayNames or {}
+	local disabledItems = {}
 	local selected = {}
 	local expanded = false
 	local collapsedHeight = 88
@@ -5235,15 +5254,30 @@ function Dropdown(data)
 		for _, val in ipairs(selectedList) do
 			table.insert(displayList, itemDisplayNames[val] or val)
 		end
-		local displayText = #displayList > 0 and table.concat(displayList, ", ") or "-"
+		local displayText = "-"
+		if #displayList > 0 then
+			if hideSelectionText then
+				displayText = "(---)"
+			else
+				displayText = table.concat(displayList, ", ")
+			end
+		end
 		toggleButton.Text = displayText
 		for item, button in pairs(optionButtons) do
 			local isOn = selected[item] == true
+			local isDsb = disabledItems[item] == true
 			local display = itemDisplayNames[item] or item
-			button.BackgroundColor3 = isOn and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.BackgroundTransparency = 0.5
-			button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
-			button.Text = isOn and ("> " .. display) or display
+			if isDsb then
+				button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+				button.BackgroundTransparency = 0.3
+				button.TextColor3 = Color3.fromRGB(150, 150, 150)
+				button.Text = display
+			else
+				button.BackgroundColor3 = isOn and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+				button.BackgroundTransparency = 0.5
+				button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+				button.Text = isOn and ("> " .. display) or display
+			end
 		end
 	end
 	local function clearOptionButtons()
@@ -5285,6 +5319,7 @@ function Dropdown(data)
 			end
 			optionButtons[item] = optionButton
 			optionButton.MouseButton1Click:Connect(function()
+				if disabledItems[item] then return end
 				setSelectedValue(item, not selected[item])
 				refreshLabels()
 				saveDropdownSelection()
@@ -5379,6 +5414,23 @@ function Dropdown(data)
 		itemDisplayNames = newMapping or {}
 		refreshLabels()
 	end
+	function dropdownControl.SetDisabledItems(mapping)
+		disabledItems = mapping or {}
+		local changed = false
+		for item in pairs(disabledItems) do
+			if selected[item] then
+				setSelectedValue(item, false)
+				changed = true
+			end
+		end
+		refreshLabels()
+		if changed then
+			saveDropdownSelection()
+			if callback then
+				callback(getCallbackValue())
+			end
+		end
+	end
 	function dropdownControl.SetValue(value, suppressCallback)
 		local previousSelectedList = getSelectedList()
 		table.clear(selected)
@@ -5426,6 +5478,25 @@ blPlayersDropdownControl = nil
 blacklistedTargets = {}
 blacklistedPlayers = {}
 blacklistedModels = {}
+offlinePlayers = {}
+offlineDeletionTimers = {}
+-- restore saved offline players
+if type(controlSaveData.OfflinePlayers) == "table" then
+	for name, data in pairs(controlSaveData.OfflinePlayers) do
+		if type(data) == "table" and data.name then
+			offlinePlayers[name] = data
+			local lbl = "[P] " .. name .. " (Offline)"
+			blacklistedTargets[lbl] = true
+		end
+	end
+end
+-- restore saved BL player names (non-M) → pre-populate blacklistedTargets by name
+local savedBLPlayerNames = {}
+if type(controlSaveData.BLPlayerNames) == "table" then
+	for _, name in ipairs(controlSaveData.BLPlayerNames) do
+		savedBLPlayerNames[tostring(name)] = true
+	end
+end
 applyModelDropdownSelection = nil
 isTargetBlacklisted = function(model, targetPlayer)
 	if blacklistedTargets["Friends"] and targetPlayer and friendCache[targetPlayer.UserId] then
@@ -5520,29 +5591,79 @@ do
 		local usedLabels = {}
 		local allItems = { "Friends" }
 		local selectableItems = {}
+		local displayNames = {}
 		local function appendEntries(entries, prefix)
 			for _, entry in ipairs(entries) do
 				local label = string.format("%s %s", prefix, entry.baseName)
 				local suffix = 1
+				local originalLabel = label
 				while usedLabels[label] do
 					suffix = suffix + 1
-					label = string.format("%s %s (%d)", prefix, entry.baseName, suffix)
+					label = string.format("%s (%d)", originalLabel, suffix)
 				end
 				usedLabels[label] = true
 				allItems[#allItems + 1] = label
+				-- auto-restore BL for P entries by saved name
+				if entry.player and (savedBLPlayerNames[entry.baseName] or offlinePlayers[entry.baseName]) then
+					blacklistedTargets[label] = true
+				end
 				local isFriend = entry.player and friendCache[entry.player.UserId]
 				if not blacklistedTargets[label] and not (isFriend and blacklistedTargets["Friends"]) then
 					selectableItems[#selectableItems + 1] = label
 				end
+				local pOrM = prefix:gsub("[%[%]]", "")
+				local hpStr = "0"
+				if entry.model then
+					local hum = entry.model:FindFirstChildOfClass("Humanoid")
+					if hum then
+						hpStr = formatHPPercent(hum)
+					end
+				end
+				local baseNameStr = string.sub(entry.baseName, 1, 20)
+				local dispNameStr = nil
+				local isFriend = entry.player and friendCache[entry.player.UserId]
+				local fStr = isFriend and "F | " or ""
+				if entry.player then
+					dispNameStr = string.sub(entry.player.DisplayName or entry.baseName, 1, 20)
+					displayNames[label] = string.format("@%s | %s | %s%% | %s%s", baseNameStr, dispNameStr, hpStr, fStr, pOrM)
+				else
+					displayNames[label] = string.format("%s | %s%% | %s", baseNameStr, hpStr, pOrM)
+				end
 				modelDropdownLookup[label] = {
 					player = entry.player,
 					model = entry.model,
+					baseNameStr = baseNameStr,
+					dispNameStr = dispNameStr,
+					pOrM = pOrM
 				}
 			end
 		end
 		appendEntries(playerEntries, "[P]")
 		appendEntries(modelEntries, "[M]")
-		return allItems, selectableItems
+		-- inject offline-only players
+		for offName, offData in pairs(offlinePlayers) do
+			if not Players:FindFirstChild(offName) then
+				local label = "[P] " .. offName .. " (Offline)"
+				local truncName = string.sub(offName, 1, 20)
+				local dispStr = offData == true and truncName or string.sub(tostring(offData.displayName or offName), 1, 20)
+				if not usedLabels[label] then
+					usedLabels[label] = true
+					allItems[#allItems + 1] = label
+					modelDropdownLookup[label] = {
+						player = nil,
+						model = nil,
+						baseNameStr = truncName,
+						dispNameStr = dispStr,
+						pOrM = "P",
+						isOffline = true,
+						offlineName = offName,
+					}
+					displayNames[label] = string.format("%s | %s | P | Offline", truncName, dispStr)
+					blacklistedTargets[label] = true
+				end
+			end
+		end
+		return allItems, selectableItems, displayNames
 	end
 	applyModelDropdownSelection = function(selectedValue)
 		local resolvedValue = tostring(selectedValue or "")
@@ -5573,20 +5694,91 @@ do
 		if not modelDropdownControl or not modelDropdownControl.SetItems then
 			return
 		end
-		local allItems, selectableItems = buildPlayerModelDropdownItems()
+		local allItems, _, displayNames = buildPlayerModelDropdownItems()
 		if blPlayersDropdownControl then
+			if blPlayersDropdownControl.SetItemDisplayNames then
+				blPlayersDropdownControl.SetItemDisplayNames(displayNames)
+			end
 			blPlayersDropdownControl.SetItems(allItems, nil, true)
 		end
+		
+		local modelItems = {}
+		for _, item in ipairs(allItems) do
+			local entry = modelDropdownLookup[item]
+			if item ~= "Friends" and not (entry and entry.isOffline) then
+				table.insert(modelItems, item)
+			end
+		end
+		-- disabled items for Players dropdown: only online blacklisted (not offline)
+		local onlineBlacklist = {}
+		for lbl, v in pairs(blacklistedTargets) do
+			local e = modelDropdownLookup[lbl]
+			if not (e and e.isOffline) then
+				onlineBlacklist[lbl] = v
+			end
+		end
+		if blacklistedTargets["Friends"] then
+			for lbl, e in pairs(modelDropdownLookup) do
+				if e and e.player and friendCache[e.player.UserId] then
+					onlineBlacklist[lbl] = true
+				end
+			end
+		end
+		
 		local nextPreferredValue = preferredValue
+		if blacklistedTargets[nextPreferredValue] then
+			nextPreferredValue = nil
+		end
 		if hasManualAttackTpSelection() then
 			nextPreferredValue = getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer)
 		elseif nextPreferredValue == nil and modelDropdownControl.GetValue then
 			nextPreferredValue = modelDropdownControl.GetValue()
 		end
-		modelDropdownControl.SetItems(selectableItems, nextPreferredValue)
+		if modelDropdownControl.SetItemDisplayNames then
+			modelDropdownControl.SetItemDisplayNames(displayNames)
+		end
+		if modelDropdownControl.SetDisabledItems then
+			modelDropdownControl.SetDisabledItems(onlineBlacklist)
+		end
+		modelDropdownControl.SetItems(modelItems, nextPreferredValue)
 		syncModelDropdownSelectionToManualTarget()
 	end
 end
+
+local function updateDynamicDropdownDisplays()
+	if not modelDropdownControl or not blPlayersDropdownControl then return end
+	local displayNames = {}
+	for label, entry in pairs(modelDropdownLookup) do
+		if entry.isOffline then
+			local offData = offlinePlayers[entry.offlineName]
+			local dispStr = (type(offData) == "table" and offData.displayName) and string.sub(offData.displayName, 1, 20) or entry.baseNameStr
+			displayNames[label] = string.format("%s | %s | P | Offline", entry.baseNameStr, dispStr)
+			-- continue
+		else
+			local hpStr = "0"
+			if entry.model then
+				local hum = entry.model:FindFirstChildOfClass("Humanoid")
+				if hum then
+					hpStr = formatHPPercent(hum)
+				end
+			end
+			local isFriend = entry.player and friendCache[entry.player.UserId]
+			local fStr = isFriend and "F | " or ""
+			if entry.player then
+				displayNames[label] = string.format("@%s | %s | %s%% | %s%s", entry.baseNameStr, entry.dispNameStr, hpStr, fStr, entry.pOrM)
+			else
+				displayNames[label] = string.format("%s | %s%% | %s", entry.baseNameStr, hpStr, entry.pOrM)
+			end
+		end
+	end
+	if blPlayersDropdownControl.SetItemDisplayNames then
+		blPlayersDropdownControl.SetItemDisplayNames(displayNames)
+	end
+	if modelDropdownControl.SetItemDisplayNames then
+		modelDropdownControl.SetItemDisplayNames(displayNames)
+	end
+end
+
 stopView = function()
 	viewing = false
 	currentViewTarget = nil
@@ -6587,6 +6779,7 @@ blPlayersDropdownControl = Dropdown({
 	saveKey = "",
 	inside = {},
 	multi = true,
+	hideSelectionText = true,
 	deffultin = nil,
 	fun = function(value)
 		local newBlacklist = {}
@@ -6609,6 +6802,27 @@ blPlayersDropdownControl = Dropdown({
 		blacklistedTargets = newBlacklist
 		blacklistedPlayers = newBLPlayers
 		blacklistedModels = newBLModels
+		-- instantly forget unchecked online players from offline list
+		for label, entry in pairs(modelDropdownLookup) do
+			if entry.player and not entry.isOffline and not newBlacklist[label] then
+				if offlinePlayers[entry.baseNameStr] then
+					offlinePlayers[entry.baseNameStr] = nil
+				end
+			end
+		end
+		-- auto-save: only P entries (not M, not offline)
+		do
+			local blNames = {}
+			for label in pairs(newBlacklist) do
+				local entry = modelDropdownLookup[label]
+				if entry and entry.player and not entry.isOffline and entry.baseNameStr then
+					blNames[#blNames + 1] = entry.baseNameStr
+				end
+			end
+			controlSaveData.BLPlayerNames = blNames
+			controlSaveData.OfflinePlayers = offlinePlayers
+			saveSliderSaveData()
+		end
 		local currentTargetLabel = getModelDropdownLabelForSelection(manualAttackTpTarget, manualAttackTpPlayer)
 		if currentTargetLabel and blacklistedTargets[currentTargetLabel] then
 			setManualAttackTpTarget(nil)
@@ -6622,8 +6836,245 @@ blPlayersDropdownControl = Dropdown({
 				modelDropdownControl.SetValue(nil, true)
 			end
 		end
+		if modelDropdownControl and modelDropdownControl.SetDisabledItems then
+			modelDropdownControl.SetDisabledItems(blacklistedTargets)
+		end
+		-- 5-sec deletion: for items unchecked, schedule removal of offline-only entries
+		if type(value) == "table" then
+			local checkedSet = {}
+			for _, lbl in ipairs(value) do checkedSet[lbl] = true end
+			for label, entry in pairs(modelDropdownLookup) do
+				if entry.isOffline and not checkedSet[label] then
+					if not offlineDeletionTimers[label] then
+						offlineDeletionTimers[label] = true
+						local capturedLabel = label
+						local capturedName = entry.offlineName
+						task.delay(5, function()
+							if offlineDeletionTimers[capturedLabel] then
+								offlineDeletionTimers[capturedLabel] = nil
+								offlinePlayers[capturedName] = nil
+								blacklistedTargets[capturedLabel] = nil
+								local blNames = {}
+								for lbl in pairs(blacklistedTargets) do
+									local e = modelDropdownLookup[lbl]
+									if e and e.player and not e.isOffline and e.baseNameStr then
+										blNames[#blNames + 1] = e.baseNameStr
+									end
+								end
+								controlSaveData.BLPlayerNames = blNames
+								controlSaveData.OfflinePlayers = offlinePlayers
+								saveSliderSaveData()
+								if refreshModelDropdown then refreshModelDropdown() end
+							end
+						end)
+					end
+				elseif entry.isOffline and checkedSet[label] then
+					-- re-checked: cancel pending deletion
+					offlineDeletionTimers[label] = nil
+				end
+			end
+			-- also handle online players who just got unchecked
+			for label, entry in pairs(modelDropdownLookup) do
+				if not entry.isOffline and not checkedSet[label] then
+					-- was online-player, now unchecked: check if they left the server
+					if entry.player and not (entry.player.Parent == Players) then
+						-- they left; start 5-sec timer to remove
+						if not offlineDeletionTimers[label] then
+							offlineDeletionTimers[label] = true
+							local capturedLabel = label
+							task.delay(5, function()
+								if offlineDeletionTimers[capturedLabel] then
+									offlineDeletionTimers[capturedLabel] = nil
+									blacklistedTargets[capturedLabel] = nil
+									local blNames = {}
+									for lbl in pairs(blacklistedTargets) do
+										local e = modelDropdownLookup[lbl]
+										if e and e.player and not e.isOffline and e.baseNameStr then
+											blNames[#blNames + 1] = e.baseNameStr
+										end
+									end
+									controlSaveData.BLPlayerNames = blNames
+									controlSaveData.OfflinePlayers = offlinePlayers
+									saveSliderSaveData()
+									if refreshModelDropdown then refreshModelDropdown() end
+								end
+							end)
+						end
+					end
+				end
+			end
+		end
 	end,
 })
+-- Offline Player Input TextBox
+do
+	local offlineInputHolder = makeControlFrame(78)
+	offlineInputHolder.Parent = uiX
+	local offlineLabel = Instance.new("TextLabel")
+	offlineLabel.BackgroundTransparency = 1
+	offlineLabel.Position = UDim2.new(0, 10, 0, 5)
+	offlineLabel.Size = UDim2.new(1, -20, 0, 16)
+	offlineLabel.Font = Enum.Font.GothamBold
+	offlineLabel.Text = "BL Offline"
+	offlineLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	offlineLabel.TextStrokeTransparency = 1
+	offlineLabel.TextSize = 13
+	offlineLabel.TextXAlignment = Enum.TextXAlignment.Left
+	offlineLabel.Parent = offlineInputHolder
+	local offlineBox = Instance.new("TextBox")
+	offlineBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	offlineBox.BackgroundTransparency = 0.5
+	offlineBox.BorderSizePixel = 0
+	offlineBox.Position = UDim2.new(0, 10, 0, 26)
+	offlineBox.Size = UDim2.new(1, -70, 0, 26)
+	offlineBox.Font = Enum.Font.GothamBold
+	offlineBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+	offlineBox.TextSize = 13
+	offlineBox.Text = ""
+	offlineBox.PlaceholderText = "user id..."
+	offlineBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+	offlineBox.ClearTextOnFocus = true
+	offlineBox.Parent = offlineInputHolder
+	do
+		local boxCorner = Instance.new("UICorner")
+		boxCorner.CornerRadius = UDim.new(0, 4)
+		boxCorner.Parent = offlineBox
+	end
+	offlineBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local raw = offlineBox.Text
+		local filtered = raw:gsub("[^%d]", "")
+		if #filtered > 21 then filtered = filtered:sub(1, 21) end
+		if filtered ~= raw then
+			offlineBox.Text = filtered
+		end
+	end)
+	local statusLabel = Instance.new("TextLabel")
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Position = UDim2.new(0, 10, 0, 56)
+	statusLabel.Size = UDim2.new(1, -70, 0, 16)
+	statusLabel.Font = Enum.Font.GothamBold
+	statusLabel.Text = ""
+	statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	statusLabel.TextStrokeTransparency = 1
+	statusLabel.TextTransparency = 1
+	statusLabel.TextSize = 12
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+	statusLabel.Parent = offlineInputHolder
+	local TweenService = game:GetService("TweenService")
+	local fadeInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local function showStatus(text, duration)
+		statusLabel.Text = text
+		TweenService:Create(statusLabel, fadeInfo, { TextTransparency = 0 }):Play()
+		if duration then
+			task.delay(duration, function()
+				if statusLabel.Text == text then
+					TweenService:Create(statusLabel, fadeInfo, { TextTransparency = 1 }):Play()
+				end
+			end)
+		end
+	end
+	local addBtn = Instance.new("TextButton")
+	addBtn.BackgroundColor3 = Color3.fromRGB(120, 0, 0)
+	addBtn.BackgroundTransparency = 0.4
+	addBtn.BorderSizePixel = 0
+	addBtn.Position = UDim2.new(1, -56, 0, 26)
+	addBtn.Size = UDim2.new(0, 50, 0, 26)
+	addBtn.Font = Enum.Font.GothamBold
+	addBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	addBtn.TextSize = 13
+	addBtn.Text = "Add"
+	addBtn.AutoButtonColor = false
+	addBtn.Parent = offlineInputHolder
+	do
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 4)
+		btnCorner.Parent = addBtn
+	end
+	local function doAddOffline()
+		local raw = offlineBox.Text:gsub("[^%d]", "")
+		if #raw == 0 then return end
+		if #raw > 21 then raw = raw:sub(1, 21) end
+		offlineBox.Text = ""
+		showStatus("Analyzing . . .")
+		addBtn.Active = false
+		task.spawn(function()
+			local HttpService = game:GetService("HttpService")
+			local userId = tonumber(raw)
+			local realName, displayName
+			if not userId then
+				showStatus("Not Found (404)", 3)
+				addBtn.Active = true
+				return
+			end
+			-- check if local player
+			if userId == Players.LocalPlayer.UserId then
+				showStatus("Is You", 3)
+				addBtn.Active = true
+				return
+			end
+			-- get name from userId
+			local ok, name = pcall(function()
+				return Players:GetNameFromUserIdAsync(userId)
+			end)
+			if ok and name then
+				realName = name
+				displayName = name
+			else
+				showStatus("Not Found (404)", 3)
+				addBtn.Active = true
+				return
+			end
+			-- check if already on the list (checked)
+			local lblOnline = "[P] " .. realName
+			local lblOffline = lblOnline .. " (Offline)"
+			if blacklistedTargets[lblOnline] or blacklistedTargets[lblOffline] or offlinePlayers[realName] then
+				showStatus("Already Added", 3)
+				addBtn.Active = true
+				return
+			end
+			
+			showStatus("Adding . . .")
+			-- fetch displayName via HTTP
+			local okHttp, result = pcall(function()
+				return game:HttpGet("https://users.roblox.com/v1/users/" .. tostring(userId))
+			end)
+			if not okHttp then
+				okHttp, result = pcall(function()
+					return HttpService:GetAsync("https://users.roblox.com/v1/users/" .. tostring(userId))
+				end)
+			end
+			if okHttp and result then
+				local ok2, data = pcall(function() return HttpService:JSONDecode(result) end)
+				if ok2 and data and data.displayName then
+					displayName = data.displayName
+				end
+			end
+			
+			offlinePlayers[realName] = { name = realName, displayName = displayName, userId = userId }
+			local label = "[P] " .. realName .. " (Offline)"
+			blacklistedTargets[label] = true
+			offlineDeletionTimers[label] = nil
+			-- persist
+			controlSaveData.OfflinePlayers = offlinePlayers
+			saveSliderSaveData()
+			
+			showStatus("Added", 2)
+			addBtn.Active = true
+			if refreshModelDropdown then refreshModelDropdown() end
+			if blPlayersDropdownControl and blPlayersDropdownControl.SetValue then
+				local toCheck = {}
+				for lbl in pairs(blacklistedTargets) do
+					toCheck[#toCheck + 1] = lbl
+				end
+				blPlayersDropdownControl.SetValue(toCheck, false)
+			end
+		end)
+	end
+	addBtn.MouseButton1Click:Connect(doAddOffline)
+	offlineBox.FocusLost:Connect(function(enterPressed)
+		if enterPressed then doAddOffline() end
+	end)
+end
 targetActionControls = _G["3tog_on_one_one_button"]({
 	title = "Function",
 	name1 = "View",
@@ -7378,6 +7829,20 @@ end)
 parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
 syncFlingModeControls()
 refreshModelDropdown()
+-- restore BL dropdown checkmarks for saved players/offline on server
+task.defer(function()
+	if blPlayersDropdownControl and blPlayersDropdownControl.SetValue then
+		local toCheck = {}
+		for label in pairs(blacklistedTargets) do
+			if modelDropdownLookup[label] then
+				toCheck[#toCheck + 1] = label
+			end
+		end
+		if #toCheck > 0 then
+			blPlayersDropdownControl.SetValue(toCheck, true)
+		end
+	end
+end)
 task.spawn(function()
 	local updatePending = false
 	local function updateDropdownsEvent()
@@ -7522,7 +7987,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		end
 		return
 	end
-	if gameProcessed then
+	if gameProcessed or UserInputService:GetFocusedTextBox() then
 		return
 	end
 	if key == Enum.KeyCode.LeftAlt then
@@ -7769,6 +8234,9 @@ do
 	if shouldRefreshTargetDisplay or targetDisplayAccumulator >= 0.15 then
 		targetDisplayAccumulator = 0
 		updateTargetDisplay()
+		if updateDynamicDropdownDisplays then
+			updateDynamicDropdownDisplays()
+		end
 	end
 	local isTeleportLocked = (_G.SafeTeleportLock == true)
 	if (viewing or autoTpEnabled or flingEnabled) and not manualAttackTpPlayer and not hasSelectedTargetOrPendingPlayer() then
