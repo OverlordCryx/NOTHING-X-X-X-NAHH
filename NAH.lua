@@ -30,6 +30,8 @@ function showExistingGuiInfo(gui, title, text, duration)
 	if not infoContainer or not infoTitle or not infoText then
 		return false
 	end
+	local currentToken = (gui:GetAttribute("InfoToken") or 0) + 1
+	gui:SetAttribute("InfoToken", currentToken)
 	infoTitle.Text = tostring(title or "")
 	infoText.Text = tostring(text or "")
 	infoContainer.Visible = true
@@ -50,6 +52,9 @@ function showExistingGuiInfo(gui, title, text, duration)
 		TextStrokeTransparency = 1,
 	}):Play()
 	task.delay(tonumber(duration) or 3, function()
+		if currentToken ~= (gui:GetAttribute("InfoToken") or 0) then
+			return
+		end
 		if not infoContainer.Parent then
 			return
 		end
@@ -72,6 +77,9 @@ function showExistingGuiInfo(gui, title, text, duration)
 		})
 		fadeText:Play()
 		fadeText.Completed:Connect(function()
+			if currentToken ~= (gui:GetAttribute("InfoToken") or 0) then
+				return
+			end
 			if infoContainer.Parent then
 				infoContainer.Visible = false
 			end
@@ -783,8 +791,8 @@ local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneHPCharacter = nil
-local safeZoneHPThresholdEnter = 35
-local safeZoneHPThresholdExit = 100
+local safeZoneHPThresholdEnter = 26
+local safeZoneHPThresholdExit = 34
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
 	Vector3.new(9e9, -6666, 9e9),
@@ -1889,7 +1897,7 @@ local function handleSafeZoneHP()
 		end
 	else
 		local hpPercent = (maxHp > 0) and (hp / maxHp * 100) or 100
-		if hpPercent <= safeZoneHPThresholdEnter then
+		if hpPercent < safeZoneHPThresholdEnter then
 			safeZoneEnterSafeZone(character, hrp)
 		end
 	end
@@ -3488,53 +3496,7 @@ local function showInfo(title, text, time)
 		}
 		return
 	end
-	local currentToken = (screenGui:GetAttribute("InfoToken") or 0) + 1
-	screenGui:SetAttribute("InfoToken", currentToken)
-	local titleValue = tostring(title or "")
-	local textValue = tostring(text or "")
-	local duration = tonumber(time) or 5
-	infoTitle.Text = titleValue
-	infoText.Text = textValue
-	infoContainer.Visible = true
-	infoContainer.BackgroundTransparency = 0.5
-	if infoStroke then
-		infoStroke.Transparency = 1
-	end
-	infoTitle.TextTransparency = 0
-	infoTitle.TextStrokeTransparency = 1
-	TweenService:Create(infoText, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TextTransparency = 0,
-		TextStrokeTransparency = 1,
-	}):Play()
-	task.delay(duration, function()
-		if currentToken ~= (screenGui:GetAttribute("InfoToken") or 0) then
-			return
-		end
-		local fadeTweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		TweenService:Create(infoContainer, fadeTweenInfo, {
-			BackgroundTransparency = 1,
-		}):Play()
-		if infoStroke then
-			TweenService:Create(infoStroke, fadeTweenInfo, {
-				Transparency = 1,
-			}):Play()
-		end
-		TweenService:Create(infoTitle, fadeTweenInfo, {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		}):Play()
-		local fadeText = TweenService:Create(infoText, fadeTweenInfo, {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		})
-		fadeText:Play()
-		fadeText.Completed:Connect(function()
-			if currentToken ~= (screenGui:GetAttribute("InfoToken") or 0) then
-				return
-			end
-			infoContainer.Visible = false
-		end)
-	end)
+	showExistingGuiInfo(screenGui, title, text, time)
 end
 function INFO(title, text, time)
 	if not introFinished then
