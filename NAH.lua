@@ -182,8 +182,8 @@ keybindText.Parent = keybindFrame
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
-targetFrame.Position = UDim2.new(1, -260, 0, 10)
-targetFrame.Size = UDim2.fromOffset(0, 30)
+targetFrame.Position = UDim2.new(1, -10, 0, 10)
+targetFrame.Size = UDim2.fromOffset(0, 0)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.25
 targetFrame.ClipsDescendants = true
@@ -207,8 +207,8 @@ targetFrame.Visible = false
 targetFrame.AutomaticSize = Enum.AutomaticSize.XY
 do
 	local targetSizeConstraint = Instance.new("UISizeConstraint")
-	targetSizeConstraint.MinSize = Vector2.new(0, 30)
-	targetSizeConstraint.MaxSize = Vector2.new(300, 50) 
+	targetSizeConstraint.MinSize = Vector2.new(0, 0)
+	targetSizeConstraint.MaxSize = Vector2.new(260, 90) 
 	targetSizeConstraint.Parent = targetFrame
 end
 local function roundToTenth(value)
@@ -244,60 +244,58 @@ targetPadding.PaddingBottom = UDim.new(0, 5)
 targetPadding.Parent = targetFrame
 targetFrame.Parent = screenGui
 local targetLayout = Instance.new("UIListLayout")
-targetLayout.FillDirection = Enum.FillDirection.Horizontal
-targetLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+targetLayout.FillDirection = Enum.FillDirection.Vertical
+targetLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 targetLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-targetLayout.Padding = UDim.new(0, 8) 
+targetLayout.Padding = UDim.new(0, 2)
 targetLayout.Parent = targetFrame
-targetValueText = Instance.new("TextLabel")
-targetValueText.Name = "TargetValueText"
-targetValueText.BackgroundTransparency = 1
-targetValueText.Position = UDim2.fromScale(0, 0)
-targetValueText.Size = UDim2.fromScale(0, 1)
-targetValueText.AutomaticSize = Enum.AutomaticSize.X
-targetValueText.Font = Enum.Font.GothamBold
-targetValueText.Text = ""
-targetValueText.TextColor3 = Color3.fromRGB(255, 0, 0)
-targetValueText.TextStrokeTransparency = 1
-targetValueText.TextSize = 13
-targetValueText.TextScaled = false
-targetValueText.TextWrapped = false 
-targetValueText.ClipsDescendants = false
-targetValueText.TextYAlignment = Enum.TextYAlignment.Center
-targetValueText.LayoutOrder = 3
-targetValueText.Parent = targetFrame
+-- Linia 1: HP% | @username
 targetHPText = Instance.new("TextLabel")
 targetHPText.Name = "TargetHPText"
 targetHPText.BackgroundTransparency = 1
-targetHPText.Position = UDim2.fromScale(0, 0)
-targetHPText.Size = UDim2.fromScale(0, 1)
-targetHPText.AutomaticSize = Enum.AutomaticSize.X
+targetHPText.Size = UDim2.fromOffset(0, 0)
+targetHPText.AutomaticSize = Enum.AutomaticSize.XY
 targetHPText.Font = Enum.Font.GothamBold
 targetHPText.Text = ""
 targetHPText.TextColor3 = Color3.fromRGB(255, 0, 0)
 targetHPText.TextStrokeTransparency = 1
 targetHPText.TextSize = 13
 targetHPText.TextScaled = false
-targetHPText.TextWrapped = false 
-targetHPText.TextTruncate = Enum.TextTruncate.AtEnd
-targetHPText.ClipsDescendants = false
+targetHPText.TextWrapped = false
 targetHPText.TextXAlignment = Enum.TextXAlignment.Left
+targetHPText.TextYAlignment = Enum.TextYAlignment.Center
 targetHPText.LayoutOrder = 1
+targetHPText.Visible = false
 targetHPText.Parent = targetFrame
+-- Linia 2: DisplayName (jeśli różni się od username)
+targetValueText = Instance.new("TextLabel")
+targetValueText.Name = "TargetValueText"
+targetValueText.BackgroundTransparency = 1
+targetValueText.Size = UDim2.fromOffset(0, 0)
+targetValueText.AutomaticSize = Enum.AutomaticSize.XY
+targetValueText.Font = Enum.Font.GothamBold
+targetValueText.Text = ""
+targetValueText.TextColor3 = Color3.fromRGB(255, 0, 0)
+targetValueText.TextStrokeTransparency = 1
+targetValueText.TextSize = 13
+targetValueText.TextScaled = false
+targetValueText.TextWrapped = false
+targetValueText.TextXAlignment = Enum.TextXAlignment.Left
+targetValueText.TextYAlignment = Enum.TextYAlignment.Center
+targetValueText.LayoutOrder = 2
+targetValueText.Visible = false
+targetValueText.Parent = targetFrame
+-- separator - ukryty na stałe
 hpSeparator = Instance.new("TextLabel")
 hpSeparator.Name = "Separator"
 hpSeparator.BackgroundTransparency = 1
-hpSeparator.Position = UDim2.fromScale(0, 0)
-hpSeparator.Size = UDim2.fromScale(0, 1)
-hpSeparator.AutomaticSize = Enum.AutomaticSize.X
+hpSeparator.Size = UDim2.fromOffset(0, 0)
 hpSeparator.Font = Enum.Font.GothamBold
-hpSeparator.Text = "|"
+hpSeparator.Text = ""
 hpSeparator.TextColor3 = Color3.fromRGB(255, 0, 0)
-hpSeparator.TextTransparency = 0
 hpSeparator.TextSize = 13
-hpSeparator.TextWrapped = false
-hpSeparator.ClipsDescendants = false
-hpSeparator.LayoutOrder = 2
+hpSeparator.LayoutOrder = 99
+hpSeparator.Visible = false
 hpSeparator.Parent = targetFrame
 infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
@@ -2667,7 +2665,10 @@ local function handleCharacterDeath()
 	syncAttackTpKeybindDisplay()
 	syncTargetPickKeybindDisplay()
 	syncSetBackKeybindDisplay()
+	targetHPText.Text = ""
+	targetHPText.Visible = false
 	targetValueText.Text = ""
+	targetValueText.Visible = false
 	targetFrame.Visible = false
 	syncTargetActionControls()
 end
@@ -2920,31 +2921,44 @@ local function updateTargetDisplay()
 		syncTargetPickKeybindDisplay()
 	end
 	local displayedTarget = getDisplayedTargetModel()
-	local displayStr = ""
+	local line1 = ""
+	local line2 = ""
+
 	if displayedTarget then
 		local plr = game:GetService("Players"):GetPlayerFromCharacter(displayedTarget)
 		local baseName = string.sub(plr and plr.Name or displayedTarget.Name, 1, 20)
-		
 		local isHPEnabled = getSavedControlValue("TargetHPEnabled") == true
-		local hpStr = "  "
 		if isHPEnabled then
 			local hum = displayedTarget:FindFirstChildOfClass("Humanoid")
 			if hum then
-				hpStr = formatHPPercent(hum) .. "%   "
+				line1 = string.format("| %s%% | %s", formatHPPercent(hum), baseName)
+			else
+				line1 = "| " .. baseName
+			end
+		else
+			line1 = "| " .. baseName
+		end
+		if plr then
+			local dispName = string.sub(plr.DisplayName or "", 1, 20)
+			if dispName ~= "" and dispName ~= baseName then
+				line2 = "| " .. dispName
 			end
 		end
-		
-		displayStr = string.format("| %s%s", hpStr, baseName)
 	elseif manualAttackTpPlayer then
 		local baseName = string.sub(manualAttackTpPlayer.Name, 1, 20)
-		displayStr = string.format("|  %s", baseName)
+		line1 = "| " .. baseName
+		local dispName = string.sub(manualAttackTpPlayer.DisplayName or "", 1, 20)
+		if dispName ~= "" and dispName ~= baseName then
+			line2 = "| " .. dispName
+		end
 	end
-	
-	targetValueText.Text = displayStr
-	targetHPText.Visible = false
-	hpSeparator.Visible = false
 
-	targetFrame.Visible = displayStr ~= ""
+	targetHPText.Text = line1
+	targetHPText.Visible = line1 ~= ""
+	targetValueText.Text = line2
+	targetValueText.Visible = line2 ~= ""
+	hpSeparator.Visible = false
+	targetFrame.Visible = line1 ~= ""
 	if targetStateChanged and not hasSelectedTargetOrPendingPlayer() then
 		if attackTpEnabled then
 			attackTpEnabled = false
@@ -2962,17 +2976,6 @@ local function updateTargetDisplay()
 		else
 			syncTargetActionControls()
 		end
-	end
-	if displayName == "" then
-		targetValueText.Size = UDim2.fromScale(0, 1)
-		targetHPText.Visible = false
-		hpSeparator.Visible = false
-	elseif not isHPEnabled or not displayedTarget then
-		targetValueText.Size = UDim2.fromScale(1, 1)
-		targetHPText.Visible = false
-		hpSeparator.Visible = false
-	else
-		targetValueText.Size = UDim2.fromScale(0, 1)
 	end
 end
 local function getClosestAliveTarget()
@@ -5490,6 +5493,10 @@ if type(controlSaveData.OfflinePlayers) == "table" then
 		end
 	end
 end
+-- restore saved Friends BL state
+if controlSaveData.BLFriends == true then
+	blacklistedTargets["Friends"] = true
+end
 -- restore saved BL player names (non-M) → pre-populate blacklistedTargets by name
 local savedBLPlayerNames = {}
 if type(controlSaveData.BLPlayerNames) == "table" then
@@ -5700,6 +5707,14 @@ do
 				blPlayersDropdownControl.SetItemDisplayNames(displayNames)
 			end
 			blPlayersDropdownControl.SetItems(allItems, nil, true)
+			-- re-sync checkmarks z blacklistedTargets (np. offline gracz wrócił = nowy label, stary usunięty przez pruneSelectedValues)
+			local blToCheck = {}
+			for lbl in pairs(blacklistedTargets) do
+				blToCheck[#blToCheck + 1] = lbl
+			end
+			if #blToCheck > 0 and blPlayersDropdownControl.SetValue then
+				blPlayersDropdownControl.SetValue(blToCheck, true)
+			end
 		end
 		
 		local modelItems = {}
@@ -6782,6 +6797,8 @@ blPlayersDropdownControl = Dropdown({
 	hideSelectionText = true,
 	deffultin = nil,
 	fun = function(value)
+		-- guard: initial Dropdown creation fires callback with empty {} → don't wipe BL
+		if not blPlayersDropdownControl then return end
 		local newBlacklist = {}
 		local newBLPlayers = {}
 		local newBLModels = {}
@@ -6820,6 +6837,7 @@ blPlayersDropdownControl = Dropdown({
 				end
 			end
 			controlSaveData.BLPlayerNames = blNames
+			controlSaveData.BLFriends = newBlacklist["Friends"] == true
 			controlSaveData.OfflinePlayers = offlinePlayers
 			saveSliderSaveData()
 		end
@@ -7834,7 +7852,7 @@ task.defer(function()
 	if blPlayersDropdownControl and blPlayersDropdownControl.SetValue then
 		local toCheck = {}
 		for label in pairs(blacklistedTargets) do
-			if modelDropdownLookup[label] then
+			if modelDropdownLookup[label] or label == "Friends" then
 				toCheck[#toCheck + 1] = label
 			end
 		end
@@ -7865,7 +7883,37 @@ task.spawn(function()
 		p.CharacterRemoving:Connect(updateDropdownsEvent)
 	end)
 
-	Players.PlayerRemoving:Connect(updateDropdownsEvent)
+	Players.PlayerRemoving:Connect(function(leavingPlayer)
+		-- jeśli gracz był zaznaczony w BL → automatycznie zapisz jako Offline
+		for label, entry in pairs(modelDropdownLookup) do
+			if entry.player == leavingPlayer and not entry.isOffline then
+				if blacklistedTargets[label] then
+					local leavingName = leavingPlayer.Name
+					if not offlinePlayers[leavingName] then
+						offlinePlayers[leavingName] = {
+							name = leavingName,
+							displayName = leavingPlayer.DisplayName or leavingName,
+							userId = leavingPlayer.UserId,
+						}
+						-- zapisz w BL names żeby przywróciło po relogu
+						local blNames = {}
+						for lbl in pairs(blacklistedTargets) do
+							local e = modelDropdownLookup[lbl]
+							if e and e.player and not e.isOffline and e.baseNameStr then
+								blNames[#blNames + 1] = e.baseNameStr
+							end
+						end
+						blNames[#blNames + 1] = leavingName
+						controlSaveData.BLPlayerNames = blNames
+						controlSaveData.OfflinePlayers = offlinePlayers
+						saveSliderSaveData()
+					end
+				end
+				break
+			end
+		end
+		updateDropdownsEvent()
+	end)
 
 	for _, p in ipairs(Players:GetPlayers()) do
 		p.CharacterAdded:Connect(function(char)
