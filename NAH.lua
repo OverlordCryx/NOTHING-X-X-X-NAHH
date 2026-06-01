@@ -1712,46 +1712,65 @@ local function toggleAFK(enabled)
 		afkConnection:Disconnect()
 		afkConnection = nil
 	end
-	local character = player.Character
-	local hrp = character and character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	local protection = _G.NOTHINGX_Protection
 	if afkEnabled then
-		if not safeZoneHPInSafeZone then
-			afkSavedCFrame = hrp.CFrame
-		else
-			afkSavedCFrame = safeZoneHPSavedCFrame
-		end
 		if voidDeadActive then
 			toggleVoidDead(false)
 		end
+		local protection = _G.NOTHINGX_Protection
 		if protection then
 			protection.Enabled = false
 			protection.oldBoundarySize = protection.boundarySize
 			protection.boundarySize = Vector3.new(2e10, 0, 2e10)
 		end
 		_G.SafeTeleportLock = true
-		afkCharacter = character
 		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-		afkConnection = RunService.Heartbeat:Connect(function()
+		
+		local character = player.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			if not safeZoneHPInSafeZone then
+				afkSavedCFrame = hrp.CFrame
+			else
+				afkSavedCFrame = safeZoneHPSavedCFrame
+			end
+			afkCharacter = character
+		else
+			afkSavedCFrame = nil
+			afkCharacter = nil
+		end
+		
+		afkConnection = game:GetService("RunService").Stepped:Connect(function()
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			
 			if char and afkCharacter and char ~= afkCharacter then
 				afkSavedCFrame = nil
 				afkCharacter = char
 			end
+			
+			if root and not afkSavedCFrame and (hum and hum.Health > 0) then
+				if not safeZoneHPInSafeZone then
+					afkSavedCFrame = root.CFrame
+				else
+					afkSavedCFrame = safeZoneHPSavedCFrame
+				end
+				afkCharacter = char
+			end
+			
 			if hum and hum.Health <= 0 then
 				afkSavedCFrame = nil
 			end
 			if root then
 				local targetPos = safeZonePositions[safeZoneCycleIndex]
-				root.CFrame = CFrame.new(targetPos)
+				root.Anchored = false
+				char:PivotTo(CFrame.new(targetPos))
 				root.AssemblyLinearVelocity = Vector3.zero
 				root.AssemblyAngularVelocity = Vector3.zero
 			end
 		end)
 	else
+		local protection = _G.NOTHINGX_Protection
 		if not safeZoneHPInSafeZone then
 			if protection then
 				protection.Enabled = true
@@ -1760,7 +1779,9 @@ local function toggleAFK(enabled)
 				end
 			end
 			_G.SafeTeleportLock = false
-			if afkSavedCFrame then
+			local character = player.Character
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			if hrp and afkSavedCFrame then
 				hrp.CFrame = afkSavedCFrame
 			end
 		end
@@ -1889,7 +1910,7 @@ local function toggleSafeZoneHP(enabled)
 		safeZoneHPSavedCFrame = nil
 	end
 	if enabled then
-		safeZoneHPConnection = RunService.Heartbeat:Connect(handleSafeZoneHP)
+		safeZoneHPConnection = RunService.Stepped:Connect(handleSafeZoneHP)
 	end
 	return safeZoneHPEnabled and "ON" or "OFF"
 end
@@ -3879,6 +3900,27 @@ task.spawn(function()
     end
     local autoFixCamEnabled = false
     local antiDeathEnabled = false
+    local noclipEnabled = false
+    local noclipConnection = nil
+    local function toggleNoclip(enabled)
+        noclipEnabled = enabled
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        if enabled then
+            noclipConnection = game:GetService("RunService").Stepped:Connect(function()
+                local char = game:GetService("Players").LocalPlayer.Character
+                if char then
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+    end
     local isProcessingAntiDeath = false
     local function isDeathCounterActive()
         local character = player.Character
@@ -4198,7 +4240,8 @@ task.spawn(function()
         makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
         makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
         local row5 = makeRow(168)
-        makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1)
+        makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
+        makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
     else
         local row2 = makeRow(66)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
