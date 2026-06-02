@@ -800,7 +800,7 @@ local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneHPCharacter = nil
-local safeZoneHPThresholdEnter = 26
+local safeZoneHPThresholdEnter = 25
 local safeZoneHPThresholdExit = 34
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
@@ -1839,10 +1839,13 @@ local function safeZoneExitCleanup(hrp)
 	safeZoneHPInSafeZone = false
 	safeZoneHPCharacter = nil
 	if not afkEnabled then
-		safeZoneRestoreProtection()
+		-- teleport back FIRST, then restore protection
+		-- (restoring protection before the CFrame set caused the protection system
+		--  to snap the player back to the void before the saved position could be applied)
 		if hrp and safeZoneHPSavedCFrame then
 			hrp.CFrame = safeZoneHPSavedCFrame
 		end
+		safeZoneRestoreProtection()
 	end
 	if getTrashState.running then
 		stopGetTrashImmediate()
@@ -1856,8 +1859,24 @@ local function safeZoneEnterSafeZone(character, hrp)
 	safeZoneHPCharacter = character
 	if getTrashState.running and getTrashState.savedCFrame then
 		safeZoneHPSavedCFrame = getTrashState.savedCFrame
+		-- Stop the getTrash holdCFrame loop WITHOUT calling stopGetTrashImmediate(),
+		-- because stopGetTrashImmediate resets _G.SafeTeleportLock to false which
+		-- would undo the lock we set in safeZoneDisableProtection below.
+		getTrashState.token = (getTrashState.token or 0) + 1
+		getTrashState.running = false
+		getTrashState.returning = false
+		getTrashState.holdCFrame = nil
+		task.spawn(function()
+			for _ = 1, 10 do
+				if getTrashState.running then break end
+				setGetTrashNoclipEnabled(false)
+				task.wait(0.05)
+			end
+		end)
+		syncGetTrashKeybindDisplay()
 	else
 		safeZoneHPSavedCFrame = hrp.CFrame
+		getTrashState.blockSetBack = true
 	end
 	if voidDeadActive then
 		toggleVoidDead(false)
@@ -1893,9 +1912,11 @@ local function handleSafeZoneHP()
 	end
 
 	if safeZoneHPInSafeZone then
-		-- Use percentage for exit (same unit as enter threshold)
-		local hpPercent = (maxHp > 0) and (hp / maxHp * 100) or 0
-		if hpPercent >= safeZoneHPThresholdExit then
+		-- Exit threshold must also use %, same as enter – using raw HP here broke
+		-- games where MaxHealth is not exactly 100 (exit threshold could be below
+		-- enter threshold, making it impossible to ever leave the safe zone).
+		local exitHpPercent = (maxHp > 0) and (hp / maxHp * 100) or 100
+		if exitHpPercent >= safeZoneHPThresholdExit then
 			safeZoneExitCleanup(hrp)
 		else
 			if safeZonePositions[safeZoneCycleIndex] then
@@ -2911,12 +2932,10 @@ local function updateTargetDisplay()
 		end
 		targetStateChanged = true
 	end
-	-- Target died: clear the stale reference but KEEP camLockEnabled so the heartbeat
-	-- can either wait for the selected player to respawn or find a new target.
-	if camLockTarget and isDeadTargetModel(camLockTarget) then
-		lastTargetDeathTime = tick()
+	if camLockTarget and isDeadTargetModel(camLockTarget) and not manualAttackTpPlayer then
 		camLockTarget = nil
-		camLockWaiting = true
+		camLockWaiting = false
+		camLockEnabled = false
 		syncCamLockKeybindDisplay()
 		targetStateChanged = true
 	end
@@ -3386,16 +3405,7 @@ local function toggleCamLock(nextState)
 		camLockEnabled = nextState
 	end
 	if camLockEnabled then
-		-- Prefer an already-selected manual target over auto-find
-		local manualTarget = resolveManualAttackTpTargetModel()
-		if isValidCamLockTarget(manualTarget) then
-			camLockTarget = manualTarget
-		elseif manualAttackTpPlayer and manualAttackTpPlayer.Parent == Players then
-			-- Player selected but currently dead/respawning - wait, don't auto-find
-			camLockTarget = nil
-		else
-			camLockTarget = getCamLockTarget()
-		end
+		camLockTarget = getCamLockTarget()
 		camLockWaiting = camLockTarget == nil
 		if camLockTarget then
 			local camLockPlayer = Players:GetPlayerFromCharacter(camLockTarget)
@@ -8248,29 +8258,17 @@ do
 			if not isValidCamLockTarget(camLockTarget) then
 				local manualTarget = resolveManualAttackTpTargetModel()
 				if isValidCamLockTarget(manualTarget) then
-					-- Respawned or newly valid manual target - pick it up
 					camLockTarget = manualTarget
-				elseif manualAttackTpPlayer then
-					-- Manual player selected: check if they left the server
-					if manualAttackTpPlayer.Parent ~= Players then
-						-- Player left → disable camLock and clear selection
-						clearCamLockTarget(true)
-						shouldRefreshTargetDisplay = true
-					else
-						-- Still in server but dead/respawning → wait, keep camLockEnabled
-						camLockTarget = nil
-					end
-				elseif not manualAttackTpTarget and tick() - lastTargetDeathTime > 0.5 then
-					-- No manual selection at all → auto-find nearest visible target
+				elseif not manualAttackTpPlayer and tick() - lastTargetDeathTime > 0.5 then
 					camLockTarget = getCamLockTarget()
 				end
 			end
-			-- Clear any stale dead-model reference; keep searching next tick
 			local nextTarget = camLockTarget
-			if nextTarget and isDeadTargetModel(nextTarget) then
-				lastTargetDeathTime = tick()
-				camLockTarget = nil
+			if nextTarget and isDeadTargetModel(nextTarget) and not manualAttackTpPlayer then
+				clearCamLockTarget(false)
 				shouldRefreshTargetDisplay = true
+				camLockTarget = nil
+				lastTargetDeathTime = tick()
 			end
 			camLockWaiting = camLockTarget == nil or not isValidCamLockTarget(camLockTarget)
 			if camLockTarget then
