@@ -800,7 +800,7 @@ local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneHPCharacter = nil
-local safeZoneHPThresholdEnter = 25
+local safeZoneHPThresholdEnter = 26
 local safeZoneHPThresholdExit = 34
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
@@ -1839,13 +1839,10 @@ local function safeZoneExitCleanup(hrp)
 	safeZoneHPInSafeZone = false
 	safeZoneHPCharacter = nil
 	if not afkEnabled then
-		-- teleport back FIRST, then restore protection
-		-- (restoring protection before the CFrame set caused the protection system
-		--  to snap the player back to the void before the saved position could be applied)
+		safeZoneRestoreProtection()
 		if hrp and safeZoneHPSavedCFrame then
 			hrp.CFrame = safeZoneHPSavedCFrame
 		end
-		safeZoneRestoreProtection()
 	end
 	if getTrashState.running then
 		stopGetTrashImmediate()
@@ -1859,24 +1856,8 @@ local function safeZoneEnterSafeZone(character, hrp)
 	safeZoneHPCharacter = character
 	if getTrashState.running and getTrashState.savedCFrame then
 		safeZoneHPSavedCFrame = getTrashState.savedCFrame
-		-- Stop the getTrash holdCFrame loop WITHOUT calling stopGetTrashImmediate(),
-		-- because stopGetTrashImmediate resets _G.SafeTeleportLock to false which
-		-- would undo the lock we set in safeZoneDisableProtection below.
-		getTrashState.token = (getTrashState.token or 0) + 1
-		getTrashState.running = false
-		getTrashState.returning = false
-		getTrashState.holdCFrame = nil
-		task.spawn(function()
-			for _ = 1, 10 do
-				if getTrashState.running then break end
-				setGetTrashNoclipEnabled(false)
-				task.wait(0.05)
-			end
-		end)
-		syncGetTrashKeybindDisplay()
 	else
 		safeZoneHPSavedCFrame = hrp.CFrame
-		getTrashState.blockSetBack = true
 	end
 	if voidDeadActive then
 		toggleVoidDead(false)
@@ -1912,11 +1893,8 @@ local function handleSafeZoneHP()
 	end
 
 	if safeZoneHPInSafeZone then
-		-- Exit threshold must also use %, same as enter – using raw HP here broke
-		-- games where MaxHealth is not exactly 100 (exit threshold could be below
-		-- enter threshold, making it impossible to ever leave the safe zone).
-		local exitHpPercent = (maxHp > 0) and (hp / maxHp * 100) or 100
-		if exitHpPercent >= safeZoneHPThresholdExit then
+		local exitHp = math.min(safeZoneHPThresholdExit, maxHp)
+		if hp >= exitHp then
 			safeZoneExitCleanup(hrp)
 		else
 			if safeZonePositions[safeZoneCycleIndex] then
