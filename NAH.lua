@@ -2954,8 +2954,14 @@ end
 function hasTrackedSelectedPlayer()
 	return manualAttackTpPlayer ~= nil and manualAttackTpPlayer ~= player and manualAttackTpPlayer.Parent == Players
 end
-function isWaitingForSelectedPlayerRespawn()
-	return hasTrackedSelectedPlayer() and isDeadTargetModel(resolveManualAttackTpTargetModel())
+function isWaitingForSelectedTargetRespawn()
+	if hasTrackedSelectedPlayer() and isDeadTargetModel(resolveManualAttackTpTargetModel()) then
+		return true
+	end
+	if manualAttackTpTargetName ~= nil and isDeadTargetModel(resolveManualAttackTpTargetModel()) then
+		return true
+	end
+	return false
 end
 local function hasManualAttackTpSelection()
 	if manualAttackTpPlayer then
@@ -2977,7 +2983,7 @@ local function hasActiveSelectedTarget()
 	return false
 end
 function hasSelectedTargetOrPendingPlayer()
-	return hasActiveSelectedTarget() or isWaitingForSelectedPlayerRespawn() or manualAttackTpTargetName ~= nil
+	return hasActiveSelectedTarget() or isWaitingForSelectedTargetRespawn() or manualAttackTpTargetName ~= nil
 end
 syncTargetActionControls = function()
 	if not targetActionControls then
@@ -3159,7 +3165,7 @@ function getSelectableTargetModels()
 	local function scanFolder(folder)
 		if not folder then return end
 		for _, model in ipairs(folder:GetChildren()) do
-			if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
+			if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) and not Players:FindFirstChild(model.Name) and not offlinePlayers[model.Name] then
 				local hum = model:FindFirstChildOfClass("Humanoid")
 				local modelRoot = model:FindFirstChild("HumanoidRootPart")
 				if hum and modelRoot then
@@ -3490,7 +3496,7 @@ local function toggleMouseTargetSelection()
 	local mouseTarget = getClosestMouseTarget()
 	local currentTarget = resolveManualAttackTpTargetModel()
 	local currentPlayer = manualAttackTpPlayer
-	if hasManualAttackTpSelection() or isWaitingForSelectedPlayerRespawn() then
+	if hasManualAttackTpSelection() or isWaitingForSelectedTargetRespawn() then
 		local clickedSamePlayer = currentPlayer
 			and mouseTarget
 			and getSelectablePlayerForTargetModel(mouseTarget) == currentPlayer
@@ -5652,10 +5658,10 @@ do
 		return targetPlayer and targetPlayer ~= player and targetPlayer.Parent == Players
 	end
 	isSelectableModelDropdownTarget = function(model)
-		if not model or model == player.Character then
+		if not model then
 			return false
 		end
-		if Players:GetPlayerFromCharacter(model) == player then
+		if Players:GetPlayerFromCharacter(model) or Players:FindFirstChild(model.Name) or offlinePlayers[model.Name] then
 			return false
 		end
 		return model:FindFirstChild("HumanoidRootPart") ~= nil
@@ -6053,7 +6059,7 @@ toggleView = function(nextState)
 		shouldEnable = not viewing
 	end
 	if shouldEnable then
-		if not hasSelectedTargetOrPendingPlayer() or (not startView() and not isWaitingForSelectedPlayerRespawn()) then
+		if not hasSelectedTargetOrPendingPlayer() or (not startView() and not isWaitingForSelectedTargetRespawn()) then
 			stopView()
 		else
 			viewing = true
@@ -6079,7 +6085,7 @@ function teleportToSelectedTarget(modeOverride)
 		return
 	end
 	if not isValidAttackTpTarget(targetModel) then
-		if isWaitingForSelectedPlayerRespawn() then
+		if isWaitingForSelectedTargetRespawn() then
 			pendingTeleportToSelectedPlayer = true
 		end
 		return
@@ -8479,6 +8485,12 @@ do
 					if manualAttackTpTargetName == name then
 						clearManualAttackTpTarget()
 					end
+					if camLockTarget and camLockTarget.Name == name then
+						camLockTarget = nil
+						camLockWaiting = false
+						camLockEnabled = false
+						syncCamLockKeybindDisplay()
+					end
 					blacklistedModelNames[name] = nil
 					local prefixLabel = "[M] " .. name
 					blacklistedTargets[prefixLabel] = nil
@@ -8523,13 +8535,21 @@ do
 					if newViewHumanoid and cam then
 						cam.CameraSubject = newViewHumanoid
 					end
-				elseif hasTrackedSelectedPlayer() and isWaitingForSelectedPlayerRespawn() then
-					currentViewPlayer = manualAttackTpPlayer
+				elseif isWaitingForSelectedTargetRespawn() then
+					if hasTrackedSelectedPlayer() then
+						currentViewPlayer = manualAttackTpPlayer
+					else
+						currentViewTarget = nil
+					end
 				else
 					stopView()
 				end
-			elseif hasTrackedSelectedPlayer() and isWaitingForSelectedPlayerRespawn() then
-				currentViewPlayer = manualAttackTpPlayer
+			elseif isWaitingForSelectedTargetRespawn() then
+				if hasTrackedSelectedPlayer() then
+					currentViewPlayer = manualAttackTpPlayer
+				else
+					currentViewTarget = nil
+				end
 			else
 				stopView()
 			end
