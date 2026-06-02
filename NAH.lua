@@ -534,53 +534,16 @@ local function updateFriendCache()
         end
     end
 end
-local function updateAntiFlingCache()
-    local newCache = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            for _, part in ipairs(p.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    table.insert(newCache, part)
-                    part.CanCollide = false
-                end
-            end
-        end
-    end
-    otherPartsCache = newCache
-end
 task.spawn(function()
-    updateAntiFlingCache()
     Players.PlayerAdded:Connect(function(p)
         task.spawn(function()
             pcall(function()
                 friendCache[p.UserId] = player:IsFriendsWith(p.UserId)
             end)
         end)
-        p.CharacterAdded:Connect(function()
-            task.wait(0.5) 
-            updateAntiFlingCache()
-        end)
     end)
     updateFriendCache()
-    for _, p in ipairs(Players:GetPlayers()) do
-        p.CharacterAdded:Connect(function()
-            task.wait(0.5)
-            updateAntiFlingCache()
-        end)
-    end
-    RunService.Heartbeat:Connect(function()
-        for i = 1, #otherPartsCache do
-            local part = otherPartsCache[i]
-            if part and part.Parent then
-                if part.CanCollide then
-                    part.CanCollide = false
-                end
-            else
-            end
-        end
-    end)
     while task.wait(5) do
-        updateAntiFlingCache()
         updateFriendCache()
     end
 end)
@@ -1208,6 +1171,118 @@ local function toggleVoidDead(state)
 		deathConn:Disconnect()
 	end)
 end
+
+local dVoidDeadActive = false
+local dVoidDeadConn = nil
+local DVoidDeadToggle = nil
+
+local function toggleDVoidDead(state)
+	local targetState = state
+	if targetState == nil then
+		targetState = not dVoidDeadActive
+	end
+	if dVoidDeadActive == targetState then return end
+	local plr = game:GetService("Players").LocalPlayer
+	local character = plr.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if targetState == false then
+		dVoidDeadActive = false
+		if dVoidDeadConn then 
+			dVoidDeadConn:Disconnect() 
+			dVoidDeadConn = nil
+		end
+		if DVoidDeadToggle then DVoidDeadToggle.SetValue(false, true) end
+		if voidDeadLastCF and hrp and humanoid and humanoid.Health > 0 then
+			applyTeleportRootState(hrp, voidDeadLastCF)
+		end
+		pcall(function()
+			workspace.Camera.CameraType = Enum.CameraType.Custom
+			workspace.Camera.CameraSubject = humanoid or character
+		end)
+		return
+	end
+	if not (character and hrp and humanoid) then
+		if DVoidDeadToggle then DVoidDeadToggle.SetValue(false, true) end
+		return
+	end
+	if canSaveSetBackPosition(character, hrp, humanoid) then
+		voidDeadLastCF = hrp.CFrame
+	else
+		voidDeadLastCF = hrp.CFrame
+	end
+	dVoidDeadActive = true
+	if DVoidDeadToggle then DVoidDeadToggle.SetValue(true, true) end
+	pcall(function()
+		workspace.Camera.CameraType = Enum.CameraType.Scriptable
+	end)
+	if dVoidDeadConn then dVoidDeadConn:Disconnect() end
+	dVoidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
+		local targetModel = resolveAttackTpTarget()
+		local targetPlayer = targetModel and game:GetService("Players"):GetPlayerFromCharacter(targetModel)
+		local targetHumanoid = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
+		
+		if not dVoidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) then
+			if dVoidDeadConn then 
+				dVoidDeadConn:Disconnect() 
+				dVoidDeadConn = nil
+			end
+			if dVoidDeadActive and humanoid and humanoid.Health <= 0 then
+				toggleDVoidDead(false)
+			end
+			return
+		end
+		
+		if targetPlayer and targetHumanoid and targetHumanoid.Health > 0 then
+			hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		else
+			if dVoidDeadActive then
+				toggleDVoidDead(false)
+			end
+		end
+	end)
+	local deathConn
+	deathConn = humanoid.Died:Connect(function()
+		if dVoidDeadActive then
+			toggleDVoidDead(false)
+		end
+		deathConn:Disconnect()
+	end)
+end
+
+local antiFlingEnabled = false
+local antiFlingConnection = nil
+local function toggleAntiFling(enabled)
+	antiFlingEnabled = enabled
+	if antiFlingConnection then
+		antiFlingConnection:Disconnect()
+		antiFlingConnection = nil
+	end
+	if antiFlingEnabled then
+		antiFlingConnection = game:GetService("RunService").Stepped:Connect(function()
+			for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+				if p ~= player and p.Character then
+					for _, part in ipairs(p.Character:GetDescendants()) do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end
+			end
+			for _, model in ipairs(getSelectableTargetModels()) do
+				if model ~= player.Character then
+					for _, part in ipairs(model:GetDescendants()) do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end
+			end
+		end)
+	end
+end
 local function syncFlyKeybindDisplay()
 	keybindEntries.Fly = {
 		name = "Fly",
@@ -1467,6 +1542,9 @@ function setAuraFlingEnabled(enabled)
 	return auraFlingEnabled and "ON" or "OFF"
 end
 function clickFlingTargetModel(targetModel)
+	if isTargetBlacklisted and isTargetBlacklisted(targetModel, Players:GetPlayerFromCharacter(targetModel)) then
+		return
+	end
 	if clickFlingBusy then
 		return
 	end
@@ -2742,7 +2820,7 @@ function isValidCamLockTarget(model)
 	end
 	local modelHumanoid = model:FindFirstChildOfClass("Humanoid")
 	local modelRoot = model:FindFirstChild("HumanoidRootPart")
-	return modelHumanoid and modelHumanoid.Health > 0 and modelRoot ~= nil
+	return modelHumanoid and modelRoot ~= nil
 end
 function isValidAttackTpTarget(model)
 	if not isValidCamLockTarget(model) then
@@ -2760,7 +2838,7 @@ local function isDeadTargetModel(model)
 	end
 	local modelHumanoid = model:FindFirstChildOfClass("Humanoid")
 	if modelHumanoid then
-		return modelHumanoid.Health <= 0
+		return false
 	end
 	return false
 end
@@ -2844,11 +2922,31 @@ local function getSelectablePlayerForTargetModel(model)
 	end
 	return nil
 end
+local manualAttackTpTargetName = nil
 local function resolveManualAttackTpTargetModel()
 	if manualAttackTpPlayer then
+		if isTargetBlacklisted and isTargetBlacklisted(nil, manualAttackTpPlayer) then
+			return nil
+		end
 		local trackedTarget = getTrackedPlayerTargetModel(manualAttackTpPlayer)
 		if trackedTarget then
 			manualAttackTpTarget = trackedTarget
+		end
+	elseif manualAttackTpTarget then
+		if manualAttackTpTarget.Parent == nil then
+			local targetName = manualAttackTpTargetName or manualAttackTpTarget.Name
+			for _, model in ipairs(getSelectableTargetModels()) do
+				if model.Name == targetName and model:FindFirstChildOfClass("Humanoid") then
+					manualAttackTpTarget = model
+					if syncModelDropdownSelectionToManualTarget then
+						syncModelDropdownSelectionToManualTarget()
+					end
+					break
+				end
+			end
+		end
+		if manualAttackTpTarget and isTargetBlacklisted and isTargetBlacklisted(manualAttackTpTarget, nil) then
+			return nil
 		end
 	end
 	return manualAttackTpTarget
@@ -2870,10 +2968,16 @@ local function hasActiveSelectedTarget()
 		return true
 	end
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
-	return hasLiveStoredTarget(resolvedManualTarget)
+	if hasLiveStoredTarget(resolvedManualTarget) then
+		return true
+	end
+	if manualAttackTpTargetName then
+		return true
+	end
+	return false
 end
 function hasSelectedTargetOrPendingPlayer()
-	return hasActiveSelectedTarget() or isWaitingForSelectedPlayerRespawn()
+	return hasActiveSelectedTarget() or isWaitingForSelectedPlayerRespawn() or manualAttackTpTargetName ~= nil
 end
 syncTargetActionControls = function()
 	if not targetActionControls then
@@ -2882,6 +2986,9 @@ syncTargetActionControls = function()
 	targetActionControls.First.SetValue(viewing, true)
 	targetActionControls.Second.SetValue(autoTpEnabled, true)
 	targetActionControls.Third.SetValue(flingEnabled, true)
+	if targetActionControls.Fourth then
+		targetActionControls.Fourth.SetValue(dVoidDeadActive, true)
+	end
 end
 syncFlingModeControls = function()
 	if not flingModeControls then
@@ -2928,19 +3035,24 @@ local function updateTargetDisplay()
 			manualAttackTpTarget = trackedTarget
 		end
 	elseif manualAttackTpTarget and (manualAttackTpTarget.Parent == nil) then
-		manualAttackTpTarget = nil
-		pendingTeleportToSelectedPlayer = false
-		if syncModelDropdownSelectionToManualTarget then
-			syncModelDropdownSelectionToManualTarget()
+		if not manualAttackTpTargetName then
+			manualAttackTpTarget = nil
+			pendingTeleportToSelectedPlayer = false
+			if syncModelDropdownSelectionToManualTarget then
+				syncModelDropdownSelectionToManualTarget()
+			end
+			targetStateChanged = true
 		end
-		targetStateChanged = true
 	end
 	if camLockTarget and isDeadTargetModel(camLockTarget) and not manualAttackTpPlayer then
-		camLockTarget = nil
-		camLockWaiting = false
-		camLockEnabled = false
-		syncCamLockKeybindDisplay()
-		targetStateChanged = true
+		local camPlayer = Players:GetPlayerFromCharacter(camLockTarget)
+		if camPlayer and camPlayer.Parent ~= Players then
+			camLockTarget = nil
+			camLockWaiting = false
+			camLockEnabled = false
+			syncCamLockKeybindDisplay()
+			targetStateChanged = true
+		end
 	end
 	if targetStateChanged then
 		syncTargetPickKeybindDisplay()
@@ -3044,46 +3156,26 @@ function getSelectableTargetModels()
 			end
 		end
 	end
-	if now - lastWorkspaceScan > 5 then
-		lastWorkspaceScan = now
-		task.spawn(function()
-			local newModels = {}
-			local function scanFolder(folder)
-				if not folder then return end
-				for _, model in ipairs(folder:GetChildren()) do
-					if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
-						local hum = model:FindFirstChildOfClass("Humanoid")
-						local modelRoot = model:FindFirstChild("HumanoidRootPart")
-						if hum and modelRoot then
-							newModels[#newModels + 1] = model
-						end
+	local function scanFolder(folder)
+		if not folder then return end
+		for _, model in ipairs(folder:GetChildren()) do
+			if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) then
+				local hum = model:FindFirstChildOfClass("Humanoid")
+				local modelRoot = model:FindFirstChild("HumanoidRootPart")
+				if hum and modelRoot then
+					if not seenModels[model] then
+						seenModels[model] = true
+						models[#models + 1] = model
 					end
 				end
 			end
-			scanFolder(Workspace:FindFirstChild("Live"))
-			if #newModels < 5 then
-				scanFolder(Workspace:FindFirstChild("Map"))
-			end
-			for _, m in ipairs(newModels) do
-				if not seenModels[m] then
-					seenModels[m] = true
-					models[#models + 1] = m
-				end
-			end
-			cachedSelectableModels = models
-		end)
-	else
-		for _, m in ipairs(cachedSelectableModels) do
-			if not seenModels[m] and m.Parent and not Players:GetPlayerFromCharacter(m) then
-				local hum = m:FindFirstChildOfClass("Humanoid")
-				if hum and hum.Health > 0 then
-					seenModels[m] = true
-					models[#models + 1] = m
-				end
-			end
 		end
-		cachedSelectableModels = models
 	end
+	
+	scanFolder(Workspace:FindFirstChild("Live"))
+	scanFolder(Workspace)
+	
+	cachedSelectableModels = models
 	return models
 end
 local function getClosestAlivePlayerTarget()
@@ -3120,7 +3212,9 @@ local function getPreferredAttackTpTarget()
 end
 local function getCurrentActionTargetModel(allowClosestFallback)
 	if hasLiveStoredTarget(camLockTarget) then
-		return camLockTarget
+		if not (isTargetBlacklisted and isTargetBlacklisted(camLockTarget, Players:GetPlayerFromCharacter(camLockTarget))) then
+			return camLockTarget
+		end
 	end
 	local resolvedManualTarget = resolveManualAttackTpTargetModel()
 	if hasLiveStoredTarget(resolvedManualTarget) then
@@ -3288,17 +3382,19 @@ local function getCamLockTarget()
 	local bestModel = nil
 	local bestDistance = math.huge
 	for _, model in ipairs(getSelectableTargetModels()) do
-		local modelRoot = model:FindFirstChild("HumanoidRootPart")
-		if modelRoot then
-			local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
-			if visible then
-				local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
-				local centerDistance = (screenVector - viewportCenter).Magnitude
-				local mouseDistance = (screenVector - mousePosition).Magnitude
-				local distance = math.min(centerDistance, mouseDistance)
-				if distance < bestDistance then
-					bestDistance = distance
-					bestModel = model
+		if not (isTargetBlacklisted and isTargetBlacklisted(model, Players:GetPlayerFromCharacter(model))) then
+			local modelRoot = model:FindFirstChild("HumanoidRootPart")
+			if modelRoot then
+				local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
+				if visible then
+					local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
+					local centerDistance = (screenVector - viewportCenter).Magnitude
+					local mouseDistance = (screenVector - mousePosition).Magnitude
+					local distance = math.min(centerDistance, mouseDistance)
+					if distance < bestDistance then
+						bestDistance = distance
+						bestModel = model
+					end
 				end
 			end
 		end
@@ -3317,15 +3413,17 @@ local function getClosestMouseTarget()
 	local bestModel = nil
 	local bestDistance = math.huge
 	for _, model in ipairs(getSelectableTargetModels()) do
-		local modelRoot = model:FindFirstChild("HumanoidRootPart")
-		if modelRoot then
-			local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
-			if visible then
-				local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
-				local mouseDistance = (screenVector - mousePosition).Magnitude
-				if mouseDistance < bestDistance then
-					bestDistance = mouseDistance
-					bestModel = model
+		if not (isTargetBlacklisted and isTargetBlacklisted(model, Players:GetPlayerFromCharacter(model))) then
+			local modelRoot = model:FindFirstChild("HumanoidRootPart")
+			if modelRoot then
+				local screenPoint, visible = cam:WorldToViewportPoint(modelRoot.Position)
+				if visible then
+					local screenVector = Vector2.new(screenPoint.X, screenPoint.Y)
+					local mouseDistance = (screenVector - mousePosition).Magnitude
+					if mouseDistance < bestDistance then
+						bestDistance = mouseDistance
+						bestModel = model
+					end
 				end
 			end
 		end
@@ -3338,6 +3436,7 @@ end
 local function clearManualAttackTpTarget()
 	manualAttackTpPlayer = nil
 	manualAttackTpTarget = nil
+	manualAttackTpTargetName = nil
 	pendingTeleportToSelectedPlayer = false
 	if syncModelDropdownSelectionToManualTarget then
 		syncModelDropdownSelectionToManualTarget()
@@ -3366,12 +3465,15 @@ local function setManualAttackTpTarget(model, targetPlayer)
 	if isSelectablePlayerDropdownTarget(resolvedTargetPlayer) then
 		manualAttackTpPlayer = resolvedTargetPlayer
 		manualAttackTpTarget = getTrackedPlayerTargetModel(resolvedTargetPlayer)
+		manualAttackTpTargetName = nil
 	elseif isValidAttackTpTarget(model) then
 		manualAttackTpPlayer = nil
 		manualAttackTpTarget = model
+		manualAttackTpTargetName = model.Name
 	else
 		manualAttackTpPlayer = nil
 		manualAttackTpTarget = nil
+		manualAttackTpTargetName = nil
 	end
 	pendingTeleportToSelectedPlayer = false
 	if not isValidAttackTpTarget(camLockTarget) then
@@ -4142,7 +4244,7 @@ task.spawn(function()
     local supportsDashBlock = game.GameId == 3808081382
     local isTSB = supportsDashBlock
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(isTSB and 214 or 112) 
+    local movementHub = makeControlFrame(isTSB and 246 or 112) 
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -4261,6 +4363,8 @@ task.spawn(function()
         local row5 = makeRow(168)
         makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
         makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
+        local row6 = makeRow(202)
+        makeHubTog(row6, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1)
     else
         local row2 = makeRow(66)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
@@ -5504,8 +5608,11 @@ blPlayersDropdownControl = nil
 blacklistedTargets = {}
 blacklistedPlayers = {}
 blacklistedModels = {}
+blacklistedModelNames = {}
 offlinePlayers = {}
 offlineDeletionTimers = {}
+offlineModels = {}
+offlineModelDeletionTimers = {}
 if type(controlSaveData.OfflinePlayers) == "table" then
 	for name, data in pairs(controlSaveData.OfflinePlayers) do
 		if type(data) == "table" and data.name then
@@ -5532,7 +5639,13 @@ isTargetBlacklisted = function(model, targetPlayer)
 	if targetPlayer then
 		return blacklistedPlayers[targetPlayer] == true
 	end
-	return blacklistedModels[model] == true
+	if blacklistedModels[model] == true then
+		return true
+	end
+	if model and blacklistedModelNames[model.Name] then
+		return true
+	end
+	return false
 end
 do
 	isSelectablePlayerDropdownTarget = function(targetPlayer)
@@ -5548,15 +5661,21 @@ do
 		return model:FindFirstChild("HumanoidRootPart") ~= nil
 	end
 	getModelDropdownLabelForSelection = function(model, targetPlayer)
-		if not model and not targetPlayer then
+		if not model and not targetPlayer and not manualAttackTpTargetName then
 			return nil
 		end
+		local modelName = model and model.Name or manualAttackTpTargetName
 		for label, mappedTarget in pairs(modelDropdownLookup) do
-			if mappedTarget.player == targetPlayer then
+			if targetPlayer and mappedTarget.player == targetPlayer then
 				return label
 			end
-			if mappedTarget.player == nil and mappedTarget.model == model then
-				return label
+			if not targetPlayer then
+				if model and mappedTarget.model == model then
+					return label
+				end
+				if modelName and mappedTarget.isOfflineModel and mappedTarget.baseNameStr == modelName then
+					return label
+				end
 			end
 		end
 		return nil
@@ -5595,6 +5714,24 @@ do
 					fullName = targetModel:GetFullName(),
 					player = nil,
 					model = targetModel,
+				}
+			end
+		end
+		for offName in pairs(offlineModels) do
+			local found = false
+			for _, entry in ipairs(modelEntries) do
+				if entry.baseName == offName then
+					found = true
+					break
+				end
+			end
+			if not found then
+				modelEntries[#modelEntries + 1] = {
+					baseName = offName,
+					fullName = offName,
+					player = nil,
+					model = nil,
+					isOfflineModel = true,
 				}
 			end
 		end
@@ -5660,7 +5797,8 @@ do
 					model = entry.model,
 					baseNameStr = baseNameStr,
 					dispNameStr = dispNameStr,
-					pOrM = pOrM
+					pOrM = pOrM,
+					isOfflineModel = entry.isOfflineModel,
 				}
 			end
 		end
@@ -5703,8 +5841,19 @@ do
 		end
 		if isSelectablePlayerDropdownTarget(selectedEntry.player) then
 			setManualAttackTpTarget(selectedEntry.model, selectedEntry.player)
-		elseif selectedEntry.model then
-			setManualAttackTpTarget(selectedEntry.model)
+		elseif selectedEntry.model or selectedEntry.isOfflineModel then
+			manualAttackTpPlayer = nil
+			manualAttackTpTarget = selectedEntry.model
+			manualAttackTpTargetName = selectedEntry.baseNameStr
+			pendingTeleportToSelectedPlayer = false
+			if not isValidAttackTpTarget(camLockTarget) then
+				attackTpTarget = resolveManualAttackTpTargetModel()
+			end
+			if syncModelDropdownSelectionToManualTarget then
+				syncModelDropdownSelectionToManualTarget()
+			end
+			syncTargetPickKeybindDisplay()
+			updateTargetDisplay()
 		else
 			setManualAttackTpTarget(nil)
 		end
@@ -6008,6 +6157,9 @@ _G["3tog_on_one_one_button"] = function(data)
 	local secondName = tostring(data.name2 or "Auto TP")
 	local thirdName = tostring(data.name3 or "Fling")
 	local buttonName = tostring(data.buttonName or data.name4 or "TP")
+	local toggle4Name = data.name4Tog
+	local toggle4Callback = data.fun4Tog
+	local toggle4Enabled = data.default4Tog == true
 	local firstCallback = data.fun1
 	local secondCallback = data.fun2
 	local thirdCallback = data.fun3
@@ -6046,12 +6198,13 @@ _G["3tog_on_one_one_button"] = function(data)
 	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	rowLayout.Padding = UDim.new(0, 6)
 	rowLayout.Parent = rowFrame
+	local segmentCount = toggle4Name and 5 or 4
 	local function createSegment(text, isToggle, initialState, callback)
 		local segmentButton = Instance.new("TextButton")
 		segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		segmentButton.BackgroundTransparency = 0.5
 		segmentButton.BorderSizePixel = 0
-		segmentButton.Size = UDim2.new(0.25, -5, 1, 0)
+		segmentButton.Size = UDim2.new(1/segmentCount, -5, 1, 0)
 		segmentButton.AutoButtonColor = false
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
@@ -6116,12 +6269,17 @@ _G["3tog_on_one_one_button"] = function(data)
 	local firstControl = createSegment(firstName, true, firstEnabled, firstCallback)
 	local secondControl = createSegment(secondName, true, secondEnabled, secondCallback)
 	local thirdControl = createSegment(thirdName, true, thirdEnabled, thirdCallback)
+	local fourthControl = nil
+	if toggle4Name then
+		fourthControl = createSegment(toggle4Name, true, toggle4Enabled, toggle4Callback)
+	end
 	local buttonControl = createSegment(buttonName, false, false, buttonCallback)
 	return {
 		Frame = holder,
 		First = firstControl,
 		Second = secondControl,
 		Third = thirdControl,
+		Fourth = fourthControl,
 		Button = buttonControl,
 	}
 end
@@ -6812,6 +6970,7 @@ blPlayersDropdownControl = Dropdown({
 		local newBlacklist = {}
 		local newBLPlayers = {}
 		local newBLModels = {}
+		local newBLModelNames = {}
 		if type(value) == "table" then
 			for _, label in ipairs(value) do
 				newBlacklist[label] = true
@@ -6822,6 +6981,9 @@ blPlayersDropdownControl = Dropdown({
 					end
 					if entry.model then
 						newBLModels[entry.model] = true
+						if not entry.player then
+							newBLModelNames[entry.model.Name] = true
+						end
 					end
 				end
 			end
@@ -6829,6 +6991,7 @@ blPlayersDropdownControl = Dropdown({
 		blacklistedTargets = newBlacklist
 		blacklistedPlayers = newBLPlayers
 		blacklistedModels = newBLModels
+		blacklistedModelNames = newBLModelNames
 		for label, entry in pairs(modelDropdownLookup) do
 			if entry.player and not entry.isOffline and not newBlacklist[label] then
 				if offlinePlayers[entry.baseNameStr] then
@@ -7092,10 +7255,12 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 	name1 = "View",
 	name2 = "Auto TP",
 	name3 = "Fling",
+	name4Tog = "(D)",
 	buttonName = "TP",
 	default1 = viewing,
 	default2 = autoTpEnabled,
 	default3 = flingEnabled,
+	default4Tog = dVoidDeadActive,
 	fun1 = function(enabled)
 		if enabled and not (manualAttackTpPlayer or manualAttackTpTarget) then
 			targetActionControls.First.SetValue(false, true)
@@ -7126,6 +7291,13 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 			zeroLocalPlayerRoot()
 		end
 		syncTargetActionControls()
+	end,
+	fun4Tog = function(enabled)
+		if enabled and not manualAttackTpPlayer then
+			targetActionControls.Fourth.SetValue(false, true)
+			return
+		end
+		toggleDVoidDead(enabled)
 	end,
 	buttonfun = function()
 		if not (manualAttackTpPlayer or manualAttackTpTarget) then
@@ -8229,11 +8401,29 @@ do
 				end
 			end
 			local nextTarget = camLockTarget
-			if nextTarget and isDeadTargetModel(nextTarget) and not manualAttackTpPlayer then
-				clearCamLockTarget(false)
-				shouldRefreshTargetDisplay = true
-				camLockTarget = nil
-				lastTargetDeathTime = tick()
+			if nextTarget and isDeadTargetModel(nextTarget) then
+				local nextPlayer = Players:GetPlayerFromCharacter(nextTarget)
+				if nextPlayer and nextPlayer.Parent ~= Players then
+					clearCamLockTarget(false)
+					shouldRefreshTargetDisplay = true
+					camLockTarget = nil
+					lastTargetDeathTime = tick()
+				elseif not nextPlayer and nextTarget.Parent == nil then
+					local foundReplacement = false
+					for _, model in ipairs(getSelectableTargetModels()) do
+						if model.Name == nextTarget.Name and model:FindFirstChildOfClass("Humanoid") then
+							camLockTarget = model
+							foundReplacement = true
+							shouldRefreshTargetDisplay = true
+							break
+						end
+					end
+					if not foundReplacement then
+						camLockWaiting = true
+					end
+				else
+					camLockWaiting = true
+				end
 			end
 			camLockWaiting = camLockTarget == nil or not isValidCamLockTarget(camLockTarget)
 			if camLockTarget then
@@ -8269,6 +8459,38 @@ do
 	if shouldRefreshTargetDisplay or targetDisplayAccumulator >= 0.15 then
 		targetDisplayAccumulator = 0
 		updateTargetDisplay()
+		
+		local seenCurrentModels = {}
+		for _, targetModel in ipairs(getSelectableTargetModels()) do
+			if isSelectableModelDropdownTarget(targetModel) then
+				local name = targetModel.Name ~= "" and targetModel.Name or "Model"
+				seenCurrentModels[name] = true
+				offlineModels[name] = true
+				offlineModelDeletionTimers[name] = nil
+			end
+		end
+		for name in pairs(offlineModels) do
+			if not seenCurrentModels[name] then
+				if not offlineModelDeletionTimers[name] then
+					offlineModelDeletionTimers[name] = tick()
+				elseif tick() - offlineModelDeletionTimers[name] >= 10 then
+					offlineModels[name] = nil
+					offlineModelDeletionTimers[name] = nil
+					if manualAttackTpTargetName == name then
+						clearManualAttackTpTarget()
+					end
+					blacklistedModelNames[name] = nil
+					local prefixLabel = "[M] " .. name
+					blacklistedTargets[prefixLabel] = nil
+					local i = 2
+					while blacklistedTargets[prefixLabel .. " (" .. i .. ")"] do
+						blacklistedTargets[prefixLabel .. " (" .. i .. ")"] = nil
+						i = i + 1
+					end
+				end
+			end
+		end
+
 		if updateDynamicDropdownDisplays then
 			updateDynamicDropdownDisplays()
 		end
@@ -8354,10 +8576,10 @@ do
 		if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 			clearManualAttackTpTarget()
 		end
-		if not manualAttackTpPlayer and manualAttackTpTarget and isDeadTargetModel(manualAttackTpTarget) then
+		if not manualAttackTpPlayer and manualAttackTpTarget and manualAttackTpTarget.Parent == nil and not manualAttackTpTargetName then
 			clearManualAttackTpTarget()
 		end
-		if isDeadTargetModel(attackTpTarget) and not manualAttackTpPlayer then
+		if isDeadTargetModel(attackTpTarget) and not manualAttackTpPlayer and not manualAttackTpTargetName then
 			attackTpTarget = nil
 		end
 		local preferredTarget = resolveAttackTpTarget()
