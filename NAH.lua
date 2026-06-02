@@ -249,7 +249,6 @@ targetLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 targetLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 targetLayout.Padding = UDim.new(0, 2)
 targetLayout.Parent = targetFrame
--- Linia 1: HP% | @username
 targetHPText = Instance.new("TextLabel")
 targetHPText.Name = "TargetHPText"
 targetHPText.BackgroundTransparency = 1
@@ -267,7 +266,6 @@ targetHPText.TextYAlignment = Enum.TextYAlignment.Center
 targetHPText.LayoutOrder = 1
 targetHPText.Visible = false
 targetHPText.Parent = targetFrame
--- Linia 2: DisplayName (jeśli różni się od username)
 targetValueText = Instance.new("TextLabel")
 targetValueText.Name = "TargetValueText"
 targetValueText.BackgroundTransparency = 1
@@ -285,7 +283,6 @@ targetValueText.TextYAlignment = Enum.TextYAlignment.Center
 targetValueText.LayoutOrder = 2
 targetValueText.Visible = false
 targetValueText.Parent = targetFrame
--- separator - ukryty na stałe
 hpSeparator = Instance.new("TextLabel")
 hpSeparator.Name = "Separator"
 hpSeparator.BackgroundTransparency = 1
@@ -796,6 +793,8 @@ local selectedPlace = "/\\"
 local afkEnabled = false
 local afkSavedCFrame = nil
 local afkConnection = nil
+local afkCharacter = nil
+local afkCharAddedConnection = nil
 local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
@@ -1744,7 +1743,6 @@ local function toggleAFK(enabled)
 		end
 		_G.SafeTeleportLock = true
 		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-		
 		local character = player.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart")
 		if hrp then
@@ -1754,21 +1752,36 @@ local function toggleAFK(enabled)
 				afkSavedCFrame = safeZoneHPSavedCFrame
 			end
 			afkCharacter = character
+			local targetPos = safeZonePositions[safeZoneCycleIndex]
+			hrp.Anchored = false
+			character:PivotTo(CFrame.new(targetPos))
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
 		else
 			afkSavedCFrame = nil
 			afkCharacter = nil
 		end
-		
+		afkCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
+			afkSavedCFrame = nil
+			afkCharacter = nil
+			local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
+			if newRoot and afkEnabled then
+				afkCharacter = newChar
+				local targetPos = safeZonePositions[safeZoneCycleIndex]
+				newRoot.Anchored = false
+				newChar:PivotTo(CFrame.new(targetPos))
+				newRoot.AssemblyLinearVelocity = Vector3.zero
+				newRoot.AssemblyAngularVelocity = Vector3.zero
+			end
+		end)
 		afkConnection = game:GetService("RunService").Stepped:Connect(function()
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			
 			if char and afkCharacter and char ~= afkCharacter then
 				afkSavedCFrame = nil
 				afkCharacter = char
 			end
-			
 			if root and not afkSavedCFrame and (hum and hum.Health > 0) then
 				if not safeZoneHPInSafeZone then
 					afkSavedCFrame = root.CFrame
@@ -1777,7 +1790,6 @@ local function toggleAFK(enabled)
 				end
 				afkCharacter = char
 			end
-			
 			if hum and hum.Health <= 0 then
 				afkSavedCFrame = nil
 			end
@@ -1790,6 +1802,10 @@ local function toggleAFK(enabled)
 			end
 		end)
 	else
+		if afkCharAddedConnection then
+			afkCharAddedConnection:Disconnect()
+			afkCharAddedConnection = nil
+		end
 		local protection = _G.NOTHINGX_Protection
 		if not safeZoneHPInSafeZone then
 			if protection then
@@ -1802,7 +1818,10 @@ local function toggleAFK(enabled)
 			local character = player.Character
 			local hrp = character and character:FindFirstChild("HumanoidRootPart")
 			if hrp and afkSavedCFrame then
-				hrp.CFrame = afkSavedCFrame
+				hrp.Anchored = false
+				character:PivotTo(afkSavedCFrame)
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
 			end
 		end
 		afkSavedCFrame = nil
@@ -1836,12 +1855,21 @@ local function safeZoneTeleportToSafe(character, hrp)
 	hrp.AssemblyAngularVelocity = Vector3.zero
 end
 local function safeZoneExitCleanup(hrp)
+	local exitCharacter = safeZoneHPCharacter
 	safeZoneHPInSafeZone = false
 	safeZoneHPCharacter = nil
 	if not afkEnabled then
 		safeZoneRestoreProtection()
 		if hrp and safeZoneHPSavedCFrame then
-			hrp.CFrame = safeZoneHPSavedCFrame
+			local char = exitCharacter or (hrp and hrp.Parent)
+			hrp.Anchored = false
+			if char and char:FindFirstChild("HumanoidRootPart") then
+				char:PivotTo(safeZoneHPSavedCFrame)
+			else
+				hrp.CFrame = safeZoneHPSavedCFrame
+			end
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
 		end
 	end
 	if getTrashState.running then
@@ -1876,7 +1904,6 @@ local function handleSafeZoneHP()
 	if not humanoid or not hrp then return end
 	local hp = humanoid.Health
 	local maxHp = humanoid.MaxHealth
-
 	if hp <= 0 or (safeZoneHPInSafeZone and safeZoneHPCharacter and character ~= safeZoneHPCharacter) then
 		if safeZoneHPInSafeZone then
 			safeZoneHPInSafeZone = false
@@ -1891,7 +1918,6 @@ local function handleSafeZoneHP()
 		end
 		return
 	end
-
 	if safeZoneHPInSafeZone then
 		local exitHp = math.min(safeZoneHPThresholdExit, maxHp)
 		if hp >= exitHp then
@@ -1911,7 +1937,6 @@ local function handleSafeZoneHP()
 		end
 	end
 end
-
 local safeZoneHPConnection = nil
 local safeZoneHPCharAddedConnection = nil
 local function toggleSafeZoneHP(enabled)
@@ -2923,7 +2948,6 @@ local function updateTargetDisplay()
 	local displayedTarget = getDisplayedTargetModel()
 	local line1 = ""
 	local line2 = ""
-
 	if displayedTarget then
 		local plr = game:GetService("Players"):GetPlayerFromCharacter(displayedTarget)
 		local baseName = string.sub(plr and plr.Name or displayedTarget.Name, 1, 20)
@@ -2952,7 +2976,6 @@ local function updateTargetDisplay()
 			line2 = "| " .. dispName
 		end
 	end
-
 	targetHPText.Text = line1
 	targetHPText.Visible = line1 ~= ""
 	targetValueText.Text = line2
@@ -5260,7 +5283,7 @@ function Dropdown(data)
 		local displayText = "-"
 		if #displayList > 0 then
 			if hideSelectionText then
-				displayText = "(---)"
+				displayText = "(
 			else
 				displayText = table.concat(displayList, ", ")
 			end
@@ -5483,7 +5506,6 @@ blacklistedPlayers = {}
 blacklistedModels = {}
 offlinePlayers = {}
 offlineDeletionTimers = {}
--- restore saved offline players
 if type(controlSaveData.OfflinePlayers) == "table" then
 	for name, data in pairs(controlSaveData.OfflinePlayers) do
 		if type(data) == "table" and data.name then
@@ -5493,11 +5515,9 @@ if type(controlSaveData.OfflinePlayers) == "table" then
 		end
 	end
 end
--- restore saved Friends BL state
 if controlSaveData.BLFriends == true then
 	blacklistedTargets["Friends"] = true
 end
--- restore saved BL player names (non-M) → pre-populate blacklistedTargets by name
 local savedBLPlayerNames = {}
 if type(controlSaveData.BLPlayerNames) == "table" then
 	for _, name in ipairs(controlSaveData.BLPlayerNames) do
@@ -5610,7 +5630,6 @@ do
 				end
 				usedLabels[label] = true
 				allItems[#allItems + 1] = label
-				-- auto-restore BL for P entries by saved name
 				if entry.player and (savedBLPlayerNames[entry.baseName] or offlinePlayers[entry.baseName]) then
 					blacklistedTargets[label] = true
 				end
@@ -5647,7 +5666,6 @@ do
 		end
 		appendEntries(playerEntries, "[P]")
 		appendEntries(modelEntries, "[M]")
-		-- inject offline-only players
 		for offName, offData in pairs(offlinePlayers) do
 			if not Players:FindFirstChild(offName) then
 				local label = "[P] " .. offName .. " (Offline)"
@@ -5707,7 +5725,6 @@ do
 				blPlayersDropdownControl.SetItemDisplayNames(displayNames)
 			end
 			blPlayersDropdownControl.SetItems(allItems, nil, true)
-			-- re-sync checkmarks z blacklistedTargets (np. offline gracz wrócił = nowy label, stary usunięty przez pruneSelectedValues)
 			local blToCheck = {}
 			for lbl in pairs(blacklistedTargets) do
 				blToCheck[#blToCheck + 1] = lbl
@@ -5716,7 +5733,6 @@ do
 				blPlayersDropdownControl.SetValue(blToCheck, true)
 			end
 		end
-		
 		local modelItems = {}
 		for _, item in ipairs(allItems) do
 			local entry = modelDropdownLookup[item]
@@ -5724,7 +5740,6 @@ do
 				table.insert(modelItems, item)
 			end
 		end
-		-- disabled items for Players dropdown: only online blacklisted (not offline)
 		local onlineBlacklist = {}
 		for lbl, v in pairs(blacklistedTargets) do
 			local e = modelDropdownLookup[lbl]
@@ -5739,7 +5754,6 @@ do
 				end
 			end
 		end
-		
 		local nextPreferredValue = preferredValue
 		if blacklistedTargets[nextPreferredValue] then
 			nextPreferredValue = nil
@@ -5759,7 +5773,6 @@ do
 		syncModelDropdownSelectionToManualTarget()
 	end
 end
-
 local function updateDynamicDropdownDisplays()
 	if not modelDropdownControl or not blPlayersDropdownControl then return end
 	local displayNames = {}
@@ -5768,7 +5781,6 @@ local function updateDynamicDropdownDisplays()
 			local offData = offlinePlayers[entry.offlineName]
 			local dispStr = (type(offData) == "table" and offData.displayName) and string.sub(offData.displayName, 1, 20) or entry.baseNameStr
 			displayNames[label] = string.format("%s | %s | P | Offline", entry.baseNameStr, dispStr)
-			-- continue
 		else
 			local hpStr = "0"
 			if entry.model then
@@ -5793,7 +5805,6 @@ local function updateDynamicDropdownDisplays()
 		modelDropdownControl.SetItemDisplayNames(displayNames)
 	end
 end
-
 stopView = function()
 	viewing = false
 	currentViewTarget = nil
@@ -6797,7 +6808,6 @@ blPlayersDropdownControl = Dropdown({
 	hideSelectionText = true,
 	deffultin = nil,
 	fun = function(value)
-		-- guard: initial Dropdown creation fires callback with empty {} → don't wipe BL
 		if not blPlayersDropdownControl then return end
 		local newBlacklist = {}
 		local newBLPlayers = {}
@@ -6819,7 +6829,6 @@ blPlayersDropdownControl = Dropdown({
 		blacklistedTargets = newBlacklist
 		blacklistedPlayers = newBLPlayers
 		blacklistedModels = newBLModels
-		-- instantly forget unchecked online players from offline list
 		for label, entry in pairs(modelDropdownLookup) do
 			if entry.player and not entry.isOffline and not newBlacklist[label] then
 				if offlinePlayers[entry.baseNameStr] then
@@ -6827,7 +6836,6 @@ blPlayersDropdownControl = Dropdown({
 				end
 			end
 		end
-		-- auto-save: only P entries (not M, not offline)
 		do
 			local blNames = {}
 			for label in pairs(newBlacklist) do
@@ -6857,7 +6865,6 @@ blPlayersDropdownControl = Dropdown({
 		if modelDropdownControl and modelDropdownControl.SetDisabledItems then
 			modelDropdownControl.SetDisabledItems(blacklistedTargets)
 		end
-		-- 5-sec deletion: for items unchecked, schedule removal of offline-only entries
 		if type(value) == "table" then
 			local checkedSet = {}
 			for _, lbl in ipairs(value) do checkedSet[lbl] = true end
@@ -6887,16 +6894,12 @@ blPlayersDropdownControl = Dropdown({
 						end)
 					end
 				elseif entry.isOffline and checkedSet[label] then
-					-- re-checked: cancel pending deletion
 					offlineDeletionTimers[label] = nil
 				end
 			end
-			-- also handle online players who just got unchecked
 			for label, entry in pairs(modelDropdownLookup) do
 				if not entry.isOffline and not checkedSet[label] then
-					-- was online-player, now unchecked: check if they left the server
 					if entry.player and not (entry.player.Parent == Players) then
-						-- they left; start 5-sec timer to remove
 						if not offlineDeletionTimers[label] then
 							offlineDeletionTimers[label] = true
 							local capturedLabel = label
@@ -6924,7 +6927,6 @@ blPlayersDropdownControl = Dropdown({
 		end
 	end,
 })
--- Offline Player Input TextBox
 do
 	local offlineInputHolder = makeControlFrame(78)
 	offlineInputHolder.Parent = uiX
@@ -7024,13 +7026,11 @@ do
 				addBtn.Active = true
 				return
 			end
-			-- check if local player
 			if userId == Players.LocalPlayer.UserId then
 				showStatus("Is You", 3)
 				addBtn.Active = true
 				return
 			end
-			-- get name from userId
 			local ok, name = pcall(function()
 				return Players:GetNameFromUserIdAsync(userId)
 			end)
@@ -7042,7 +7042,6 @@ do
 				addBtn.Active = true
 				return
 			end
-			-- check if already on the list (checked)
 			local lblOnline = "[P] " .. realName
 			local lblOffline = lblOnline .. " (Offline)"
 			if blacklistedTargets[lblOnline] or blacklistedTargets[lblOffline] or offlinePlayers[realName] then
@@ -7050,9 +7049,7 @@ do
 				addBtn.Active = true
 				return
 			end
-			
 			showStatus("Adding . . .")
-			-- fetch displayName via HTTP
 			local okHttp, result = pcall(function()
 				return game:HttpGet("https://users.roblox.com/v1/users/" .. tostring(userId))
 			end)
@@ -7067,15 +7064,12 @@ do
 					displayName = data.displayName
 				end
 			end
-			
 			offlinePlayers[realName] = { name = realName, displayName = displayName, userId = userId }
 			local label = "[P] " .. realName .. " (Offline)"
 			blacklistedTargets[label] = true
 			offlineDeletionTimers[label] = nil
-			-- persist
 			controlSaveData.OfflinePlayers = offlinePlayers
 			saveSliderSaveData()
-			
 			showStatus("Added", 2)
 			addBtn.Active = true
 			if refreshModelDropdown then refreshModelDropdown() end
@@ -7847,7 +7841,6 @@ end)
 parseWalkFlingDirectionSelection(getSavedControlValue("WalkFlingDirection") or { "Forward" })
 syncFlingModeControls()
 refreshModelDropdown()
--- restore BL dropdown checkmarks for saved players/offline on server
 task.defer(function()
 	if blPlayersDropdownControl and blPlayersDropdownControl.SetValue then
 		local toCheck = {}
@@ -7873,7 +7866,6 @@ task.spawn(function()
 			end
 		end)
 	end
-
 	Players.PlayerAdded:Connect(function(p)
 		updateDropdownsEvent()
 		p.CharacterAdded:Connect(function(char)
@@ -7882,9 +7874,7 @@ task.spawn(function()
 		end)
 		p.CharacterRemoving:Connect(updateDropdownsEvent)
 	end)
-
 	Players.PlayerRemoving:Connect(function(leavingPlayer)
-		-- jeśli gracz był zaznaczony w BL → automatycznie zapisz jako Offline
 		for label, entry in pairs(modelDropdownLookup) do
 			if entry.player == leavingPlayer and not entry.isOffline then
 				if blacklistedTargets[label] then
@@ -7895,7 +7885,6 @@ task.spawn(function()
 							displayName = leavingPlayer.DisplayName or leavingName,
 							userId = leavingPlayer.UserId,
 						}
-						-- zapisz w BL names żeby przywróciło po relogu
 						local blNames = {}
 						for lbl in pairs(blacklistedTargets) do
 							local e = modelDropdownLookup[lbl]
@@ -7914,7 +7903,6 @@ task.spawn(function()
 		end
 		updateDropdownsEvent()
 	end)
-
 	for _, p in ipairs(Players:GetPlayers()) do
 		p.CharacterAdded:Connect(function(char)
 			char:WaitForChild("HumanoidRootPart", 5)
@@ -7922,7 +7910,6 @@ task.spawn(function()
 		end)
 		p.CharacterRemoving:Connect(updateDropdownsEvent)
 	end
-
 	while screenGui.Parent do
 		task.wait(10)
 		updateDropdownsEvent()
