@@ -5283,7 +5283,7 @@ function Dropdown(data)
 		local displayText = "-"
 		if #displayList > 0 then
 			if hideSelectionText then
-				displayText = "(
+				displayText = "(---)"
 			else
 				displayText = table.concat(displayList, ", ")
 			end
