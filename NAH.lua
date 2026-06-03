@@ -138,12 +138,12 @@ do
 	kfCorner.CornerRadius = UDim.new(0, 6)
 	kfCorner.Parent = keybindFrame
 	local kfStroke = Instance.new("UIStroke")
-	kfStroke.Color = Color3.fromRGB(120, 0, 0)
+	kfStroke.Color = Color3.fromRGB(255, 255, 255)
 	kfStroke.Thickness = 1
 	kfStroke.Transparency = 0.3
 	kfStroke.Parent = keybindFrame
 	local kfGradient = Instance.new("UIGradient")
-	kfGradient.Color = ColorSequence.new(Color3.fromRGB(15, 0, 0), Color3.fromRGB(0, 0, 0))
+	kfGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(0, 0, 0))
 	kfGradient.Rotation = 90
 	kfGradient.Parent = keybindFrame
 end
@@ -169,7 +169,7 @@ keybindText.Position = UDim2.fromScale(0, 0)
 keybindText.Size = UDim2.new(1, 0, 0, 0)
 keybindText.AutomaticSize = Enum.AutomaticSize.Y
 keybindText.BackgroundTransparency = 1
-keybindText.TextColor3 = Color3.fromRGB(255, 0, 0)
+keybindText.TextColor3 = Color3.fromRGB(255, 255, 255)
 keybindText.TextStrokeTransparency = 1
 keybindText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 keybindText.Font = Enum.Font.GothamBold
@@ -196,12 +196,12 @@ do
 	tfCorner.CornerRadius = UDim.new(0, 4)
 	tfCorner.Parent = targetFrame
 	local tfStroke = Instance.new("UIStroke")
-	tfStroke.Color = Color3.fromRGB(120, 0, 0)
+	tfStroke.Color = Color3.fromRGB(255, 255, 255)
 	tfStroke.Thickness = 1
 	tfStroke.Transparency = 0.4
 	tfStroke.Parent = targetFrame
 	local tfGradient = Instance.new("UIGradient")
-	tfGradient.Color = ColorSequence.new(Color3.fromRGB(12, 0, 0), Color3.fromRGB(0, 0, 0))
+	tfGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(0, 0, 0))
 	tfGradient.Rotation = 90
 	tfGradient.Parent = targetFrame
 end
@@ -219,7 +219,8 @@ end
 local function formatHPPercent(hum)
 	if not hum then return "0" end
 	local pct = (hum.Health / math.max(1, hum.MaxHealth)) * 100
-	local str = string.format("%.1f", pct)
+	if pct ~= pct then pct = 0 end
+	local str = string.format("%.1f", math.clamp(pct, 0, 999))
 	if string.sub(str, -2) == ".0" then
 		return string.sub(str, 1, -3)
 	end
@@ -258,7 +259,7 @@ targetHPText.Size = UDim2.fromOffset(0, 0)
 targetHPText.AutomaticSize = Enum.AutomaticSize.XY
 targetHPText.Font = Enum.Font.GothamBold
 targetHPText.Text = ""
-targetHPText.TextColor3 = Color3.fromRGB(255, 0, 0)
+targetHPText.TextColor3 = Color3.fromRGB(255, 255, 255)
 targetHPText.TextStrokeTransparency = 1
 targetHPText.TextSize = 13
 targetHPText.TextScaled = false
@@ -275,7 +276,7 @@ targetValueText.Size = UDim2.fromOffset(0, 0)
 targetValueText.AutomaticSize = Enum.AutomaticSize.XY
 targetValueText.Font = Enum.Font.GothamBold
 targetValueText.Text = ""
-targetValueText.TextColor3 = Color3.fromRGB(255, 0, 0)
+targetValueText.TextColor3 = Color3.fromRGB(255, 255, 255)
 targetValueText.TextStrokeTransparency = 1
 targetValueText.TextSize = 13
 targetValueText.TextScaled = false
@@ -291,7 +292,7 @@ hpSeparator.BackgroundTransparency = 1
 hpSeparator.Size = UDim2.fromOffset(0, 0)
 hpSeparator.Font = Enum.Font.GothamBold
 hpSeparator.Text = ""
-hpSeparator.TextColor3 = Color3.fromRGB(255, 0, 0)
+hpSeparator.TextColor3 = Color3.fromRGB(255, 255, 255)
 hpSeparator.TextSize = 13
 hpSeparator.LayoutOrder = 99
 hpSeparator.Visible = false
@@ -306,7 +307,7 @@ infoContainer.BackgroundTransparency = 0.25
 infoContainer.BorderSizePixel = 0
 infoContainer.ClipsDescendants = true
 local infoStroke = Instance.new("UIStroke")
-infoStroke.Color = Color3.fromRGB(200, 0, 0)
+infoStroke.Color = Color3.fromRGB(200, 200, 200)
 infoStroke.Thickness = 1.5
 infoStroke.Transparency = 0.3
 infoStroke.Parent = infoContainer
@@ -315,7 +316,7 @@ do
 	icCorner.CornerRadius = UDim.new(0, 6)
 	icCorner.Parent = infoContainer
 	local icGradient = Instance.new("UIGradient")
-	icGradient.Color = ColorSequence.new(Color3.fromRGB(18, 0, 0), Color3.fromRGB(0, 0, 0))
+	icGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(0, 0, 0))
 	icGradient.Rotation = 90
 	icGradient.Parent = infoContainer
 end
@@ -349,7 +350,7 @@ infoTitle.AutomaticSize = Enum.AutomaticSize.XY
 infoTitle.TextXAlignment = Enum.TextXAlignment.Center
 infoTitle.BackgroundTransparency = 1
 infoTitle.Text = ""
-infoTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+infoTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 infoTitle.TextStrokeTransparency = 1
 infoTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoTitle.Font = Enum.Font.GothamBold
@@ -368,7 +369,7 @@ infoText.AutomaticSize = Enum.AutomaticSize.XY
 infoText.TextXAlignment = Enum.TextXAlignment.Center
 infoText.BackgroundTransparency = 1
 infoText.Text = ""
-infoText.TextColor3 = Color3.fromRGB(255, 0, 0)
+infoText.TextColor3 = Color3.fromRGB(255, 255, 255)
 infoText.TextStrokeTransparency = 1
 infoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoText.Font = Enum.Font.GothamBold
@@ -404,7 +405,7 @@ do
 	swCorner.CornerRadius = UDim.new(0, 6)
 	swCorner.Parent = settingsWindow
 	local swGradient = Instance.new("UIGradient")
-	swGradient.Color = ColorSequence.new(Color3.fromRGB(15, 0, 0), Color3.fromRGB(0, 0, 0))
+	swGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(0, 0, 0))
 	swGradient.Rotation = 90
 	swGradient.Parent = settingsWindow
 end
@@ -412,7 +413,7 @@ local settingsStroke
 local windowOutlineStroke
 do
 	settingsStroke = Instance.new("UIStroke")
-	settingsStroke.Color = Color3.fromRGB(200, 0, 0)
+	settingsStroke.Color = Color3.fromRGB(200, 200, 200)
 	settingsStroke.Thickness = 1.5
 	settingsStroke.Transparency = 0.05
 	settingsStroke.Parent = settingsWindow
@@ -444,7 +445,7 @@ do
 end
 do
 	windowOutlineStroke = Instance.new("UIStroke")
-	windowOutlineStroke.Color = Color3.fromRGB(200, 0, 0)
+	windowOutlineStroke.Color = Color3.fromRGB(200, 200, 200)
 	windowOutlineStroke.Thickness = 1.5
 	windowOutlineStroke.Transparency = 0.05
 	windowOutlineStroke.Parent = windowOutline
@@ -455,7 +456,7 @@ do
 	inputBlocker.Size = UDim2.fromScale(1, 1)
 	inputBlocker.BackgroundTransparency = 1
 	inputBlocker.BorderSizePixel = 1
-inputBlocker.BorderColor3 = Color3.fromRGB(255, 0, 0)
+inputBlocker.BorderColor3 = Color3.fromRGB(255, 255, 255)
 	inputBlocker.Text = ""
 	inputBlocker.AutoButtonColor = false
 	inputBlocker.Visible = true
@@ -477,9 +478,9 @@ do
 	uiTitle.Size = UDim2.fromScale(0.52, 0.1)
 	uiTitle.BackgroundTransparency = 1
 	uiTitle.Text = "NOTHING _X                                                _^"
-	uiTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+	uiTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 	uiTitle.TextStrokeTransparency = 0.7
-	uiTitle.TextStrokeColor3 = Color3.fromRGB(180, 0, 0)
+	uiTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	uiTitle.Font = Enum.Font.GothamBold
 	uiTitle.TextSize = 16
 	uiTitle.TextScaled = false
@@ -491,13 +492,13 @@ do
 	divider.AnchorPoint = Vector2.new(0.5, 0)
 	divider.Position = UDim2.fromScale(0.5, 0.18)
 	divider.Size = UDim2.fromScale(0.9, 0.006)
-	divider.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+	divider.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 	divider.BackgroundTransparency = 0.3
 	divider.BorderSizePixel = 0
 	divider.ZIndex = 11
 	divider.Parent = settingsWindow
 	local divGradient = Instance.new("UIGradient")
-	divGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 0, 0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))})
+	divGradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))})
 	divGradient.Parent = divider
 end
 uiX = Instance.new("ScrollingFrame")
@@ -513,7 +514,7 @@ uiX.AutomaticCanvasSize = Enum.AutomaticSize.Y
 uiX.ElasticBehavior = Enum.ElasticBehavior.Never
 uiX.ScrollBarImageTransparency = 0.4
 uiX.ScrollBarThickness = 3
-uiX.ScrollBarImageColor3 = Color3.fromRGB(180, 0, 0)
+uiX.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
 uiX.Active = true
 uiX.ZIndex = 11
 uiX.Parent = settingsWindow
@@ -3631,12 +3632,12 @@ local function makeControlFrame(heightScale)
 	cfCorner.CornerRadius = UDim.new(0, 4)
 	cfCorner.Parent = holder
 	local cfStroke = Instance.new("UIStroke")
-	cfStroke.Color = Color3.fromRGB(120, 0, 0)
+	cfStroke.Color = Color3.fromRGB(255, 255, 255)
 	cfStroke.Thickness = 1
 	cfStroke.Transparency = 0.3
 	cfStroke.Parent = holder
 	local cfGradient = Instance.new("UIGradient")
-	cfGradient.Color = ColorSequence.new(Color3.fromRGB(12, 0, 0), Color3.fromRGB(5, 0, 0))
+	cfGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(20, 20, 20))
 	cfGradient.Rotation = 0
 	cfGradient.Parent = holder
 	return holder
@@ -4265,7 +4266,7 @@ task.spawn(function()
     hubTitle.Size = UDim2.new(1, -32, 0, 18)
     hubTitle.Font = Enum.Font.GothamBold
     hubTitle.Text = "Movement & System"
-    hubTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+    hubTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     hubTitle.TextStrokeTransparency = 1
     hubTitle.TextSize = 14
     hubTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -4289,12 +4290,12 @@ task.spawn(function()
         btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         btn.BackgroundTransparency = 0.5
         btn.BorderSizePixel = 0
-        btn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+        btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
         btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
         btn.AutoButtonColor = false
         btn.Font = Enum.Font.GothamBold
         btn.Text = text
-        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
         btn.TextStrokeTransparency = 1
         btn.TextSize = 13
         btn.TextScaled = false
@@ -4304,8 +4305,8 @@ task.spawn(function()
             enabled = getSavedControlValue(saveKey) == true
         end
         local function render()
-            btn.BackgroundColor3 = enabled and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
-            btn.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+            btn.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
+            btn.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
         end
         local function setValue(val, skipCallback)
             enabled = val == true
@@ -4330,12 +4331,12 @@ task.spawn(function()
         btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         btn.BackgroundTransparency = 0.5
         btn.BorderSizePixel = 0
-        btn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+        btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
         btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
         btn.AutoButtonColor = true
         btn.Font = Enum.Font.GothamBold
         btn.Text = text
-        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
         btn.TextStrokeTransparency = 1
         btn.TextSize = 13
         btn.Parent = parent
@@ -4392,7 +4393,7 @@ task.spawn(function()
     fpTitle.Size = UDim2.new(1, -32, 0, 18)
     fpTitle.Font = Enum.Font.GothamBold
     fpTitle.Text = "Faker Ping"
-    fpTitle.TextColor3 = Color3.fromRGB(255, 0, 0)
+    fpTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     fpTitle.TextStrokeTransparency = 1
     fpTitle.TextSize = 14
     fpTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -4403,7 +4404,7 @@ task.spawn(function()
     fpLabel.Size = UDim2.new(0.5, -16, 0, 24)
     fpLabel.Font = Enum.Font.GothamBold
     fpLabel.Text = "Ping"
-    fpLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    fpLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     fpLabel.TextStrokeTransparency = 1
     fpLabel.TextSize = 13
     fpLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -4412,7 +4413,7 @@ task.spawn(function()
     fpBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     fpBox.BackgroundTransparency = 0.5
     fpBox.BorderSizePixel = 0
-    fpBox.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    fpBox.BorderColor3 = Color3.fromRGB(255, 255, 255)
     fpBox.Position = UDim2.new(0.5, 0, 0, 32)
     fpBox.Size = UDim2.new(0.45, -16, 0, 24)
     fpBox.ClearTextOnFocus = false
@@ -4420,7 +4421,7 @@ task.spawn(function()
     fpBox.PlaceholderText = "Ping (0-5000)"
     fpBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
     fpBox.Text = ""
-    fpBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+    fpBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     fpBox.TextStrokeTransparency = 1
     fpBox.TextSize = 13
     fpBox.Parent = fakerPingHub
@@ -4778,7 +4779,7 @@ function Slider(data)
 	nameLabel.Size = UDim2.fromScale(0.55, 0.25)
 	nameLabel.Font = Enum.Font.GothamBold
 	nameLabel.Text = state.name
-	nameLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	nameLabel.TextStrokeTransparency = 1
 	nameLabel.TextSize = 13
 	nameLabel.TextScaled = false
@@ -4793,7 +4794,7 @@ function Slider(data)
 	editBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	editBox.BackgroundTransparency = 0.5
 	editBox.BorderSizePixel = 0
-	editBox.BorderColor3 = Color3.fromRGB(255, 0, 0)
+	editBox.BorderColor3 = Color3.fromRGB(255, 255, 255)
 	editBox.Position = UDim2.fromScale(0.66, 0.3)
 	editBox.Size = UDim2.fromScale(0.24, 0.24)
 	editBox.ClearTextOnFocus = false
@@ -4801,7 +4802,7 @@ function Slider(data)
 	editBox.PlaceholderText = "set"
 	editBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
 	editBox.Text = "0"
-	editBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+	editBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 	editBox.TextStrokeTransparency = 1
 	editBox.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	editBox.Font = Enum.Font.GothamBold
@@ -4814,7 +4815,7 @@ function Slider(data)
 		ebCorner.CornerRadius = UDim.new(0, 3)
 		ebCorner.Parent = editBox
 		local ebStroke = Instance.new("UIStroke")
-		ebStroke.Color = Color3.fromRGB(80, 0, 0)
+		ebStroke.Color = Color3.fromRGB(255, 255, 255)
 		ebStroke.Thickness = 1
 		ebStroke.Transparency = 0.4
 		ebStroke.Parent = editBox
@@ -4829,7 +4830,7 @@ function Slider(data)
 		if filtered ~= text then editBox.Text = filtered end
 	end)
 	local bar = Instance.new("Frame")
-	bar.BackgroundColor3 = Color3.fromRGB(35, 0, 0)
+	bar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 	bar.Position = UDim2.fromScale(0.05, 0.68)
 	bar.Size = UDim2.fromScale(0.9, 0.14)
 	bar.Active = true
@@ -4841,12 +4842,12 @@ function Slider(data)
 		barCorner.Parent = bar
 	end
 	local barStroke = Instance.new("UIStroke")
-	barStroke.Color = Color3.fromRGB(80, 0, 0)
+	barStroke.Color = Color3.fromRGB(255, 255, 255)
 	barStroke.Thickness = 1
 	barStroke.Transparency = 0.5
 	barStroke.Parent = bar
 	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.fromScale(0, 1)
 	fill.Parent = bar
@@ -4855,7 +4856,7 @@ function Slider(data)
 		fillCorner.CornerRadius = UDim.new(0, 3)
 		fillCorner.Parent = fill
 		local fillGradient = Instance.new("UIGradient")
-		fillGradient.Color = ColorSequence.new(Color3.fromRGB(200, 30, 0), Color3.fromRGB(255, 0, 0))
+		fillGradient.Color = ColorSequence.new(Color3.fromRGB(100, 100, 100), Color3.fromRGB(255, 255, 255))
 		fillGradient.Rotation = 0
 		fillGradient.Parent = fill
 	end
@@ -4917,7 +4918,7 @@ function Textbox(data)
 	titleLabel.Size = UDim2.fromScale(0.9, 0.18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = textTitle
-	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	titleLabel.TextSize = 13
@@ -4940,7 +4941,7 @@ function Textbox(data)
 	inputBox.PlaceholderText = "type here"
 	inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
 	inputBox.Text = ""
-	inputBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+	inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 	inputBox.TextSize = 13
 	inputBox.TextScaled = false
 	inputBox.TextWrapped = true
@@ -4950,7 +4951,7 @@ function Textbox(data)
 		ibCorner.CornerRadius = UDim.new(0, 3)
 		ibCorner.Parent = inputBox
 		local ibStroke = Instance.new("UIStroke")
-		ibStroke.Color = Color3.fromRGB(80, 0, 0)
+		ibStroke.Color = Color3.fromRGB(255, 255, 255)
 		ibStroke.Thickness = 1
 		ibStroke.Transparency = 0.4
 		ibStroke.Parent = inputBox
@@ -4981,7 +4982,7 @@ _G["2textbox_on_one_frame"] = function(data)
 	titleLabel.Size = UDim2.fromScale(0.9, 0.16)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = tostring(data.title or "Inputs")
-	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	titleLabel.TextSize = 13
@@ -5015,7 +5016,7 @@ _G["2textbox_on_one_frame"] = function(data)
 		label.Size = UDim2.fromScale(1, 0.4)
 		label.Font = Enum.Font.GothamBold
 		label.Text = tostring(labelText or "")
-		label.TextColor3 = Color3.fromRGB(255, 0, 0)
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
 		label.TextStrokeTransparency = 1
 		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		label.TextSize = 13
@@ -5039,7 +5040,7 @@ _G["2textbox_on_one_frame"] = function(data)
 		inputBox.PlaceholderText = "set"
 		inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
 		inputBox.Text = tostring(defaultValue or "")
-		inputBox.TextColor3 = Color3.fromRGB(255, 0, 0)
+		inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 		inputBox.TextSize = 13
 		inputBox.TextScaled = false
 		inputBox.ClipsDescendants = true
@@ -5049,7 +5050,7 @@ _G["2textbox_on_one_frame"] = function(data)
 			ib2Corner.CornerRadius = UDim.new(0, 3)
 			ib2Corner.Parent = inputBox
 			local ib2Stroke = Instance.new("UIStroke")
-			ib2Stroke.Color = Color3.fromRGB(80, 0, 0)
+			ib2Stroke.Color = Color3.fromRGB(255, 255, 255)
 			ib2Stroke.Thickness = 1
 			ib2Stroke.Transparency = 0.4
 			ib2Stroke.Parent = inputBox
@@ -5313,7 +5314,7 @@ function Dropdown(data)
 	titleLabel.Size = UDim2.new(1, -20, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = dropdownName
-	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextSize = 13
 	titleLabel.TextScaled = false
@@ -5325,12 +5326,12 @@ function Dropdown(data)
 	toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	toggleButton.BackgroundTransparency = 0.5
 	toggleButton.BorderSizePixel = 0
-	toggleButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+	toggleButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
 	toggleButton.Position = UDim2.new(0, 10, 0, 32)
 	toggleButton.Size = UDim2.new(1, -20, 0, 24)
 	toggleButton.AutoButtonColor = false
 	toggleButton.Font = Enum.Font.GothamBold
-	toggleButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+	toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 	toggleButton.TextStrokeTransparency = 1
 	toggleButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	toggleButton.TextSize = 13
@@ -5343,7 +5344,7 @@ function Dropdown(data)
 		tbCorner.CornerRadius = UDim.new(0, 3)
 		tbCorner.Parent = toggleButton
 		local tbStroke = Instance.new("UIStroke")
-		tbStroke.Color = Color3.fromRGB(80, 0, 0)
+		tbStroke.Color = Color3.fromRGB(255, 255, 255)
 		tbStroke.Thickness = 1
 		tbStroke.Transparency = 0.5
 		tbStroke.Parent = toggleButton
@@ -5358,7 +5359,7 @@ function Dropdown(data)
 	optionsFrame.ZIndex = 1
 	optionsFrame.Parent = holder
 	local choiceFrame = Instance.new("ScrollingFrame")
-	choiceFrame.BackgroundColor3 = Color3.fromRGB(12, 0, 0)
+	choiceFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	choiceFrame.BackgroundTransparency = 0.5
 	choiceFrame.BorderSizePixel = 0
 	choiceFrame.AnchorPoint = Vector2.new(0.5, 0)
@@ -5414,9 +5415,9 @@ function Dropdown(data)
 				button.TextColor3 = Color3.fromRGB(150, 150, 150)
 				button.Text = display
 			else
-				button.BackgroundColor3 = isOn and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+				button.BackgroundColor3 = isOn and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
 				button.BackgroundTransparency = 0.5
-				button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+				button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
 				button.Text = isOn and ("> " .. display) or display
 			end
 		end
@@ -5444,7 +5445,7 @@ function Dropdown(data)
 			optionButton.Size = UDim2.new(0.9, 0, 0, optionHeight)
 			optionButton.AutoButtonColor = false
 			optionButton.Font = Enum.Font.GothamMedium
-			optionButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+			optionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 			optionButton.TextStrokeTransparency = 1
 			optionButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 			optionButton.TextSize = 13
@@ -6171,9 +6172,9 @@ function tog(data)
 	switchButton.ClipsDescendants = true
 	switchButton.Parent = holder
 	local function render()
-		switchButton.BackgroundColor3 = enabled and Color3.fromRGB(160, 0, 0) or Color3.fromRGB(0, 0, 0)
+		switchButton.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
 		switchButton.BackgroundTransparency = 0.5
-		switchButton.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 0, 0)
+		switchButton.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
 	end
 	switchButton.MouseButton1Click:Connect(function()
 		enabled = not enabled
@@ -6225,9 +6226,9 @@ _G["3tog_on_one_one_button"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 55, 55)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
-	titleLabel.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	titleLabel.TextSize = 13
 	titleLabel.TextScaled = false
 	titleLabel.TextWrapped = true
@@ -6259,7 +6260,7 @@ _G["3tog_on_one_one_button"] = function(data)
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
 		segmentButton.TextStrokeTransparency = 1
-		segmentButton.TextStrokeColor3 = Color3.fromRGB(110, 0, 0)
+		segmentButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		segmentButton.TextSize = 13
 		segmentButton.TextScaled = false
 		segmentButton.TextWrapped = true
@@ -6276,12 +6277,12 @@ _G["3tog_on_one_one_button"] = function(data)
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
-				segmentButton.BackgroundColor3 = Color3.fromRGB(160, 0, 0)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 				segmentButton.TextStrokeTransparency = 0.7
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 				segmentButton.TextStrokeTransparency = 1
 			end
 		end
@@ -6375,7 +6376,7 @@ _G["4tog_on_one_frame"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	titleLabel.TextSize = 13
@@ -6406,7 +6407,7 @@ _G["4tog_on_one_frame"] = function(data)
 		button.AutoButtonColor = false
 		button.Font = Enum.Font.GothamBold
 		button.Text = tostring(text)
-		button.TextColor3 = Color3.fromRGB(255, 0, 0)
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
 		button.TextStrokeTransparency = 1
 		button.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		button.TextSize = 13
@@ -6424,8 +6425,8 @@ _G["4tog_on_one_frame"] = function(data)
 		constraint.Parent = button
 		local enabled = initialState == true
 		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
 			button.TextStrokeTransparency = enabled and 0.7 or 1
 		end
 		local control = {}
@@ -6510,7 +6511,7 @@ _G["5tog_on_one_frame"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	titleLabel.TextSize = 13
@@ -6541,7 +6542,7 @@ _G["5tog_on_one_frame"] = function(data)
 		button.AutoButtonColor = false
 		button.Font = Enum.Font.GothamBold
 		button.Text = tostring(text)
-		button.TextColor3 = Color3.fromRGB(255, 0, 0)
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
 		button.TextStrokeTransparency = 1
 		button.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		button.TextSize = 13
@@ -6560,8 +6561,8 @@ _G["5tog_on_one_frame"] = function(data)
 		local enabled = initialState == true
 		local control = {}
 		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 0, 0)
+			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
 			button.TextStrokeTransparency = enabled and 0.7 or 1
 		end
 		function control.SetValue(nextState, suppressCallback)
@@ -6634,7 +6635,7 @@ _G["2tog_on_one_button"] = function(data)
 	titleLabel.Size = UDim2.new(1, -32, 0, 18)
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.Text = titleText
-	titleLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	titleLabel.TextStrokeTransparency = 1
 	titleLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	titleLabel.TextSize = 13
@@ -6666,7 +6667,7 @@ _G["2tog_on_one_button"] = function(data)
 		segmentButton.AutoButtonColor = false
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
-		segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+		segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 		segmentButton.TextStrokeTransparency = 1
 		segmentButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		segmentButton.TextSize = 13
@@ -6685,12 +6686,12 @@ _G["2tog_on_one_button"] = function(data)
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
-				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 				segmentButton.TextStrokeTransparency = 0.7
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 				segmentButton.TextStrokeTransparency = 1
 			end
 		end
@@ -6757,7 +6758,7 @@ function button(data)
 	local holder = makeControlFrame(60)
 	holder.Parent = uiX
 	local actionButton = Instance.new("TextButton")
-	actionButton.BackgroundColor3 = Color3.fromRGB(28, 0, 0)
+	actionButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 	actionButton.BackgroundTransparency = 0.5
 	actionButton.BorderSizePixel = 0
 	actionButton.Position = UDim2.fromScale(0.05, 0.16)
@@ -6765,7 +6766,7 @@ function button(data)
 	actionButton.AutoButtonColor = false
 	actionButton.Font = Enum.Font.GothamBold
 	actionButton.Text = buttonName
-	actionButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+	actionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 	actionButton.TextStrokeTransparency = 1
 	actionButton.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	actionButton.TextSize = 13
@@ -7149,7 +7150,7 @@ do
 	offlineLabel.Size = UDim2.new(1, -20, 0, 16)
 	offlineLabel.Font = Enum.Font.GothamBold
 	offlineLabel.Text = "BL Offline"
-	offlineLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	offlineLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	offlineLabel.TextStrokeTransparency = 1
 	offlineLabel.TextSize = 13
 	offlineLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -7187,7 +7188,7 @@ do
 	statusLabel.Size = UDim2.new(1, -70, 0, 16)
 	statusLabel.Font = Enum.Font.GothamBold
 	statusLabel.Text = ""
-	statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+	statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	statusLabel.TextStrokeTransparency = 1
 	statusLabel.TextTransparency = 1
 	statusLabel.TextSize = 12
@@ -7207,7 +7208,7 @@ do
 		end
 	end
 	local addBtn = Instance.new("TextButton")
-	addBtn.BackgroundColor3 = Color3.fromRGB(120, 0, 0)
+	addBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 	addBtn.BackgroundTransparency = 0.4
 	addBtn.BorderSizePixel = 0
 	addBtn.Position = UDim2.new(1, -56, 0, 26)
@@ -7470,7 +7471,7 @@ do
 		labelObj.Size = UDim2.fromScale(0.4, 1)
 		labelObj.Font = Enum.Font.GothamBold
 		labelObj.Text = label
-		labelObj.TextColor3 = Color3.fromRGB(255, 0, 0)
+		labelObj.TextColor3 = Color3.fromRGB(255, 255, 255)
 		labelObj.TextSize = 13
 		labelObj.TextScaled = false
 		labelObj.TextWrapped = true
@@ -7483,7 +7484,7 @@ do
 		box.Position = UDim2.fromScale(0.55, 0.15)
 		box.Size = UDim2.fromScale(0.35, 0.7)
 		box.Font = Enum.Font.GothamMedium
-		box.TextColor3 = Color3.fromRGB(255, 0, 0)
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
 		box.TextSize = 13
 		box.TextScaled = false
 		box.ClearTextOnFocus = false
@@ -7525,7 +7526,7 @@ do
 		labelObj.Size = UDim2.fromScale(0.4, 1)
 		labelObj.Font = Enum.Font.GothamBold
 		labelObj.Text = label
-		labelObj.TextColor3 = Color3.fromRGB(255, 0, 0)
+		labelObj.TextColor3 = Color3.fromRGB(255, 255, 255)
 		labelObj.TextSize = 13
 		labelObj.TextXAlignment = Enum.TextXAlignment.Left
 		labelObj.Parent = behindCustomFrame
@@ -7536,7 +7537,7 @@ do
 		box.Position = UDim2.fromScale(0.55, 0.15)
 		box.Size = UDim2.fromScale(0.35, 0.7)
 		box.Font = Enum.Font.GothamMedium
-		box.TextColor3 = Color3.fromRGB(255, 0, 0)
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
 		box.TextSize = 13
 		box.ClearTextOnFocus = false
 		box.Text = tostring(attackTpBehindDistance)
@@ -7597,7 +7598,7 @@ do
 		labelObj.Size = UDim2.fromScale(0.1, 0.3)
 		labelObj.Font = Enum.Font.GothamBold
 		labelObj.Text = label
-		labelObj.TextColor3 = Color3.fromRGB(255, 0, 0)
+		labelObj.TextColor3 = Color3.fromRGB(255, 255, 255)
 		labelObj.TextSize = 13
 		labelObj.TextScaled = false
 		labelObj.TextWrapped = true
@@ -7609,7 +7610,7 @@ do
 		box.Position = UDim2.fromScale(position, 0.5)
 		box.Size = UDim2.fromScale(0.25, 0.4)
 		box.Font = Enum.Font.GothamMedium
-		box.TextColor3 = Color3.fromRGB(255, 0, 0)
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
 		box.TextSize = 13
 		box.TextScaled = false
 		box.ClearTextOnFocus = false
@@ -7702,14 +7703,14 @@ task.spawn(function()
 			return Color3.fromRGB(255, 255, 0)
 		end
 		if value >= 100 then
-			return Color3.fromRGB(255, 0, 0)
+			return Color3.fromRGB(255, 255, 255)
 		end
 		return Color3.fromRGB(255, 165, 0)
 	end
 	local function getHpColor(hpPercent)
 		local value = clampPercent(hpPercent)
 		if value <= 0 then
-			return Color3.fromRGB(255, 0, 0)
+			return Color3.fromRGB(255, 255, 255)
 		end
 		if value >= 100 then
 			return Color3.fromRGB(0, 255, 0)
@@ -7732,7 +7733,7 @@ task.spawn(function()
 		line.Size = UDim2.fromOffset(0, BILLBOARD_LINE_HEIGHT)
 		line.Font = Enum.Font.GothamBold
 		line.Text = ""
-		line.TextColor3 = defaultColor or Color3.fromRGB(255, 0, 0)
+		line.TextColor3 = defaultColor or Color3.fromRGB(255, 255, 255)
 		line.TextStrokeTransparency = 1
 		line.TextScaled = false
 		line.TextSize = 14
@@ -7776,7 +7777,7 @@ task.spawn(function()
 		corner.CornerRadius = UDim.new(0, 6)
 		corner.Parent = frame
 		local stroke = Instance.new("UIStroke")
-		stroke.Color = Color3.fromRGB(255, 0, 0)
+		stroke.Color = Color3.fromRGB(255, 255, 255)
 		stroke.Transparency = 0
 		stroke.Thickness = 1
 		stroke.Parent = frame
@@ -7794,9 +7795,9 @@ task.spawn(function()
 		list.SortOrder = Enum.SortOrder.LayoutOrder
 		list.Parent = frame
 		createBillboardLine(frame, "HpLine").LayoutOrder = 1
-		createBillboardLine(frame, "SepOne", Color3.fromRGB(255, 0, 0)).LayoutOrder = 2
+		createBillboardLine(frame, "SepOne", Color3.fromRGB(255, 255, 255)).LayoutOrder = 2
 		createBillboardLine(frame, "CharacterLine").LayoutOrder = 3
-		createBillboardLine(frame, "SepTwo", Color3.fromRGB(255, 0, 0)).LayoutOrder = 4
+		createBillboardLine(frame, "SepTwo", Color3.fromRGB(255, 255, 255)).LayoutOrder = 4
 		createBillboardLine(frame, "UltimateLine").LayoutOrder = 5
 		return billboard
 	end
@@ -7805,7 +7806,7 @@ task.spawn(function()
 		if seriousModeState == "weak" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 0, 0),
+				outline = Color3.fromRGB(255, 255, 255),
 				enabled = true,
 			}
 		end
@@ -7967,8 +7968,7 @@ task.spawn(function()
 				local hpVisible = updateLine(
 					hpLine,
 					espOverlayConfig.showHp,
-					string.format("%d%%", hpValue),
-					getHpColor(hpValue)
+					formatHPPercent(humanoid) .. "%", Color3.fromRGB(150, 150, 150)
 				)
 				local characterVisible = updateLine(
 					characterLine,
@@ -7980,8 +7980,7 @@ task.spawn(function()
 				local ultimateVisible = updateLine(
 					ultimateLine,
 					espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
-					string.format("%d%%", ultimateValue),
-					getUltimateColor(ultimateValue)
+					string.format("%d%%", ultimateValue), Color3.fromRGB(255, 255, 255)
 				)
 				if hpVisible then
 					visibleCount = visibleCount + 1
@@ -7994,8 +7993,8 @@ task.spawn(function()
 				end
 				local showSepOne = hpVisible and characterVisible
 				local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
-				updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 0, 0))
-				updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 0, 0))
+				updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 255, 255))
+				updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 255, 255))
 				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine }) do
 					if guiObject and guiObject.Visible then
 						visibleGuiCount = visibleGuiCount + 1
@@ -8905,3 +8904,38 @@ task.spawn(function()
 	end
 end)
 end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
