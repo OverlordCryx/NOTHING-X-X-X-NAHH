@@ -1,3 +1,4 @@
+
 repeat
     task.wait();
 until game:IsLoaded();
@@ -117,9 +118,13 @@ local function updateGlobalScale()
 	local scaleX = viewportSize.X / baseResolution.X
 	local scaleY = viewportSize.Y / baseResolution.Y
 	local finalScale = math.min(scaleX, scaleY)
-	finalScale = math.max(finalScale, 0.35)
 	
 	mainScale.Scale = finalScale
+	
+	if infoContainer then
+		local yPos = 0.08 + (1 - mainScale.Scale) * 0.15
+		infoContainer.Position = UDim2.fromScale(0.5, yPos)
+	end
 end
 
 task.spawn(function()
@@ -140,7 +145,7 @@ introFinished = true
 local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
-keybindFrame.Position = UDim2.new(0.008, 0, 0.5, 0)
+keybindFrame.Position = UDim2.new(0, 10, 0.5, 0)
 keybindFrame.Size = UDim2.fromScale(0, 0)
 keybindFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 keybindFrame.BackgroundTransparency = 0.2
@@ -181,7 +186,7 @@ keybindText.TextColor3 = Color3.fromRGB(255, 255, 255)
 keybindText.TextStrokeTransparency = 1
 keybindText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 keybindText.Font = Enum.Font.GothamBold
-keybindText.TextSize = 14
+keybindText.TextSize = 16
 keybindText.Text = "NOTHING X"
 keybindText.LineHeight = 1.5
 keybindText.TextScaled = false
@@ -194,7 +199,7 @@ keybindText.Parent = keybindFrame
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
-targetFrame.Position = UDim2.new(1, -10, 0, 10)
+targetFrame.Position = UDim2.new(1, -330, 0, 10)
 targetFrame.Size = UDim2.fromOffset(0, 0)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.25
@@ -304,7 +309,7 @@ hpSeparator.Parent = targetFrame
 infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
-infoContainer.Position = UDim2.fromScale(0.5, 0.05) 
+infoContainer.Position = UDim2.fromScale(0.5, 0.1) 
 infoContainer.AutomaticSize = Enum.AutomaticSize.XY
 infoContainer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 infoContainer.BackgroundTransparency = 0.25
@@ -352,7 +357,7 @@ infoTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 infoTitle.TextStrokeTransparency = 1
 infoTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoTitle.Font = Enum.Font.GothamBold
-infoTitle.TextSize = 18 
+infoTitle.TextSize = 22 
 infoTitle.TextScaled = false
 infoTitle.TextWrapped = true
 infoTitle.AutomaticSize = Enum.AutomaticSize.XY
@@ -371,7 +376,7 @@ infoText.TextColor3 = Color3.fromRGB(255, 255, 255)
 infoText.TextStrokeTransparency = 1
 infoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoText.Font = Enum.Font.GothamBold
-infoText.TextSize = 15 
+infoText.TextSize = 20 
 infoText.TextScaled = false
 infoText.TextWrapped = true
 infoText.AutomaticSize = Enum.AutomaticSize.XY
@@ -380,18 +385,14 @@ infoText.Parent = infoContainer
 settingsWindow = Instance.new("Frame")
 settingsWindow.Name = "WindowUI"
 settingsWindow.AnchorPoint = Vector2.new(0.5, 0.5)
-settingsWindow.Position = UDim2.fromScale(0.5, 0.5)
-settingsWindow.Size = UDim2.new(0, 0, 0.82, 0)
+settingsWindow.Position = UDim2.fromScale(0.5, 0.57)
+settingsWindow.Size = UDim2.fromOffset(422, 486)
 settingsWindow.ClipsDescendants = true
 do
 	local windowAspectRatio = Instance.new("UIAspectRatioConstraint")
-	windowAspectRatio.AspectRatio = 0.87
+	windowAspectRatio.AspectRatio = 0.72
 	windowAspectRatio.DominantAxis = Enum.DominantAxis.Height
 	windowAspectRatio.Parent = settingsWindow
-	local windowSizeConstraint = Instance.new("UISizeConstraint")
-	windowSizeConstraint.MinSize = Vector2.new(220, 260)
-	windowSizeConstraint.MaxSize = Vector2.new(520, 620)
-	windowSizeConstraint.Parent = settingsWindow
 end
 settingsWindow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 settingsWindow.BackgroundTransparency = 0.1
@@ -473,7 +474,7 @@ do
 	uiTitle.TextStrokeTransparency = 1
 	uiTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	uiTitle.Font = Enum.Font.GothamBold
-	uiTitle.TextSize = 14
+	uiTitle.TextSize = 16
 	uiTitle.TextScaled = false
 	uiTitle.TextXAlignment = Enum.TextXAlignment.Left
 	uiTitle.ZIndex = 11
@@ -8807,3 +8808,47 @@ task.spawn(function()
 	end
 end)
 end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
