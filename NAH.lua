@@ -1,8 +1,10 @@
-task.wait(1)
-warn("NOTHING _X -X_X-")
+
 repeat
     task.wait();
 until game:IsLoaded();
+print("NOTHING _X -X_X-")
+task.wait(4)
+warn("NOTHING _X -X_X-")
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
@@ -567,6 +569,7 @@ targetSelectKeybind = Enum.KeyCode.C
 setBackKeybind = Enum.KeyCode.N
 voidDeadActive = false
 voidDeadKeybind = Enum.KeyCode.Z
+_G.SafeTeleportLock = false
 local voidDeadLastCF = nil
 local voidDeadConn = nil
 local getTrashState = {
@@ -3945,33 +3948,35 @@ task.spawn(function()
 	end
 end)
 task.spawn(function()
-	local folder = workspace.Map.InvisibleBorder
-local function fixPart(v)
-	if v:IsA("BasePart") then
-		if v.CanCollide ~= false then v.CanCollide = false end
-		if v.CanTouch ~= false then v.CanTouch = false end
-		if v.CanQuery ~= false then v.CanQuery = false end
-	end
-end
-for _, v in pairs(folder:GetDescendants()) do
-	fixPart(v)
-end
-folder.DescendantAdded:Connect(function(v)
-	fixPart(v)
-end)
-folder.DescendantAdded:Connect(function(v)
-	if v:IsA("BasePart") then
-		v:GetPropertyChangedSignal("CanCollide"):Connect(function()
+	local map = workspace:FindFirstChild("Map")
+	local folder = map and map:FindFirstChild("InvisibleBorder")
+	if not folder then return end
+	local function fixPart(v)
+		if v:IsA("BasePart") then
 			if v.CanCollide ~= false then v.CanCollide = false end
-		end)
-		v:GetPropertyChangedSignal("CanTouch"):Connect(function()
 			if v.CanTouch ~= false then v.CanTouch = false end
-		end)
-		v:GetPropertyChangedSignal("CanQuery"):Connect(function()
 			if v.CanQuery ~= false then v.CanQuery = false end
-		end)
+		end
 	end
-end)
+	for _, v in pairs(folder:GetDescendants()) do
+		fixPart(v)
+	end
+	folder.DescendantAdded:Connect(function(v)
+		fixPart(v)
+	end)
+	folder.DescendantAdded:Connect(function(v)
+		if v:IsA("BasePart") then
+			v:GetPropertyChangedSignal("CanCollide"):Connect(function()
+				if v.CanCollide ~= false then v.CanCollide = false end
+			end)
+			v:GetPropertyChangedSignal("CanTouch"):Connect(function()
+				if v.CanTouch ~= false then v.CanTouch = false end
+			end)
+			v:GetPropertyChangedSignal("CanQuery"):Connect(function()
+				if v.CanQuery ~= false then v.CanQuery = false end
+			end)
+		end
+	end)
 end)
 task.spawn(function()
 	while true do 
@@ -3984,7 +3989,7 @@ task.spawn(function()
 		pcall(function()
 			game:GetService("Players").LocalPlayer.Character:WaitForChild("Communicate"):FireServer(unpack(args))
 		end)
-		task.wait(0.25)
+		task.wait(0.15)
 	end
 end)
 end
@@ -4666,7 +4671,7 @@ do
 		local isExtremeFling = isNanPos or isNanVel or isHugeVel
 		local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
 		local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
-		if ((isFar and not _G.SafeTeleportLock) or isVoid or isNanVel or isHugeVel) and alive then
+		if ((isFar and not _G.SafeTeleportLock and not (attackTpEnabled and attackTpHolding)) or isVoid or isNanVel or isHugeVel) and alive then
 			for i = 1, #safePositions do
 				local targetCF = safePositions[i]
 				if targetCF then
@@ -5887,6 +5892,26 @@ do
 			if #blToCheck > 0 and blPlayersDropdownControl.SetValue then
 				blPlayersDropdownControl.SetValue(blToCheck, true)
 			end
+			local newBLPlayers = {}
+			local newBLModels = {}
+			local newBLModelNames = {}
+			for lbl in pairs(blacklistedTargets) do
+				local entry = modelDropdownLookup[lbl]
+				if entry then
+					if entry.player then
+						newBLPlayers[entry.player] = true
+					end
+					if entry.model then
+						newBLModels[entry.model] = true
+						if not entry.player then
+							newBLModelNames[entry.model.Name] = true
+						end
+					end
+				end
+			end
+			blacklistedPlayers = newBLPlayers
+			blacklistedModels = newBLModels
+			blacklistedModelNames = newBLModelNames
 		end
 		local modelItems = {}
 		for _, item in ipairs(allItems) do
@@ -6033,7 +6058,15 @@ startView = function()
 					end
 				end
 			else
-				stopView()
+				local hasDropdown = manualAttackTpPlayer or manualAttackTpTarget or manualAttackTpTargetName
+				if not hasDropdown then
+					stopView()
+				else
+					local activeHumanoid = activeTarget and activeTarget:FindFirstChildOfClass("Humanoid")
+					if activeHumanoid and cam.CameraSubject ~= activeHumanoid then
+						cam.CameraSubject = activeHumanoid
+					end
+				end
 			end
 			return
 		end
@@ -6043,11 +6076,21 @@ startView = function()
 		end
 	end)
 	if not isValidCamLockTarget(targetModel) then
-		return false
+		local deadHum = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
+		if deadHum then
+			cam.CameraType = Enum.CameraType.Custom
+			cam.CameraSubject = deadHum
+		end
+		return true
 	end
 	local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
 	if not targetHumanoid then
-		return false
+		local deadHum = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
+		if deadHum then
+			cam.CameraType = Enum.CameraType.Custom
+			cam.CameraSubject = deadHum
+		end
+		return true
 	end
 	cam.CameraType = Enum.CameraType.Custom
 	cam.CameraSubject = targetHumanoid
@@ -6059,10 +6102,11 @@ toggleView = function(nextState)
 		shouldEnable = not viewing
 	end
 	if shouldEnable then
-		if not hasSelectedTargetOrPendingPlayer() or (not startView() and not isWaitingForSelectedTargetRespawn()) then
+		local hasDropdownSelection = manualAttackTpPlayer or manualAttackTpTarget or manualAttackTpTargetName
+		if not hasDropdownSelection then
 			stopView()
 		else
-			viewing = true
+			startView()
 		end
 	else
 		stopView()
@@ -8508,10 +8552,11 @@ do
 		end
 	end
 	local isTeleportLocked = (_G.SafeTeleportLock == true)
-	if (viewing or autoTpEnabled or flingEnabled) and not manualAttackTpPlayer and not hasSelectedTargetOrPendingPlayer() then
-		if viewing then
-			stopView()
-		end
+	local hasDropdown = manualAttackTpPlayer or manualAttackTpTarget or manualAttackTpTargetName
+	if viewing and not hasDropdown then
+		stopView()
+	end
+	if (autoTpEnabled or flingEnabled) and not manualAttackTpPlayer and not hasSelectedTargetOrPendingPlayer() then
 		autoTpEnabled = false
 		flingEnabled = false
 		syncTargetActionControls()
@@ -8526,7 +8571,7 @@ do
 			if desiredHumanoid and cam then
 				cam.CameraSubject = desiredHumanoid
 			end
-		elseif isDeadTargetModel(currentViewTarget) then
+		elseif isDeadTargetModel(currentViewTarget) or not isValidCamLockTarget(currentViewTarget) then
 			if currentViewPlayer and currentViewPlayer.Parent == Players then
 				local newViewTarget = getTrackedPlayerTargetModel(currentViewPlayer)
 				if isValidCamLockTarget(newViewTarget) then
@@ -8542,7 +8587,7 @@ do
 						currentViewTarget = nil
 					end
 				else
-					stopView()
+					if not hasDropdown then stopView() end
 				end
 			elseif isWaitingForSelectedTargetRespawn() then
 				if hasTrackedSelectedPlayer() then
@@ -8551,7 +8596,14 @@ do
 					currentViewTarget = nil
 				end
 			else
-				stopView()
+				if not hasDropdown then stopView() end
+			end
+			
+			if viewing and currentViewTarget then
+				local currHum = currentViewTarget:FindFirstChildOfClass("Humanoid")
+				if currHum and cam and cam.CameraSubject ~= currHum then
+					cam.CameraSubject = currHum
+				end
 			end
 		elseif currentViewTarget then
 			local currentViewHumanoid = currentViewTarget:FindFirstChildOfClass("Humanoid")
