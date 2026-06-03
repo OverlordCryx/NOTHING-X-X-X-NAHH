@@ -103,27 +103,45 @@ screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
 screenGui.Parent = CoreGui
+
 local mainScale = Instance.new("UIScale")
 mainScale.Name = "MainScale"
 mainScale.Parent = screenGui
+
 local function updateGlobalScale()
-	local viewportSize = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local viewportSize = cam.ViewportSize
+	if viewportSize.X < 1 or viewportSize.Y < 1 then return end
+	
 	local baseResolution = Vector2.new(1920, 1080)
 	local scaleX = viewportSize.X / baseResolution.X
 	local scaleY = viewportSize.Y / baseResolution.Y
 	local finalScale = math.min(scaleX, scaleY)
-	mainScale.Scale = math.clamp(finalScale, 0.5, 1.2)
+	
+	mainScale.Scale = finalScale
+	
 	if infoContainer then
 		local yPos = 0.08 + (1 - mainScale.Scale) * 0.15
 		infoContainer.Position = UDim2.fromScale(0.5, yPos)
 	end
 end
+
 task.spawn(function()
-	updateGlobalScale()
-	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateGlobalScale)
+	local currentConnection = nil
+	local function bindCamera()
+		if currentConnection then currentConnection:Disconnect() end
+		local cam = Workspace.CurrentCamera
+		if cam then
+			currentConnection = cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateGlobalScale)
+			updateGlobalScale()
+		end
+	end
+	bindCamera()
+	Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCamera)
 end)
+
 introFinished = true
-local keybindFrame = Instance.new("Frame")
 local keybindFrame = Instance.new("Frame")
 keybindFrame.Name = "KeybindFrame"
 keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
@@ -149,19 +167,14 @@ do
 end
 keybindFrame.Visible = true
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
-do
-	local keybindSizeConstraint = Instance.new("UISizeConstraint")
-	keybindSizeConstraint.MinSize = Vector2.new(0, 0) 
-	keybindSizeConstraint.MaxSize = Vector2.new(240, 450) 
-	keybindSizeConstraint.Parent = keybindFrame
-end
 local keybindPadding = Instance.new("UIPadding")
 keybindPadding.PaddingTop = UDim.new(0, 10)
 keybindPadding.PaddingBottom = UDim.new(0, 10)
-keybindPadding.PaddingLeft = UDim.new(0, 12)
-keybindPadding.PaddingRight = UDim.new(0, 12)
+keybindPadding.PaddingLeft = UDim.new(0, 0)
+keybindPadding.PaddingRight = UDim.new(0, 0)
 keybindPadding.Parent = keybindFrame
 keybindFrame.Parent = screenGui
+
 keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
 keybindText.AnchorPoint = Vector2.new(0, 0)
@@ -181,6 +194,8 @@ keybindText.TextWrapped = true
 keybindText.TextYAlignment = Enum.TextYAlignment.Top
 keybindText.TextXAlignment = Enum.TextXAlignment.Center
 keybindText.Parent = keybindFrame
+
+
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
@@ -190,7 +205,7 @@ targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.25
 targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
-targetFrame.ClipsDescendants = true 
+
 do
 	local tfCorner = Instance.new("UICorner")
 	tfCorner.CornerRadius = UDim.new(0, 4)
@@ -207,12 +222,6 @@ do
 end
 targetFrame.Visible = false
 targetFrame.AutomaticSize = Enum.AutomaticSize.XY
-do
-	local targetSizeConstraint = Instance.new("UISizeConstraint")
-	targetSizeConstraint.MinSize = Vector2.new(0, 0)
-	targetSizeConstraint.MaxSize = Vector2.new(260, 90) 
-	targetSizeConstraint.Parent = targetFrame
-end
 local function roundToTenth(value)
 	return math.floor((value * 10) + 0.5) / 10
 end
@@ -263,7 +272,7 @@ targetHPText.TextColor3 = Color3.fromRGB(255, 255, 255)
 targetHPText.TextStrokeTransparency = 1
 targetHPText.TextSize = 13
 targetHPText.TextScaled = false
-targetHPText.TextWrapped = false
+targetHPText.TextWrapped = true
 targetHPText.TextXAlignment = Enum.TextXAlignment.Left
 targetHPText.TextYAlignment = Enum.TextYAlignment.Center
 targetHPText.LayoutOrder = 1
@@ -280,7 +289,7 @@ targetValueText.TextColor3 = Color3.fromRGB(255, 255, 255)
 targetValueText.TextStrokeTransparency = 1
 targetValueText.TextSize = 13
 targetValueText.TextScaled = false
-targetValueText.TextWrapped = false
+targetValueText.TextWrapped = true
 targetValueText.TextXAlignment = Enum.TextXAlignment.Left
 targetValueText.TextYAlignment = Enum.TextYAlignment.Center
 targetValueText.LayoutOrder = 2
@@ -321,12 +330,6 @@ do
 	icGradient.Parent = infoContainer
 end
 infoContainer.Visible = false
-do
-	local infoSizeConstraint = Instance.new("UISizeConstraint")
-	infoSizeConstraint.MinSize = Vector2.new(0, 0) 
-	infoSizeConstraint.MaxSize = Vector2.new(600, 400)
-	infoSizeConstraint.Parent = infoContainer
-end
 local infoPadding = Instance.new("UIPadding")
 infoPadding.PaddingTop = UDim.new(0, 8)
 infoPadding.PaddingBottom = UDim.new(0, 8)
@@ -356,7 +359,7 @@ infoTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoTitle.Font = Enum.Font.GothamBold
 infoTitle.TextSize = 22 
 infoTitle.TextScaled = false
-infoTitle.TextWrapped = false
+infoTitle.TextWrapped = true
 infoTitle.AutomaticSize = Enum.AutomaticSize.XY
 infoTitle.LayoutOrder = 1
 infoTitle.Parent = infoContainer
@@ -375,7 +378,7 @@ infoText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 infoText.Font = Enum.Font.GothamBold
 infoText.TextSize = 20 
 infoText.TextScaled = false
-infoText.TextWrapped = false
+infoText.TextWrapped = true
 infoText.AutomaticSize = Enum.AutomaticSize.XY
 infoText.LayoutOrder = 2
 infoText.Parent = infoContainer
@@ -383,14 +386,8 @@ settingsWindow = Instance.new("Frame")
 settingsWindow.Name = "WindowUI"
 settingsWindow.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsWindow.Position = UDim2.fromScale(0.5, 0.57)
-settingsWindow.Size = UDim2.fromScale(0.22, 0.45)
+settingsWindow.Size = UDim2.fromOffset(422, 486)
 settingsWindow.ClipsDescendants = true
-do
-	local windowSizeConstraint = Instance.new("UISizeConstraint")
-	windowSizeConstraint.MinSize = Vector2.new(280, 350)
-	windowSizeConstraint.MaxSize = Vector2.new(400, 650) 
-	windowSizeConstraint.Parent = settingsWindow
-end
 do
 	local windowAspectRatio = Instance.new("UIAspectRatioConstraint")
 	windowAspectRatio.AspectRatio = 0.72
@@ -422,11 +419,6 @@ settingsWindow.Visible = false
 settingsWindow.Active = true
 settingsWindow.ZIndex = 10
 settingsWindow.Parent = screenGui
-do
-	local windowSizeConstraint = Instance.new("UISizeConstraint")
-	windowSizeConstraint.MinSize = Vector2.new(280, 350)
-	windowSizeConstraint.Parent = settingsWindow
-end
 local windowOutline = Instance.new("Frame")
 windowOutline.Name = "WindowOutline"
 windowOutline.BackgroundTransparency = 1
@@ -479,7 +471,7 @@ do
 	uiTitle.BackgroundTransparency = 1
 	uiTitle.Text = "NOTHING _X                                                _^"
 	uiTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-	uiTitle.TextStrokeTransparency = 0.7
+	uiTitle.TextStrokeTransparency = 1
 	uiTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	uiTitle.Font = Enum.Font.GothamBold
 	uiTitle.TextSize = 16
@@ -512,8 +504,8 @@ uiX.BorderColor3 = Color3.fromRGB(0, 0, 0)
 uiX.CanvasSize = UDim2.fromOffset(0, 0)
 uiX.AutomaticCanvasSize = Enum.AutomaticSize.Y
 uiX.ElasticBehavior = Enum.ElasticBehavior.Never
-uiX.ScrollBarImageTransparency = 0.4
-uiX.ScrollBarThickness = 3
+uiX.ScrollBarImageTransparency = 1
+uiX.ScrollBarThickness = 0
 uiX.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
 uiX.Active = true
 uiX.ZIndex = 11
@@ -4419,7 +4411,7 @@ task.spawn(function()
     fpBox.ClearTextOnFocus = false
     fpBox.Font = Enum.Font.GothamBold
     fpBox.PlaceholderText = "Ping (0-5000)"
-    fpBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
+    fpBox.PlaceholderColor3 = Color3.fromRGB(187, 187, 187)
     fpBox.Text = ""
     fpBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     fpBox.TextStrokeTransparency = 1
@@ -4786,10 +4778,6 @@ function Slider(data)
 	nameLabel.TextWrapped = true
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Parent = holder
-	local nameConstraint = Instance.new("UITextSizeConstraint")
-	nameConstraint.MinTextSize = 12
-	nameConstraint.MaxTextSize = 18
-	nameConstraint.Parent = nameLabel
 	local editBox = Instance.new("TextBox")
 	editBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	editBox.BackgroundTransparency = 0.5
@@ -4800,7 +4788,7 @@ function Slider(data)
 	editBox.ClearTextOnFocus = false
 	editBox.Font = Enum.Font.GothamMedium
 	editBox.PlaceholderText = "set"
-	editBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
+	editBox.PlaceholderColor3 = Color3.fromRGB(187, 187, 187)
 	editBox.Text = "0"
 	editBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 	editBox.TextStrokeTransparency = 1
@@ -4814,16 +4802,7 @@ function Slider(data)
 		local ebCorner = Instance.new("UICorner")
 		ebCorner.CornerRadius = UDim.new(0, 3)
 		ebCorner.Parent = editBox
-		local ebStroke = Instance.new("UIStroke")
-		ebStroke.Color = Color3.fromRGB(255, 255, 255)
-		ebStroke.Thickness = 1
-		ebStroke.Transparency = 0.4
-		ebStroke.Parent = editBox
 	end
-	local editConstraint = Instance.new("UITextSizeConstraint")
-	editConstraint.MinTextSize = 10
-	editConstraint.MaxTextSize = 14
-	editConstraint.Parent = editBox
 	editBox:GetPropertyChangedSignal("Text"):Connect(function()
 		local text = editBox.Text
 		local filtered = text:gsub("[^-0-9%.]", "")
@@ -4841,11 +4820,7 @@ function Slider(data)
 		barCorner.CornerRadius = UDim.new(0, 3)
 		barCorner.Parent = bar
 	end
-	local barStroke = Instance.new("UIStroke")
-	barStroke.Color = Color3.fromRGB(255, 255, 255)
-	barStroke.Thickness = 1
-	barStroke.Transparency = 0.5
-	barStroke.Parent = bar
+
 	local fill = Instance.new("Frame")
 	fill.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 	fill.BorderSizePixel = 0
@@ -4926,10 +4901,6 @@ function Textbox(data)
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
 	local inputBox = Instance.new("TextBox")
 	inputBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	inputBox.BackgroundTransparency = 0.5
@@ -4939,7 +4910,7 @@ function Textbox(data)
 	inputBox.ClearTextOnFocus = false
 	inputBox.Font = Enum.Font.GothamBold
 	inputBox.PlaceholderText = "type here"
-	inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
+	inputBox.PlaceholderColor3 = Color3.fromRGB(187, 187, 187)
 	inputBox.Text = ""
 	inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 	inputBox.TextSize = 13
@@ -4950,16 +4921,7 @@ function Textbox(data)
 		local ibCorner = Instance.new("UICorner")
 		ibCorner.CornerRadius = UDim.new(0, 3)
 		ibCorner.Parent = inputBox
-		local ibStroke = Instance.new("UIStroke")
-		ibStroke.Color = Color3.fromRGB(255, 255, 255)
-		ibStroke.Thickness = 1
-		ibStroke.Transparency = 0.4
-		ibStroke.Parent = inputBox
 	end
-	local inputConstraint = Instance.new("UITextSizeConstraint")
-	inputConstraint.MinTextSize = 12
-	inputConstraint.MaxTextSize = 16
-	inputConstraint.Parent = inputBox
 	inputBox:GetPropertyChangedSignal("Text"):Connect(function()
 		local text = inputBox.Text
 		local filtered = text:gsub("[^-0-9%.]", "")
@@ -4990,10 +4952,6 @@ _G["2textbox_on_one_frame"] = function(data)
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
 	rowFrame.Position = UDim2.fromScale(0.05, 0.38)
@@ -5025,10 +4983,6 @@ _G["2textbox_on_one_frame"] = function(data)
 		label.ClipsDescendants = true
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.Parent = container
-		local labelConstraint = Instance.new("UITextSizeConstraint")
-		labelConstraint.MinTextSize = 10
-		labelConstraint.MaxTextSize = 14
-		labelConstraint.Parent = label
 		local inputBox = Instance.new("TextBox")
 		inputBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		inputBox.BackgroundTransparency = 0.5
@@ -5038,7 +4992,7 @@ _G["2textbox_on_one_frame"] = function(data)
 		inputBox.ClearTextOnFocus = false
 		inputBox.Font = Enum.Font.GothamBold
 		inputBox.PlaceholderText = "set"
-		inputBox.PlaceholderColor3 = Color3.fromRGB(140, 70, 70)
+		inputBox.PlaceholderColor3 = Color3.fromRGB(187, 187, 187)
 		inputBox.Text = tostring(defaultValue or "")
 		inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 		inputBox.TextSize = 13
@@ -5049,16 +5003,7 @@ _G["2textbox_on_one_frame"] = function(data)
 			local ib2Corner = Instance.new("UICorner")
 			ib2Corner.CornerRadius = UDim.new(0, 3)
 			ib2Corner.Parent = inputBox
-			local ib2Stroke = Instance.new("UIStroke")
-			ib2Stroke.Color = Color3.fromRGB(255, 255, 255)
-			ib2Stroke.Thickness = 1
-			ib2Stroke.Transparency = 0.4
-			ib2Stroke.Parent = inputBox
 		end
-		local inputConstraint = Instance.new("UITextSizeConstraint")
-		inputConstraint.MinTextSize = 10
-		inputConstraint.MaxTextSize = 14
-		inputConstraint.Parent = inputBox
 		local lastAllowedText = tostring(defaultValue or "")
 		local syncingText = false
 		local function isAllowedTextboxValue(text)
@@ -5343,11 +5288,6 @@ function Dropdown(data)
 		local tbCorner = Instance.new("UICorner")
 		tbCorner.CornerRadius = UDim.new(0, 3)
 		tbCorner.Parent = toggleButton
-		local tbStroke = Instance.new("UIStroke")
-		tbStroke.Color = Color3.fromRGB(255, 255, 255)
-		tbStroke.Thickness = 1
-		tbStroke.Transparency = 0.5
-		tbStroke.Parent = toggleButton
 	end
 	local expandedTopOffset = 36 
 	local optionsFrame = Instance.new("Frame")
@@ -6234,10 +6174,6 @@ _G["3tog_on_one_one_button"] = function(data)
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
 	rowFrame.Position = UDim2.new(0, 10, 0, 32)
@@ -6270,16 +6206,12 @@ _G["3tog_on_one_one_button"] = function(data)
 			sbCorner.CornerRadius = UDim.new(0, 3)
 			sbCorner.Parent = segmentButton
 		end
-		local segmentConstraint = Instance.new("UITextSizeConstraint")
-		segmentConstraint.MinTextSize = 10
-		segmentConstraint.MaxTextSize = 14
-		segmentConstraint.Parent = segmentButton
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
 				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-				segmentButton.TextStrokeTransparency = 0.7
+				segmentButton.TextStrokeTransparency = 1
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -6384,10 +6316,6 @@ _G["4tog_on_one_frame"] = function(data)
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
 	rowFrame.Position = UDim2.new(0, 10, 0, 32)
@@ -6419,15 +6347,11 @@ _G["4tog_on_one_frame"] = function(data)
 			btCorner.CornerRadius = UDim.new(0, 3)
 			btCorner.Parent = button
 		end
-		local constraint = Instance.new("UITextSizeConstraint")
-		constraint.MinTextSize = 10
-		constraint.MaxTextSize = 13
-		constraint.Parent = button
 		local enabled = initialState == true
 		local function render()
 			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
 			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
-			button.TextStrokeTransparency = enabled and 0.7 or 1
+			button.TextStrokeTransparency = 1
 		end
 		local control = {}
 		function control.SetValue(nextState, suppressCallback)
@@ -6519,10 +6443,6 @@ _G["5tog_on_one_frame"] = function(data)
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
 	rowFrame.Position = UDim2.new(0, 8, 0, 34)
@@ -6554,16 +6474,12 @@ _G["5tog_on_one_frame"] = function(data)
 			bt5Corner.CornerRadius = UDim.new(0, 3)
 			bt5Corner.Parent = button
 		end
-		local constraint = Instance.new("UITextSizeConstraint")
-		constraint.MinTextSize = 9
-		constraint.MaxTextSize = 12
-		constraint.Parent = button
 		local enabled = initialState == true
 		local control = {}
 		local function render()
 			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
 			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
-			button.TextStrokeTransparency = enabled and 0.7 or 1
+			button.TextStrokeTransparency = 1
 		end
 		function control.SetValue(nextState, suppressCallback)
 			enabled = nextState == true
@@ -6643,10 +6559,6 @@ _G["2tog_on_one_button"] = function(data)
 	titleLabel.TextWrapped = true
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = holder
-	local titleConstraint = Instance.new("UITextSizeConstraint")
-	titleConstraint.MinTextSize = 12
-	titleConstraint.MaxTextSize = 18
-	titleConstraint.Parent = titleLabel
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
 	rowFrame.Position = UDim2.new(0, 10, 0, 32)
@@ -6679,16 +6591,12 @@ _G["2tog_on_one_button"] = function(data)
 			sb2Corner.CornerRadius = UDim.new(0, 3)
 			sb2Corner.Parent = segmentButton
 		end
-		local segmentConstraint = Instance.new("UITextSizeConstraint")
-		segmentConstraint.MinTextSize = 10
-		segmentConstraint.MaxTextSize = 14
-		segmentConstraint.Parent = segmentButton
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
 				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-				segmentButton.TextStrokeTransparency = 0.7
+				segmentButton.TextStrokeTransparency = 1
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -6773,10 +6681,6 @@ function button(data)
 	actionButton.TextScaled = false
 	actionButton.TextWrapped = true
 	actionButton.Parent = holder
-	local actionConstraint = Instance.new("UITextSizeConstraint")
-	actionConstraint.MinTextSize = 12
-	actionConstraint.MaxTextSize = 18
-	actionConstraint.Parent = actionButton
 	actionButton.MouseButton1Click:Connect(function()
 		if callback then
 			callback()
@@ -8904,6 +8808,15 @@ task.spawn(function()
 	end
 end)
 end)
+
+
+
+
+
+
+
+
+
 
 
 
