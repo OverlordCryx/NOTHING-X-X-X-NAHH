@@ -3656,337 +3656,337 @@ function INFO(title, text, time)
 	end
 	showInfo(title, text, time)
 end
-local function initSeriousModeTracker()
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local SHARED_HIGHLIGHT_NAME = "NOTHING-X"
-local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
-local strongSkills = {
-    ["Omni Directional Punch"] = true,
-    ["Death Counter"] = true,
-    ["Serious Punch"] = true,
-    ["Table Flip"] = true
-}
-local weakSkills = {
-    ["Consecutive Punches"] = true,
-    ["Normal Punch"] = true,
-    ["Shove"] = true,
-    ["Uppercut"] = true
-}
-local playerState = {}     
-local activeTimers = {}
-local playerConnections = {}
-local function callInfo(title, text, duration)
-    if type(INFO) == "function" then
-        pcall(function()
-            INFO(title, text, duration or 5)
-        end)
-    end
+local SeriousModeTrackerEnabled = false
+local SM_playerState = {}     
+local SM_activeTimers = {}
+local SM_playerConnections = {}
+local SM_PlayersAddedConn = nil
+
+local function toggleSeriousModeTracker(state)
+	SeriousModeTrackerEnabled = state == true
+	local Players = game:GetService("Players")
+	local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
+	
+	if not SeriousModeTrackerEnabled then
+		if SM_PlayersAddedConn then SM_PlayersAddedConn:Disconnect(); SM_PlayersAddedConn = nil end
+		for plr, tracked in pairs(SM_playerConnections) do
+			if tracked then
+				for _, conn in ipairs(tracked) do
+					if conn and conn.Disconnect then conn:Disconnect() end
+				end
+			end
+		end
+		SM_playerConnections = {}
+		SM_playerState = {}
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local char = plr.Character
+			if char then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+		end
+		return
+	end
+
+	local RunService = game:GetService("RunService")
+	local SHARED_HIGHLIGHT_NAME = "NOTHING-X"
+	local strongSkills = {
+		["Omni Directional Punch"] = true,
+		["Death Counter"] = true,
+		["Serious Punch"] = true,
+		["Table Flip"] = true
+	}
+	local weakSkills = {
+		["Consecutive Punches"] = true,
+		["Normal Punch"] = true,
+		["Shove"] = true,
+		["Uppercut"] = true
+	}
+	
+	local function callInfo(title, text, duration)
+		if type(INFO) == "function" then
+			pcall(function() INFO(title, text, duration or 5) end)
+		end
+	end
+	
+	local function ensureSharedHighlight(model)
+		if not model or not model:FindFirstChild("HumanoidRootPart") then return nil end
+		local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
+		if hl and not hl:IsA("Highlight") then hl:Destroy(); hl = nil end
+		if hl then return hl end
+		hl = Instance.new("Highlight")
+		hl.Name = SHARED_HIGHLIGHT_NAME
+		hl.Adornee = model
+		hl.Parent = model
+		hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		hl.FillTransparency = 0.8
+		hl.OutlineTransparency = 0
+		return hl
+	end
+	local function addHighlight(model, fillColor, enabled, outlineColor)
+		local hl = ensureSharedHighlight(model)
+		if not hl then return end
+		hl.OutlineColor = outlineColor or Color3.fromRGB(0, 0, 0)
+		hl.FillColor = fillColor
+		hl.Enabled = enabled
+	end
+	local function removeHighlight(model)
+		if model then
+			local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
+			if hl then hl:Destroy() end
+		end
+	end
+	local function getSkillType(backpack)
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if strongSkills[tool.Name] then return "strong" end
+			if weakSkills[tool.Name] then return "weak" end
+		end
+		return nil
+	end
+	local function updatePlayer(plr)
+		local char = plr.Character
+		if not char then return end
+		local backpack = plr:FindFirstChild("Backpack")
+		if not backpack then return end
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.Health <= 0 then
+			SM_playerState[plr] = nil
+			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+			return
+		end
+		local skill = getSkillType(backpack)
+		local currentState = SM_playerState[plr]
+		if skill == "strong" and currentState ~= "strong" then
+			SM_playerState[plr] = "strong"
+			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "strong")
+			callInfo("SERIOUS MODE", plr.Name .. " - ACTIVE", 5)
+		elseif skill == "weak" and currentState == "strong" then
+			SM_playerState[plr] = "weak"
+			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "weak")
+			callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 5)
+			local timerId = tick()
+			SM_activeTimers[plr] = timerId
+			task.delay(9.4, function()
+				if SM_activeTimers[plr] == timerId and SM_playerState[plr] == "weak" then
+					SM_playerState[plr] = nil
+					if char and char.Parent then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+					callInfo("SERIOUS MODE", plr.Name .. " - END", 5)
+				end
+			end)
+		end
+	end
+	local function startGlobalChecker()
+		task.spawn(function()
+			while SeriousModeTrackerEnabled do
+				task.wait(0.25) 
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if plr == Players.LocalPlayer then continue end
+					local char = plr.Character
+					if not char then continue end
+					local shouldHaveState = SM_playerState[plr]
+					if shouldHaveState then
+						char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, shouldHaveState)
+					else
+						char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+					end
+				end
+			end
+		end)
+	end
+	local function setupPlayer(plr)
+		if plr == Players.LocalPlayer then return end
+		local function disconnectTrackedConnections()
+			local tracked = SM_playerConnections[plr]
+			if not tracked then return end
+			for _, conn in ipairs(tracked) do
+				if conn and conn.Disconnect then conn:Disconnect() end
+			end
+			SM_playerConnections[plr] = nil
+		end
+		local function onCharacterAdded(char)
+			task.wait(0.4)
+			SM_playerState[plr] = nil
+			if char and char.Parent then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+			char = char or plr.Character
+			if not char or char ~= plr.Character then return end
+			disconnectTrackedConnections()
+			local backpack = plr:WaitForChild("Backpack", 6)
+			if not backpack then return end
+			SM_playerConnections[plr] = {
+				backpack.ChildAdded:Connect(function()
+					task.wait(0.1)
+					if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+				end),
+				backpack.ChildRemoved:Connect(function()
+					task.wait(0.1)
+					if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+				end)
+			}
+			local hum = char:FindFirstChild("Humanoid") or char:WaitForChild("Humanoid", 3)
+			if hum and char == plr.Character then
+				table.insert(SM_playerConnections[plr], hum.Died:Connect(function()
+					SM_playerState[plr] = nil
+					if char and char.Parent then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+				end))
+				updatePlayer(plr)
+			end
+		end
+		if plr.Character then onCharacterAdded(plr.Character) end
+		local cAdded = plr.CharacterAdded:Connect(onCharacterAdded)
+		local aChanged = plr.AncestryChanged:Connect(function(_, parent)
+			if parent == nil then
+				disconnectTrackedConnections()
+				SM_playerState[plr] = nil
+				if plr.Character then plr.Character:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+			end
+		end)
+		if not SM_playerConnections[plr] then SM_playerConnections[plr] = {} end
+		table.insert(SM_playerConnections[plr], cAdded)
+		table.insert(SM_playerConnections[plr], aChanged)
+	end
+	
+	startGlobalChecker()
+	for _, plr in ipairs(Players:GetPlayers()) do
+		setupPlayer(plr)
+	end
+	SM_PlayersAddedConn = Players.PlayerAdded:Connect(setupPlayer)
 end
-local function ensureSharedHighlight(model)
-    if not model or not model:FindFirstChild("HumanoidRootPart") then return nil end
-    local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
-    if hl and not hl:IsA("Highlight") then
-        hl:Destroy()
-        hl = nil
-    end
-    if hl then
-        return hl
-    end
-    hl = Instance.new("Highlight")
-    hl.Name = SHARED_HIGHLIGHT_NAME
-    hl.Adornee = model
-    hl.Parent = model
-    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    hl.FillTransparency = 0.8
-    hl.OutlineTransparency = 0
-    return hl
-end
-local function addHighlight(model, fillColor, enabled, outlineColor)
-    local hl = ensureSharedHighlight(model)
-    if not hl then return end
-    hl.OutlineColor = outlineColor or Color3.fromRGB(0, 0, 0)
-    hl.FillColor = fillColor
-    hl.Enabled = enabled
-end
-local function removeHighlight(model)
-    if model then
-        local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
-        if hl then
-            hl:Destroy()
-        end
-    end
-end
-local function getSkillType(backpack)
-    for _, tool in ipairs(backpack:GetChildren()) do
-        if strongSkills[tool.Name] then return "strong" end
-        if weakSkills[tool.Name] then return "weak" end
-    end
-    return nil
-end
-local function updatePlayer(plr)
-    local char = plr.Character
-    if not char then return end
-    local backpack = plr:FindFirstChild("Backpack")
-    if not backpack then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then
-        playerState[plr] = nil
-        char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-        return
-    end
-    local skill = getSkillType(backpack)
-    local currentState = playerState[plr]
-    if skill == "strong" and currentState ~= "strong" then
-        playerState[plr] = "strong"
-        char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "strong")
-        callInfo("SERIOUS MODE", plr.Name .. " - ACTIVE", 5)
-    elseif skill == "weak" and currentState == "strong" then
-        playerState[plr] = "weak"
-        char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "weak")
-        callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 5)
-        local timerId = tick()
-        activeTimers[plr] = timerId
-        task.delay(9.4, function()
-            if activeTimers[plr] == timerId and playerState[plr] == "weak" then
-                playerState[plr] = nil
-                if char and char.Parent then
-                    char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-                end
-                callInfo("SERIOUS MODE", plr.Name .. " - END", 5)
-            end
-        end)
-    end
-end
-local function startGlobalChecker()
-    task.spawn(function()
-        while true do
-            task.wait(0.25) 
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr == Players.LocalPlayer then continue end
-                local char = plr.Character
-                if not char then continue end
-                local shouldHaveState = playerState[plr]
-                if shouldHaveState then
-                    char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, shouldHaveState)
-                else
-                    char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-                end
-            end
-        end
-    end)
-end
-local function setupPlayer(plr)
-    if plr == Players.LocalPlayer then return end
-    local function disconnectTrackedConnections()
-        local tracked = playerConnections[plr]
-        if not tracked then return end
-        for _, conn in ipairs(tracked) do
-            if conn and conn.Disconnect then
-                conn:Disconnect()
-            end
-        end
-        playerConnections[plr] = nil
-    end
-    local function onCharacterAdded(char)
-        task.wait(0.4)
-        playerState[plr] = nil
-        if char and char.Parent then
-            char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-        end
-        char = char or plr.Character
-        if not char or char ~= plr.Character then
-            return
-        end
-        disconnectTrackedConnections()
-        local backpack = plr:WaitForChild("Backpack", 6)
-        if not backpack then
-            return
-        end
-        playerConnections[plr] = {
-            backpack.ChildAdded:Connect(function()
-                task.wait(0.1)
-                if plr.Parent then
-                    updatePlayer(plr)
-                end
-            end),
-            backpack.ChildRemoved:Connect(function()
-                task.wait(0.1)
-                if plr.Parent then
-                    updatePlayer(plr)
-                end
-            end)
-        }
-        local hum = char:FindFirstChild("Humanoid") or char:WaitForChild("Humanoid", 3)
-        if hum and char == plr.Character then
-            table.insert(playerConnections[plr], hum.Died:Connect(function()
-                playerState[plr] = nil
-                if char and char.Parent then
-                    char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-                end
-            end))
-            updatePlayer(plr)
-        end
-    end
-    if plr.Character then 
-        onCharacterAdded(plr.Character) 
-    end
-    plr.CharacterAdded:Connect(onCharacterAdded)
-    plr.AncestryChanged:Connect(function(_, parent)
-        if parent == nil then
-            disconnectTrackedConnections()
-            playerState[plr] = nil
-            if plr.Character then
-                plr.Character:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-            end
-        end
-    end)
-end
-startGlobalChecker()
-for _, plr in ipairs(Players:GetPlayers()) do
-    setupPlayer(plr)
-end
-Players.PlayerAdded:Connect(setupPlayer)
-end
-initSeriousModeTracker()
-local function initCharacterCleanupRuntime()
-local Players = game:GetService("Players")
-local speaker = Players.LocalPlayer
-local speed = 25.66
-local jpower = 50.66
+local CharacterCleanupEnabled = false
 local ModConnections = {}
-local function SetupHumanoid(Char, Human)
-	if not Human or not Human.Parent then return end
-	if ModConnections.wsLoop then ModConnections.wsLoop:Disconnect() end
-	if ModConnections.jpLoop then ModConnections.jpLoop:Disconnect() end
-	local function UpdateWalkSpeed()
-		if Human and Human.Parent then
-			Human.WalkSpeed = speed
-		end
+
+local function toggleCharacterCleanupRuntime(state)
+	CharacterCleanupEnabled = state == true
+	if not CharacterCleanupEnabled then
+		if ModConnections.wsLoop then ModConnections.wsLoop:Disconnect(); ModConnections.wsLoop = nil end
+		if ModConnections.jpLoop then ModConnections.jpLoop:Disconnect(); ModConnections.jpLoop = nil end
+		if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect(); ModConnections.hrpLoop = nil end
+		if ModConnections.CharacterAdded then ModConnections.CharacterAdded:Disconnect(); ModConnections.CharacterAdded = nil end
+		return
 	end
-	UpdateWalkSpeed()
-	ModConnections.wsLoop = Human:GetPropertyChangedSignal("WalkSpeed"):Connect(UpdateWalkSpeed)
-	local function UpdateJumpPower()
-		if Human and Human.Parent then
-			if Human.UseJumpPower then
-				Human.JumpPower = jpower
-			else
-				Human.JumpHeight = jpower
+
+	local Players = game:GetService("Players")
+	local speaker = Players.LocalPlayer
+	local speed = 25.50
+	local jpower = 50.50
+
+	local function SetupHumanoid(Char, Human)
+		if not Human or not Human.Parent then return end
+		if ModConnections.wsLoop then ModConnections.wsLoop:Disconnect() end
+		if ModConnections.jpLoop then ModConnections.jpLoop:Disconnect() end
+		local function UpdateWalkSpeed()
+			if Human and Human.Parent and CharacterCleanupEnabled then
+				Human.WalkSpeed = speed
+			end
+		end
+		UpdateWalkSpeed()
+		ModConnections.wsLoop = Human:GetPropertyChangedSignal("WalkSpeed"):Connect(UpdateWalkSpeed)
+		local function UpdateJumpPower()
+			if Human and Human.Parent and CharacterCleanupEnabled then
+				if Human.UseJumpPower then
+					Human.JumpPower = jpower
+				else
+					Human.JumpHeight = jpower
+				end
+			end
+		end
+		UpdateJumpPower()
+		local propertyToWatch = Human.UseJumpPower and "JumpPower" or "JumpHeight"
+		ModConnections.jpLoop = Human:GetPropertyChangedSignal(propertyToWatch):Connect(UpdateJumpPower)
+		task.spawn(function()
+			local hrp = Char:WaitForChild("HumanoidRootPart", 5)
+			if hrp then
+				if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect() end
+				local function unanchor()
+					if CharacterCleanupEnabled then hrp.Anchored = false end
+				end
+				unanchor()
+				ModConnections.hrpLoop = hrp:GetPropertyChangedSignal("Anchored"):Connect(unanchor)
+			end
+		end)
+	end
+	local function isCounter(acc)
+		if not acc or not acc:IsA("Accessory") then return false end
+		return acc.Name:lower():find("counter") ~= nil
+	end
+	local function usunPusteAccessory(char)
+		if not char then return end
+		for _, obj in ipairs(char:GetChildren()) do
+			if obj:IsA("Accessory") then
+				if isCounter(obj) then
+					continue
+				end
+				if #obj:GetChildren() == 0 then
+					pcall(function()
+						for attrName, attrValue in pairs(obj:GetAttributes()) do
+							if type(attrValue) == "boolean" then obj:SetAttribute(attrName, false)
+							elseif type(attrValue) == "number" then obj:SetAttribute(attrName, 0) end
+							obj:SetAttribute(attrName, nil)
+						end
+						obj:Destroy()
+					end)
+				end
 			end
 		end
 	end
-	UpdateJumpPower()
-	local propertyToWatch = Human.UseJumpPower and "JumpPower" or "JumpHeight"
-	ModConnections.jpLoop = Human:GetPropertyChangedSignal(propertyToWatch):Connect(UpdateJumpPower)
+	local function OnCharacterAdded(Char)
+		local Human = Char:WaitForChild("Humanoid", 5)
+		if Human then SetupHumanoid(Char, Human) end
+		task.wait(0.25)
+		if CharacterCleanupEnabled then usunPusteAccessory(Char) end
+	end
+	if speaker.Character then OnCharacterAdded(speaker.Character) end
+	ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
 	task.spawn(function()
-		local hrp = Char:WaitForChild("HumanoidRootPart", 5)
-		if hrp then
-			if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect() end
-			local function unanchor()
-				hrp.Anchored = false
+		while CharacterCleanupEnabled do
+			task.wait()
+			local char = speaker.Character
+			if char then
+				usunPusteAccessory(char)
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if hrp then hrp.Anchored = false end
 			end
-			unanchor()
-			ModConnections.hrpLoop = hrp:GetPropertyChangedSignal("Anchored"):Connect(unanchor)
+		end
+	end)
+	task.spawn(function()
+		while CharacterCleanupEnabled do 
+			local args = { { Goal = "delete bv", BV = Instance.new("BodyVelocity", nil) } }
+			pcall(function() speaker.Character:WaitForChild("Communicate"):FireServer(unpack(args)) end)
+			task.wait(0.15)
 		end
 	end)
 end
-local function isCounter(acc)
-	if not acc or not acc:IsA("Accessory") then return false end
-	return acc.Name:lower():find("counter") ~= nil
-end
-local function usunPusteAccessory(char)
-	if not char then return end
-	for _, obj in ipairs(char:GetChildren()) do
-		if obj:IsA("Accessory") then
-			if isCounter(obj) then
-				continue
+
+local function initInvisibleBorderCleanup()
+	task.spawn(function()
+		local map = workspace:FindFirstChild("Map")
+		local folder = map and map:FindFirstChild("InvisibleBorder")
+		if not folder then return end
+		local function fixPart(v)
+			if v:IsA("BasePart") then
+				if v.CanCollide ~= false then v.CanCollide = false end
+				if v.CanTouch ~= false then v.CanTouch = false end
+				if v.CanQuery ~= false then v.CanQuery = false end
 			end
-			if #obj:GetChildren() == 0 then
-				pcall(function()
-					for attrName, attrValue in pairs(obj:GetAttributes()) do
-						if type(attrValue) == "boolean" then
-							obj:SetAttribute(attrName, false)
-						elseif type(attrValue) == "number" then
-							obj:SetAttribute(attrName, 0)
-						end
-						obj:SetAttribute(attrName, nil)
-					end
-					obj:Destroy()
+		end
+		for _, v in pairs(folder:GetDescendants()) do
+			fixPart(v)
+		end
+		folder.DescendantAdded:Connect(function(v)
+			fixPart(v)
+		end)
+		folder.DescendantAdded:Connect(function(v)
+			if v:IsA("BasePart") then
+				v:GetPropertyChangedSignal("CanCollide"):Connect(function()
+					if v.CanCollide ~= false then v.CanCollide = false end
+				end)
+				v:GetPropertyChangedSignal("CanTouch"):Connect(function()
+					if v.CanTouch ~= false then v.CanTouch = false end
+				end)
+				v:GetPropertyChangedSignal("CanQuery"):Connect(function()
+					if v.CanQuery ~= false then v.CanQuery = false end
 				end)
 			end
-		end
-	end
-end
-local function OnCharacterAdded(Char)
-	local Human = Char:WaitForChild("Humanoid", 5)
-	if Human then
-		SetupHumanoid(Char, Human)
-	end
-	task.wait(0.25)
-	usunPusteAccessory(Char)
-end
-if speaker.Character then
-	OnCharacterAdded(speaker.Character)
-end
-ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
-task.spawn(function()
-	while speaker.Parent do
-		task.wait()
-		local char = speaker.Character
-		if char then
-			usunPusteAccessory(char)
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then hrp.Anchored = false end
-		end
-	end
-end)
-task.spawn(function()
-	local map = workspace:FindFirstChild("Map")
-	local folder = map and map:FindFirstChild("InvisibleBorder")
-	if not folder then return end
-	local function fixPart(v)
-		if v:IsA("BasePart") then
-			if v.CanCollide ~= false then v.CanCollide = false end
-			if v.CanTouch ~= false then v.CanTouch = false end
-			if v.CanQuery ~= false then v.CanQuery = false end
-		end
-	end
-	for _, v in pairs(folder:GetDescendants()) do
-		fixPart(v)
-	end
-	folder.DescendantAdded:Connect(function(v)
-		fixPart(v)
-	end)
-	folder.DescendantAdded:Connect(function(v)
-		if v:IsA("BasePart") then
-			v:GetPropertyChangedSignal("CanCollide"):Connect(function()
-				if v.CanCollide ~= false then v.CanCollide = false end
-			end)
-			v:GetPropertyChangedSignal("CanTouch"):Connect(function()
-				if v.CanTouch ~= false then v.CanTouch = false end
-			end)
-			v:GetPropertyChangedSignal("CanQuery"):Connect(function()
-				if v.CanQuery ~= false then v.CanQuery = false end
-			end)
-		end
-	end)
-end)
-task.spawn(function()
-	while true do 
-		local args = {
-			{
-				Goal = "delete bv",
-				BV = Instance.new("BodyVelocity", nil)
-			}
-		}
-		pcall(function()
-			game:GetService("Players").LocalPlayer.Character:WaitForChild("Communicate"):FireServer(unpack(args))
 		end)
-		task.wait(0.15)
-	end
-end)
+	end)
 end
-initCharacterCleanupRuntime()
+initInvisibleBorderCleanup()
 local StayToggle = nil
 local DashToggle = nil
 task.spawn(function()
@@ -4248,7 +4248,7 @@ task.spawn(function()
     local supportsDashBlock = game.GameId == 3808081382
     local isTSB = supportsDashBlock
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(isTSB and 246 or 112) 
+    local movementHub = makeControlFrame(isTSB and 246 or 146) 
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -4368,12 +4368,17 @@ task.spawn(function()
         makeHubTog(row5, "Anti Death Counter (V)", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
         makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
         local row6 = makeRow(202)
-        makeHubTog(row6, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1)
+        makeHubTog(row6, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/3)
+        makeHubTog(row6, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
+        makeHubTog(row6, "Death Counter ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/3)
     else
         local row2 = makeRow(66)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+        local row3 = makeRow(100)
+        makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/2)
+        makeHubTog(row3, "Death Counter ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/2)
     end
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
