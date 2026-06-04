@@ -1070,7 +1070,7 @@ local function syncSpeedKeybindDisplay()
 end
 local function syncVoidDeadKeybindDisplay()
 	keybindEntries.VoidDead = {
-		name = "Void Dead",
+		name = "Void",
 		keybind = encodeKeybindValue(voidDeadKeybind),
 		enabled = voidDeadActive,
 	}
@@ -4353,19 +4353,19 @@ task.spawn(function()
             workspace:SetAttribute("EffectAffects", v and 1 or 0)
             workspace:SetAttribute("NoDashCooldown", v)
         end, "NoDashCD", false)
-        makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
+        makeHubTog(row2, "Block Tp Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
         local row3 = makeRow(100)
         makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
         makeHubTog(row3, "Names", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false)
         makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
-        makeHubTog(row3, "ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
+        makeHubTog(row3, "ESP ULT", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
         local row4 = makeRow(134)
         makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/4)
         makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/4)
         makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
-        makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
+        makeHubTog(row4, "Auto Fix Cam on kill", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
         local row5 = makeRow(168)
-        makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
+        makeHubTog(row5, "Anti Death Counter (V)", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
         makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
         local row6 = makeRow(202)
         makeHubTog(row6, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1)
@@ -5339,7 +5339,7 @@ function Dropdown(data)
 		local displayText = "-"
 		if #displayList > 0 then
 			if hideSelectionText then
-				displayText = "(---)"
+				displayText = "(~~~)"
 			else
 				displayText = table.concat(displayList, ", ")
 			end
@@ -7213,7 +7213,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 	name1 = "View",
 	name2 = "Auto TP",
 	name3 = "Fling",
-	name4Tog = "(D)",
+	name4Tog = "(V)",
 	buttonName = "TP",
 	default1 = viewing,
 	default2 = autoTpEnabled,
@@ -8811,47 +8811,3 @@ task.spawn(function()
 	end
 end)
 end)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
