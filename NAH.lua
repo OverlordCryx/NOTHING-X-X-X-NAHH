@@ -17,6 +17,9 @@ function nextFrame()
 	return RunService.Heartbeat:Wait()
 end
 local player = Players.LocalPlayer
+local uiLoaded = false
+local queuedCallbacks = {}
+local characterSpawnTime = os.clock()
 local espOverlayConfig = {
     showCharacter = false,
     showUltimate = false,
@@ -104,26 +107,202 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
 screenGui.Parent = CoreGui
 
-local mainScale = Instance.new("UIScale")
-mainScale.Name = "MainScale"
-mainScale.Parent = screenGui
+local keybindFrame
+local targetFrame
+local keybindToggles = {
+	Speed = true,
+	Fly = true,
+	CamLock = true,
+	AttackTP = true,
+	Target = true,
+	WalkFling = true,
+	SetBack = true,
+	Trash = true,
+	Void = true,
+	Places = true
+}
+local scaleRegistry = {}
+local baseResolution = Vector2.new(1920, 1080)
 
-local function updateGlobalScale()
-	local cam = Workspace.CurrentCamera
-	if not cam then return end
-	local viewportSize = cam.ViewportSize
-	if viewportSize.X < 1 or viewportSize.Y < 1 then return end
+local function getViewportScale()
+	local sizeX = screenGui and screenGui.AbsoluteSize.X or 1920
+	local sizeY = screenGui and screenGui.AbsoluteSize.Y or 1080
+	if sizeX < 10 or sizeY < 10 then
+		local cam = workspace.CurrentCamera
+		if cam then
+			local viewportSize = cam.ViewportSize
+			if viewportSize.X >= 10 and viewportSize.Y >= 10 then
+				sizeX = viewportSize.X
+				sizeY = viewportSize.Y
+			end
+		end
+	end
+	if sizeX < 10 then sizeX = 1920 end
+	if sizeY < 10 then sizeY = 1080 end
+	local scaleX = sizeX / baseResolution.X
+	local scaleY = sizeY / baseResolution.Y
+	return math.min(scaleX, scaleY)
+end
+
+local function getScaleFactorFor(guiObject)
+	local viewportScale = getViewportScale()
+	local current = guiObject
+	while current do
+		if current.Name == "WindowUI" then
+			local animVal = current:FindFirstChild("WindowAnimScale")
+			local animScale = animVal and animVal.Value or 1.0
+			return 1.2 * viewportScale * animScale
+		elseif current.Name == "TargetFrame" then
+			return 1.6 * viewportScale
+		elseif current.Name == "KeybindFrame" then
+			return 1.3 * viewportScale
+		elseif current.Name == "InfoContainer" then
+			return 1.5 * viewportScale
+		end
+		current = current.Parent
+	end
+	return viewportScale
+end
+
+local function registerObject(guiObject)
+	if scaleRegistry[guiObject] then return end
+	if guiObject.Name == "DropdownHolder" or guiObject.Name == "DropdownOptionsFrame" or guiObject.Name == "DropdownChoiceFrame" then
+		return
+	end
 	
-	local baseResolution = Vector2.new(1920, 1080)
-	local scaleX = viewportSize.X / baseResolution.X
-	local scaleY = viewportSize.Y / baseResolution.Y
-	local finalScale = math.min(scaleX, scaleY)
+	local original = {}
+	local shouldRegister = false
 	
-	mainScale.Scale = finalScale
+	if guiObject:IsA("GuiObject") then
+		original.Size = guiObject.Size
+		original.Position = guiObject.Position
+		shouldRegister = true
+	end
+	if guiObject:IsA("TextLabel") or guiObject:IsA("TextButton") or guiObject:IsA("TextBox") then
+		original.TextSize = guiObject.TextSize
+		shouldRegister = true
+	end
+	if guiObject:IsA("UIPadding") then
+		original.PaddingLeft = guiObject.PaddingLeft
+		original.PaddingRight = guiObject.PaddingRight
+		original.PaddingTop = guiObject.PaddingTop
+		original.PaddingBottom = guiObject.PaddingBottom
+		shouldRegister = true
+	end
+	if guiObject:IsA("UIListLayout") then
+		original.Padding = guiObject.Padding
+		shouldRegister = true
+	end
+	if guiObject:IsA("UICorner") then
+		original.CornerRadius = guiObject.CornerRadius
+		shouldRegister = true
+	end
+	if guiObject:IsA("UIStroke") then
+		original.Thickness = guiObject.Thickness
+		shouldRegister = true
+	end
+	
+	if shouldRegister then
+		scaleRegistry[guiObject] = original
+	end
+end
+
+local function applyScaleToObject(guiObject)
+	local original = scaleRegistry[guiObject]
+	if not original then return end
+	local scaleFactor = getScaleFactorFor(guiObject)
+	
+	if guiObject:IsA("GuiObject") then
+		local origSize = original.Size
+		guiObject.Size = UDim2.new(
+			origSize.X.Scale, origSize.X.Offset * scaleFactor,
+			origSize.Y.Scale, origSize.Y.Offset * scaleFactor
+		)
+		local origPos = original.Position
+		guiObject.Position = UDim2.new(
+			origPos.X.Scale, origPos.X.Offset * scaleFactor,
+			origPos.Y.Scale, origPos.Y.Offset * scaleFactor
+		)
+	end
+	if guiObject:IsA("TextLabel") or guiObject:IsA("TextButton") or guiObject:IsA("TextBox") then
+		guiObject.TextSize = math.max(1, math.floor(original.TextSize * scaleFactor + 0.5))
+	end
+	if guiObject:IsA("UIPadding") then
+		guiObject.PaddingLeft = UDim.new(original.PaddingLeft.Scale, original.PaddingLeft.Offset * scaleFactor)
+		guiObject.PaddingRight = UDim.new(original.PaddingRight.Scale, original.PaddingRight.Offset * scaleFactor)
+		guiObject.PaddingTop = UDim.new(original.PaddingTop.Scale, original.PaddingTop.Offset * scaleFactor)
+		guiObject.PaddingBottom = UDim.new(original.PaddingBottom.Scale, original.PaddingBottom.Offset * scaleFactor)
+	end
+	if guiObject:IsA("UIListLayout") then
+		guiObject.Padding = UDim.new(original.Padding.Scale, original.Padding.Offset * scaleFactor)
+	end
+	if guiObject:IsA("UICorner") then
+		guiObject.CornerRadius = UDim.new(original.CornerRadius.Scale, original.CornerRadius.Offset * scaleFactor)
+	end
+	if guiObject:IsA("UIStroke") then
+		guiObject.Thickness = original.Thickness * scaleFactor
+	end
+end
+
+local function updateAllScales()
+	local w = screenGui and screenGui.AbsoluteSize.X or 1600
+	if w < 10 then
+		local cam = workspace.CurrentCamera
+		if cam then
+			w = cam.ViewportSize.X
+		end
+	end
+	if w < 10 then w = 1600 end
+	
+	-- t=0 -> maly ekran (<=800px), t=1 -> duzy ekran (>=1600px)
+	local t = math.clamp((w - 800) / (1600 - 800), 0, 1)
+	
+	-- Oblicz docelowe pozycje dla keybindFrame i targetFrame
+	local kfYScale = 0.75 - t * 0.15   -- maly: 0.75, duzy: 0.6
+	local tfXOffset = -160 - t * 190   -- maly: -160, duzy: -350
+	local newKFPos = keybindFrame and UDim2.new(0, 10, kfYScale, 0) or nil
+	local newTFPos = targetFrame and UDim2.new(1, tfXOffset, 0, 10) or nil
+
+	for guiObject, original in pairs(scaleRegistry) do
+		if not guiObject.Parent then
+			scaleRegistry[guiObject] = nil
+		else
+			-- Dla keybindFrame i targetFrame skalujemy rozmiar/tekst dzieci,
+			-- ale NIE pozycje samego frame'u (zrobimy to ręcznie poniżej)
+			if guiObject == keybindFrame or guiObject == targetFrame then
+				-- tylko rozmiar (offset Y = 0 więc bez zmian) – pomijamy position
+			else
+				applyScaleToObject(guiObject)
+			end
+		end
+	end
+	
+	-- Ustaw pozycje bezpośrednio – po applyScaleToObject, żeby nie były nadpisane
+	if keybindFrame and newKFPos then
+		keybindFrame.Position = newKFPos
+	end
+	if targetFrame and newTFPos then
+		targetFrame.Position = newTFPos
+	end
 	
 	if infoContainer then
-		local yPos = 0.08 + (1 - mainScale.Scale) * 0.15
-		infoContainer.Position = UDim2.fromScale(0.5, yPos)
+		local viewportScale = getViewportScale()
+		local yPos = 0.08 + (1 - viewportScale) * 0.15
+		local newPos = UDim2.fromScale(0.5, yPos)
+		if scaleRegistry[infoContainer] then
+			scaleRegistry[infoContainer].Position = newPos
+		end
+		infoContainer.Position = newPos
+	end
+	
+	if allDropdowns then
+		for state in pairs(allDropdowns) do
+			if state.holder and state.holder.Parent then
+				state.setExpanded(state.isExpanded())
+			else
+				allDropdowns[state] = nil
+			end
+		end
 	end
 end
 
@@ -133,20 +312,41 @@ task.spawn(function()
 		if currentConnection then currentConnection:Disconnect() end
 		local cam = Workspace.CurrentCamera
 		if cam then
-			currentConnection = cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateGlobalScale)
-			updateGlobalScale()
+			currentConnection = cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateAllScales)
+			updateAllScales()
 		end
 	end
 	bindCamera()
 	Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCamera)
+	if screenGui then
+		screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateAllScales)
+	end
 end)
 
+screenGui.DescendantAdded:Connect(function(desc)
+	task.defer(function()
+		if desc.Parent then
+			registerObject(desc)
+			applyScaleToObject(desc)
+			if desc.Name == "WindowAnimScale" and desc:IsA("NumberValue") then
+				desc.Changed:Connect(updateAllScales)
+			end
+		end
+	end)
+end)
+
+for _, desc in ipairs(screenGui:GetDescendants()) do
+	registerObject(desc)
+end
+updateAllScales()
+task.defer(updateAllScales)
+
 introFinished = true
-local keybindFrame = Instance.new("Frame")
-keybindFrame.Name = "KeybindFrame"
-keybindFrame.AnchorPoint = Vector2.new(0, 0.5)
-keybindFrame.Position = UDim2.new(0, 10, 0.5, 0)
-keybindFrame.Size = UDim2.fromScale(0, 0)
+	keybindFrame = Instance.new("Frame")
+	keybindFrame.Name = "KeybindFrame"
+	keybindFrame.AnchorPoint = Vector2.new(0, 1)
+	keybindFrame.Position = UDim2.new(0, 10, 0.9, 0)
+	keybindFrame.Size = UDim2.fromScale(0, 0)
 keybindFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 keybindFrame.BackgroundTransparency = 0.2
 keybindFrame.BorderSizePixel = 0
@@ -165,15 +365,17 @@ do
 	kfGradient.Rotation = 90
 	kfGradient.Parent = keybindFrame
 end
-keybindFrame.Visible = true
+keybindFrame.Visible = false
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
 local keybindPadding = Instance.new("UIPadding")
 keybindPadding.PaddingTop = UDim.new(0, 10)
 keybindPadding.PaddingBottom = UDim.new(0, 10)
-keybindPadding.PaddingLeft = UDim.new(0, 0)
-keybindPadding.PaddingRight = UDim.new(0, 0)
+keybindPadding.PaddingLeft = UDim.new(0, 10)
+keybindPadding.PaddingRight = UDim.new(0, 10)
 keybindPadding.Parent = keybindFrame
 keybindFrame.Parent = screenGui
+-- zastosuj pozycje od razu po stworzeniu
+updateAllScales()
 
 keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
@@ -187,7 +389,7 @@ keybindText.TextStrokeTransparency = 1
 keybindText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 keybindText.Font = Enum.Font.GothamBold
 keybindText.TextSize = 16
-keybindText.Text = "NOTHING X"
+keybindText.Text = ""
 keybindText.LineHeight = 1.5
 keybindText.TextScaled = false
 keybindText.TextWrapped = true
@@ -199,7 +401,7 @@ keybindText.Parent = keybindFrame
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
-targetFrame.Position = UDim2.new(1, -330, 0, 10)
+targetFrame.Position = UDim2.new(1, -240, 0, 10)
 targetFrame.Size = UDim2.fromOffset(0, 0)
 targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.25
@@ -248,6 +450,58 @@ local function setSavedControlValue(key, value)
 	controlSaveData[key] = value
 	saveSliderSaveData()
 end
+function makeHubTog(parent, text, callback, saveKey, default, widthMult)
+	local btn = Instance.new("TextButton")
+	btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	btn.BackgroundTransparency = 0
+	btn.BorderSizePixel = 0
+	btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	btn.AutoButtonColor = false
+	btn.Font = Enum.Font.GothamBold
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextStrokeTransparency = 1
+	btn.TextSize = 13
+	btn.TextScaled = false
+	btn.Parent = parent
+	local enabled = default == true
+	if saveKey and getSavedControlValue(saveKey) ~= nil then
+		enabled = getSavedControlValue(saveKey) == true
+	end
+	local function render()
+		btn.BackgroundColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+		btn.TextColor3 = enabled and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+	end
+	local function setValue(val, skipCallback)
+		enabled = val == true
+		render()
+		if saveKey then setSavedControlValue(saveKey, enabled) end
+		if not skipCallback and callback then callback(enabled) end
+	end
+	btn.MouseButton1Click:Connect(function()
+		setValue(not enabled)
+	end)
+	if enabled and callback then
+		if uiLoaded then
+			task.spawn(callback, true)
+		else
+			table.insert(queuedCallbacks, function()
+				task.spawn(callback, true)
+			end)
+		end
+	end
+	render()
+	return {
+		Button = btn,
+		SetValue = setValue,
+		GetValue = function() return enabled end,
+		tog_change = setValue
+	}
+end
 local targetPadding = Instance.new("UIPadding")
 targetPadding.PaddingLeft = UDim.new(0, 10)
 targetPadding.PaddingRight = UDim.new(0, 10)
@@ -255,6 +509,8 @@ targetPadding.PaddingTop = UDim.new(0, 5)
 targetPadding.PaddingBottom = UDim.new(0, 5)
 targetPadding.Parent = targetFrame
 targetFrame.Parent = screenGui
+-- zastosuj pozycje od razu po stworzeniu targetFrame
+updateAllScales()
 local targetLayout = Instance.new("UIListLayout")
 targetLayout.FillDirection = Enum.FillDirection.Vertical
 targetLayout.VerticalAlignment = Enum.VerticalAlignment.Top
@@ -309,7 +565,7 @@ hpSeparator.Parent = targetFrame
 infoContainer = Instance.new("Frame")
 infoContainer.Name = "InfoContainer"
 infoContainer.AnchorPoint = Vector2.new(0.5, 0)
-infoContainer.Position = UDim2.fromScale(0.5, 0.1) 
+infoContainer.Position = UDim2.fromScale(0.5, 0.08) 
 infoContainer.AutomaticSize = Enum.AutomaticSize.XY
 infoContainer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 infoContainer.BackgroundTransparency = 0.25
@@ -398,6 +654,11 @@ settingsWindow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 settingsWindow.BackgroundTransparency = 0.1
 settingsWindow.BorderSizePixel = 0
 do
+	local windowAnimScaleVal = Instance.new("NumberValue")
+	windowAnimScaleVal.Name = "WindowAnimScale"
+	windowAnimScaleVal.Value = 1.0
+	windowAnimScaleVal.Parent = settingsWindow
+
 	local swCorner = Instance.new("UICorner")
 	swCorner.CornerRadius = UDim.new(0, 6)
 	swCorner.Parent = settingsWindow
@@ -518,29 +779,79 @@ do
 end
 local otherPartsCache = {}
 local friendCache = {}
-local function updateFriendCache()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and friendCache[p.UserId] ~= true then
-            task.spawn(function()
-                pcall(function()
-                    friendCache[p.UserId] = player:IsFriendsWith(p.UserId)
-                end)
-            end)
-        end
-    end
-end
+local friendsList = {}
+
 task.spawn(function()
-    Players.PlayerAdded:Connect(function(p)
-        task.spawn(function()
-            pcall(function()
-                friendCache[p.UserId] = player:IsFriendsWith(p.UserId)
-            end)
-        end)
-    end)
-    updateFriendCache()
-    while task.wait(2) do
-        updateFriendCache()
-    end
+	local success, pages = pcall(function()
+		return Players:GetFriendsAsync(player.UserId)
+	end)
+	if success and pages then
+		while true do
+			local items = pages:GetCurrentPage()
+			for _, item in ipairs(items) do
+				friendsList[item.Id] = true
+			end
+			if pages.IsFinished then
+				break
+			end
+			local advanceSuccess = pcall(function()
+				pages:AdvanceToNextPageAsync()
+			end)
+			if not advanceSuccess then break end
+		end
+	end
+end)
+
+local function updateFriendCache()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and friendCache[p.UserId] ~= true then
+			if friendsList[p.UserId] then
+				friendCache[p.UserId] = true
+			else
+				task.spawn(function()
+					local isFriend = false
+					pcall(function()
+						isFriend = player:IsFriendsWith(p.UserId)
+					end)
+					if not isFriend then
+						pcall(function()
+							isFriend = p:IsFriendsWith(player.UserId)
+						end)
+					end
+					if isFriend then
+						friendCache[p.UserId] = true
+					end
+				end)
+			end
+		end
+	end
+end
+
+task.spawn(function()
+	Players.PlayerAdded:Connect(function(p)
+		task.spawn(function()
+			if friendsList[p.UserId] then
+				friendCache[p.UserId] = true
+			else
+				local isFriend = false
+				pcall(function()
+					isFriend = player:IsFriendsWith(p.UserId)
+				end)
+				if not isFriend then
+					pcall(function()
+						isFriend = p:IsFriendsWith(player.UserId)
+					end)
+				end
+				if isFriend then
+					friendCache[p.UserId] = true
+				end
+			end
+		end)
+	end)
+	updateFriendCache()
+	while task.wait(2) do
+		updateFriendCache()
+	end
 end)
 keybindEntries = {}
 introFinished = true
@@ -550,6 +861,7 @@ draggingWindow = false
 dragStartPosition = nil
 dragStartInputPosition = nil
 openDropdowns = {}
+allDropdowns = {}
 sliderStates = {}
 controlSaveData = {}
 sliderSaveFile = "NOTHING_X/UI/NOTHING_X_0.file"
@@ -600,9 +912,21 @@ holdingS = false
 holdingA = false
 holdingD = false
 local cam = Workspace.CurrentCamera
-local char = player.Character or player.CharacterAdded:Wait()
-local hum = char:WaitForChild("Humanoid")
-local root = char:WaitForChild("HumanoidRootPart")
+local char = player.Character
+local hum = char and char:FindFirstChild("Humanoid")
+local root = char and char:FindFirstChild("HumanoidRootPart")
+
+local function updateLocalCharacterReferences(newChar)
+	char = newChar
+	characterSpawnTime = os.clock()
+	hum = newChar:WaitForChild("Humanoid")
+	root = newChar:WaitForChild("HumanoidRootPart")
+end
+
+if char then
+	task.spawn(updateLocalCharacterReferences, char)
+end
+player.CharacterAdded:Connect(updateLocalCharacterReferences)
 local localCharacterDiedConnection = nil
 flying = false
 bv = nil
@@ -940,6 +1264,7 @@ function parseEnabledValue(value)
 	local normalized = string.lower(tostring(value))
 	return normalized == "on" or normalized == "true" or normalized == "1"
 end
+local hideNamesKeybindEnabled = false
 function updateKeybindText()
 	local lines = {}
 	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places" }
@@ -947,7 +1272,7 @@ function updateKeybindText()
 		if not entry then
 			return
 		end
-		local name = tostring(entry.name or "")
+		local name = hideNamesKeybindEnabled and "" or tostring(entry.name or "")
 		local keybind = tostring(entry.keybind or "")
 		local hideState = entry.hideState == true
 		local stateText = tostring(entry.stateText or ((entry.enabled == true) and "ON" or "OFF"))
@@ -970,13 +1295,27 @@ function updateKeybindText()
 		end
 	end
 	for _, key in ipairs(orderedKeys) do
-		appendEntry(keybindEntries[key])
+		local allowed = true
+		if key == "TargetPick" and not keybindToggles.Target then allowed = false end
+		if key == "VoidDead" and not keybindToggles.Void then allowed = false end
+		if key == "GetTrash" and not keybindToggles.Trash then allowed = false end
+		if keybindToggles[key] == false then allowed = false end
+		
+		if allowed then
+			appendEntry(keybindEntries[key])
+		end
 	end
 	if #lines == 0 then
 		keybindText.Text = ""
+		if keybindFrame then
+			keybindFrame.Visible = false
+		end
 		return
 	end
 	keybindText.Text = table.concat(lines, "\n")
+	if keybindFrame then
+		keybindFrame.Visible = true
+	end
 end
 function hasMapMainPart()
 	if game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555 then return false end
@@ -1891,11 +2230,15 @@ local function toggleAFK(enabled)
 			_G.SafeTeleportLock = false
 			local character = player.Character
 			local hrp = character and character:FindFirstChild("HumanoidRootPart")
-			if hrp and afkSavedCFrame then
+			if hrp then
 				hrp.Anchored = false
-				character:PivotTo(afkSavedCFrame)
-				hrp.AssemblyLinearVelocity = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
+				if afkSavedCFrame then
+					-- wróć na zapisaną pozycję przed wejściem do safe zone
+					character:PivotTo(afkSavedCFrame)
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					hrp.AssemblyAngularVelocity = Vector3.zero
+					-- else: postać umarła w safe zone, zostaje gdzie jest (spawner ją zresetuje)
+				end
 			end
 		end
 		afkSavedCFrame = nil
@@ -1972,6 +2315,7 @@ local function safeZoneEnterSafeZone(character, hrp)
 end
 local function handleSafeZoneHP()
 	if not safeZoneHPEnabled or afkEnabled then return end
+	if os.clock() - characterSpawnTime < 3.5 then return end
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -2031,6 +2375,7 @@ local function toggleSafeZoneHP(enabled)
 	if enabled then
 		safeZoneHPConnection = RunService.Stepped:Connect(handleSafeZoneHP)
 		safeZoneHPCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
+			characterSpawnTime = os.clock()
 			safeZoneHPInSafeZone = false
 			safeZoneHPCharacter = nil
 			safeZoneHPSavedCFrame = nil
@@ -2043,6 +2388,28 @@ local function toggleSafeZoneHP(enabled)
 		end)
 	end
 	return safeZoneHPEnabled and "ON" or "OFF"
+end
+-- Auto-load Safe Zone N i Safe Zone HP (po zdefiniowaniu obu funkcji)
+do
+	local savedAFK = controlSaveData.AFKEnabled
+	local savedHP = controlSaveData.HPSafeZoneEnabled
+	if savedAFK == true then
+		task.defer(function()
+			local char = player.Character
+			if not char then
+				char = player.CharacterAdded:Wait()
+			end
+			local hrp = char:WaitForChild("HumanoidRootPart", 5)
+			if hrp then
+				toggleAFK(true)
+			end
+		end)
+	end
+	if savedHP == true then
+		task.defer(function()
+			toggleSafeZoneHP(true)
+		end)
+	end
 end
 local function stopFly()
 	flying = false
@@ -3563,16 +3930,13 @@ local function setSettingsVisible(visible)
 	settingsWindow.Visible = visible
 	windowOutline.Visible = visible
 	if visible then
-		local swScale = settingsWindow:FindFirstChild("MainScale")
-		if not swScale then
-			swScale = Instance.new("UIScale")
-			swScale.Name = "MainScale"
-			swScale.Parent = settingsWindow
+		local animVal = settingsWindow:FindFirstChild("WindowAnimScale")
+		if animVal then
+			animVal.Value = 0.95
+			TweenService:Create(animVal, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				Value = 1.0,
+			}):Play()
 		end
-		swScale.Scale = 0.95
-		TweenService:Create(swScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Scale = 1,
-		}):Play()
 		TweenService:Create(settingsWindow, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			BackgroundTransparency = 0.18,
 		}):Play()
@@ -3623,11 +3987,6 @@ local function makeControlFrame(heightScale)
 	local cfCorner = Instance.new("UICorner")
 	cfCorner.CornerRadius = UDim.new(0, 4)
 	cfCorner.Parent = holder
-	local cfStroke = Instance.new("UIStroke")
-	cfStroke.Color = Color3.fromRGB(255, 255, 255)
-	cfStroke.Thickness = 1
-	cfStroke.Transparency = 0.3
-	cfStroke.Parent = holder
 	local cfGradient = Instance.new("UIGradient")
 	cfGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(20, 20, 20))
 	cfGradient.Rotation = 0
@@ -3760,7 +4119,7 @@ local function toggleSeriousModeTracker(state)
 		elseif skill == "weak" and currentState == "strong" then
 			SM_playerState[plr] = "weak"
 			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "weak")
-			callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 5)
+			callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 7)
 			local timerId = tick()
 			SM_activeTimers[plr] = timerId
 			task.delay(9.4, function()
@@ -4248,7 +4607,7 @@ task.spawn(function()
     local supportsDashBlock = game.GameId == 3808081382
     local isTSB = supportsDashBlock
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(isTSB and 246 or 146) 
+    local movementHub = makeControlFrame(isTSB and 214 or 124) 
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -4267,64 +4626,27 @@ task.spawn(function()
         local row = Instance.new("Frame")
         row.BackgroundTransparency = 1
         row.BorderSizePixel = 0
-        row.Position = UDim2.new(0, 0, 0, yPos)
-        row.Size = UDim2.new(1, 0, 0, 28)
+        row.Position = UDim2.new(0, 4, 0, yPos)
+        row.Size = UDim2.new(1, -8, 0, 26)
         row.Parent = movementHub
         local layout = Instance.new("UIListLayout")
         layout.FillDirection = Enum.FillDirection.Horizontal
         layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        layout.Padding = UDim.new(0, 0)
+        layout.VerticalAlignment = Enum.VerticalAlignment.Center
+        layout.Padding = UDim.new(0, 4)
         layout.Parent = row
         return row
-    end
-    local function makeHubTog(parent, text, callback, saveKey, default, widthMult)
-        local btn = Instance.new("TextButton")
-        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        btn.BackgroundTransparency = 0.5
-        btn.BorderSizePixel = 0
-        btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
-        btn.AutoButtonColor = false
-        btn.Font = Enum.Font.GothamBold
-        btn.Text = text
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextStrokeTransparency = 1
-        btn.TextSize = 13
-        btn.TextScaled = false
-        btn.Parent = parent
-        local enabled = default == true
-        if saveKey and getSavedControlValue(saveKey) ~= nil then
-            enabled = getSavedControlValue(saveKey) == true
-        end
-        local function render()
-            btn.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
-            btn.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
-        end
-        local function setValue(val, skipCallback)
-            enabled = val == true
-            render()
-            if saveKey then setSavedControlValue(saveKey, enabled) end
-            if not skipCallback and callback then callback(enabled) end
-        end
-        btn.MouseButton1Click:Connect(function()
-            setValue(not enabled)
-        end)
-        if enabled and callback then task.spawn(callback, true) end
-        render()
-        return {
-            Button = btn,
-            SetValue = setValue,
-            GetValue = function() return enabled end,
-            tog_change = setValue
-        }
     end
     local function makeHubBtn(parent, text, callback, widthMult)
         local btn = Instance.new("TextButton")
         btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        btn.BackgroundTransparency = 0.5
+        btn.BackgroundTransparency = 0
         btn.BorderSizePixel = 0
         btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
         btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = btn
         btn.AutoButtonColor = true
         btn.Font = Enum.Font.GothamBold
         btn.Text = text
@@ -4337,7 +4659,7 @@ task.spawn(function()
         end)
         return btn
     end
-    local row1 = makeRow(32)
+    local row1 = makeRow(30)
     StayToggle = makeHubTog(row1, "Stay", setStayState, "StayEnabled", false, isTSB and 1/4 or 1/3)
     if isTSB then
         DashToggle = makeHubTog(row1, "Dash Block", setDashBlockRuntime, "DashBlockEnabled", false, 1/4)
@@ -4345,7 +4667,7 @@ task.spawn(function()
     makeHubBtn(row1, "Fix Cam", fixCamera, isTSB and 1/4 or 1/3)
     makeHubBtn(row1, "Lay", layCharacter, isTSB and 1/4 or 1/3)
     if isTSB then
-        local row2 = makeRow(66)
+        local row2 = makeRow(60)
         makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
         makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
         makeHubTog(row2, "No Dash CD", function(v) 
@@ -4353,30 +4675,30 @@ task.spawn(function()
             workspace:SetAttribute("EffectAffects", v and 1 or 0)
             workspace:SetAttribute("NoDashCooldown", v)
         end, "NoDashCD", false)
-        makeHubTog(row2, "Block Tp Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
-        local row3 = makeRow(100)
+        makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
+        local row3 = makeRow(90)
         makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
         makeHubTog(row3, "Name (CH)", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false)
         makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
-        makeHubTog(row3, "ESP ULT", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
-        local row4 = makeRow(134)
-        makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/4)
-        makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/4)
-        makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/4)
-        makeHubTog(row4, "Auto Fix Cam on kill", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/4)
-        local row5 = makeRow(168)
-        makeHubTog(row5, "Anti Death Counter (V)", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
-        makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
-        local row6 = makeRow(202)
+        makeHubTog(row3, "ULT ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
+        local row4 = makeRow(120)
+        makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
+        makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
+        makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+        local row5 = makeRow(150)
+        makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/3)
+        makeHubTog(row5, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/3)
+        makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/3)
+        local row6 = makeRow(180)
         makeHubTog(row6, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/3)
         makeHubTog(row6, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
-        makeHubTog(row6, "Death Counter ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/3)
+        makeHubTog(row6, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/3)
     else
-        local row2 = makeRow(66)
+        local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
-        local row3 = makeRow(100)
+        local row3 = makeRow(90)
         makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/2)
         makeHubTog(row3, "Death Counter ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/2)
     end
@@ -5113,12 +5435,10 @@ function Dropdown(data)
 	local selected = {}
 	local expanded = false
 	local collapsedHeight = 88
-	local expandedTopOffset = 36
+	local expandedTopOffset = 40
 	local maxVisibleOptions = 6
 	local optionHeight = 28
 	local optionPadding = 6
-	local dropdownHolder = makeControlFrame(collapsedHeight)
-	dropdownHolder.ClipsDescendants = true
 	local function normalizeValues(value)
 		local result = {}
 		local seen = {}
@@ -5257,6 +5577,7 @@ function Dropdown(data)
 		end
 	end
 	local holder = makeControlFrame(88) 
+	holder.Name = "DropdownHolder"
 	holder.Parent = uiX
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
@@ -5274,7 +5595,7 @@ function Dropdown(data)
 	titleLabel.Parent = holder
 	local toggleButton = Instance.new("TextButton")
 	toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	toggleButton.BackgroundTransparency = 0.5
+	toggleButton.BackgroundTransparency = 0
 	toggleButton.BorderSizePixel = 0
 	toggleButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
 	toggleButton.Position = UDim2.new(0, 10, 0, 32)
@@ -5291,11 +5612,12 @@ function Dropdown(data)
 	toggleButton.Parent = holder
 	do
 		local tbCorner = Instance.new("UICorner")
-		tbCorner.CornerRadius = UDim.new(0, 3)
+		tbCorner.CornerRadius = UDim.new(0, 6)
 		tbCorner.Parent = toggleButton
 	end
 	local expandedTopOffset = 36 
 	local optionsFrame = Instance.new("Frame")
+	optionsFrame.Name = "DropdownOptionsFrame"
 	optionsFrame.BackgroundTransparency = 1
 	optionsFrame.Position = UDim2.new(0, 0, 0, expandedTopOffset)
 	optionsFrame.Size = UDim2.new(1, 0, 0, 0)
@@ -5304,6 +5626,7 @@ function Dropdown(data)
 	optionsFrame.ZIndex = 1
 	optionsFrame.Parent = holder
 	local choiceFrame = Instance.new("ScrollingFrame")
+	choiceFrame.Name = "DropdownChoiceFrame"
 	choiceFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	choiceFrame.BackgroundTransparency = 0.5
 	choiceFrame.BorderSizePixel = 0
@@ -5356,13 +5679,13 @@ function Dropdown(data)
 			local display = itemDisplayNames[item] or item
 			if isDsb then
 				button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-				button.BackgroundTransparency = 0.3
+				button.BackgroundTransparency = 0
 				button.TextColor3 = Color3.fromRGB(150, 150, 150)
 				button.Text = display
 			else
-				button.BackgroundColor3 = isOn and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
-				button.BackgroundTransparency = 0.5
-				button.TextColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
+				button.BackgroundColor3 = isOn and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+				button.BackgroundTransparency = 0
+				button.TextColor3 = isOn and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
 				button.Text = isOn and ("> " .. display) or display
 			end
 		end
@@ -5385,7 +5708,7 @@ function Dropdown(data)
 		for _, item in ipairs(items) do
 			local optionButton = Instance.new("TextButton")
 			optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-			optionButton.BackgroundTransparency = 0.5
+			optionButton.BackgroundTransparency = 0
 			optionButton.BorderSizePixel = 0
 			optionButton.Size = UDim2.new(0.9, 0, 0, optionHeight)
 			optionButton.AutoButtonColor = false
@@ -5401,11 +5724,11 @@ function Dropdown(data)
 			optionButton.Parent = choiceFrame
 			do
 				local obCorner = Instance.new("UICorner")
-				obCorner.CornerRadius = UDim.new(0, 3)
+				obCorner.CornerRadius = UDim.new(0, 6)
 				obCorner.Parent = optionButton
 			end
 			optionButtons[item] = optionButton
-			optionButton.MouseButton1Click:Connect(function()
+			optionButton.Activated:Connect(function()
 				if disabledItems[item] then return end
 				setSelectedValue(item, not selected[item])
 				refreshLabels()
@@ -5422,21 +5745,22 @@ function Dropdown(data)
 		expanded = nextState == true
 		optionsFrame.Visible = expanded
 		toggleButton.Visible = not expanded
+		local scale = getScaleFactorFor(holder)
 		local optionsHeight = 0
 		local visibleOptionsHeight = 0
 		if expanded then
-			optionsHeight = (#items * optionHeight) + math.max(#items - 1, 0) * optionPadding
 			local visibleCount = math.min(#items, maxVisibleOptions)
-			visibleOptionsHeight = (visibleCount * optionHeight) + math.max(visibleCount - 1, 0) * optionPadding
+			visibleOptionsHeight = (visibleCount * optionHeight + math.max(visibleCount - 1, 0) * optionPadding) * scale
 		end
 		optionsFrame.Size = UDim2.new(1, 0, 0, visibleOptionsHeight)
+		optionsFrame.Position = UDim2.new(0, 0, 0, expandedTopOffset * scale)
 		choiceFrame.Size = UDim2.new(0.94, 0, 0, visibleOptionsHeight)
 		if expanded and not wasExpanded then
 			choiceFrame.CanvasPosition = Vector2.new(0, 0)
 		elseif not expanded then
 			choiceFrame.CanvasPosition = Vector2.new(0, 0)
 		end
-		holder.Size = UDim2.new(1, -4, 0, expanded and (expandedTopOffset + visibleOptionsHeight + 8) or collapsedHeight)
+		holder.Size = UDim2.new(1, -4, 0, expanded and ((expandedTopOffset + 8) * scale + visibleOptionsHeight) or (collapsedHeight * scale))
 		if expanded then
 			openDropdowns[dropdownState] = true
 		else
@@ -5444,7 +5768,7 @@ function Dropdown(data)
 		end
 		refreshLabels()
 	end
-	toggleButton.MouseButton1Click:Connect(function()
+	toggleButton.Activated:Connect(function()
 		setExpanded(not expanded)
 	end)
 	dropdownState = {
@@ -5457,6 +5781,7 @@ function Dropdown(data)
 			return expanded
 		end,
 	}
+	allDropdowns[dropdownState] = true
 	local dropdownControl = {
 		Frame = holder,
 	}
@@ -5552,6 +5877,7 @@ function Dropdown(data)
 	end
 	rebuildOptionButtons()
 	refreshLabels()
+	setExpanded(false)
 	saveDropdownSelection()
 	if callback then
 		callback(getCallbackValue())
@@ -5580,7 +5906,7 @@ if type(controlSaveData.OfflinePlayers) == "table" then
 	end
 end
 if controlSaveData.BLFriends == nil then
-	controlSaveData.BLFriends = true
+	controlSaveData.BLFriends = false
 end
 if controlSaveData.BLFriends == true then
 	blacklistedTargets["Friends"] = true
@@ -5838,7 +6164,7 @@ do
 			for lbl in pairs(blacklistedTargets) do
 				blToCheck[#blToCheck + 1] = lbl
 			end
-			if #blToCheck > 0 and blPlayersDropdownControl.SetValue then
+			if blPlayersDropdownControl.SetValue then
 				blPlayersDropdownControl.SetValue(blToCheck, true)
 			end
 			local newBLPlayers = {}
@@ -5898,7 +6224,10 @@ do
 		if modelDropdownControl.SetDisabledItems then
 			modelDropdownControl.SetDisabledItems(onlineBlacklist)
 		end
-		modelDropdownControl.SetItems(modelItems, nextPreferredValue)
+		modelDropdownControl.SetItems(modelItems, nil, true)
+		if modelDropdownControl.SetValue then
+			modelDropdownControl.SetValue(nextPreferredValue, true)
+		end
 		syncModelDropdownSelectionToManualTarget()
 	end
 end
@@ -6119,10 +6448,15 @@ function tog(data)
 	switchButton.TextWrapped = true
 	switchButton.ClipsDescendants = true
 	switchButton.Parent = holder
+	do
+		local sbCorner = Instance.new("UICorner")
+		sbCorner.CornerRadius = UDim.new(0, 6)
+		sbCorner.Parent = switchButton
+	end
 	local function render()
-		switchButton.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
-		switchButton.BackgroundTransparency = 0.5
-		switchButton.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
+		switchButton.BackgroundColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+		switchButton.BackgroundTransparency = 0
+		switchButton.TextColor3 = enabled and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
 	end
 	switchButton.MouseButton1Click:Connect(function()
 		enabled = not enabled
@@ -6197,10 +6531,10 @@ _G["3tog_on_one_one_button"] = function(data)
 	local function createSegment(text, isToggle, initialState, callback)
 		local segmentButton = Instance.new("TextButton")
 		segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		segmentButton.BackgroundTransparency = 0.5
+		segmentButton.BackgroundTransparency = 0
 		segmentButton.BorderSizePixel = 0
 		segmentButton.Size = UDim2.new(1/segmentCount, -5, 1, 0)
-		segmentButton.AutoButtonColor = false
+		segmentButton.AutoButtonColor = not isToggle
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
 		segmentButton.TextStrokeTransparency = 1
@@ -6211,14 +6545,14 @@ _G["3tog_on_one_one_button"] = function(data)
 		segmentButton.Parent = rowFrame
 		do
 			local sbCorner = Instance.new("UICorner")
-			sbCorner.CornerRadius = UDim.new(0, 3)
+			sbCorner.CornerRadius = UDim.new(0, 6)
 			sbCorner.Parent = segmentButton
 		end
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
-				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				segmentButton.TextColor3 = Color3.fromRGB(0, 0, 0)
 				segmentButton.TextStrokeTransparency = 1
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -6337,7 +6671,7 @@ _G["4tog_on_one_frame"] = function(data)
 	rowLayout.Parent = rowFrame
 	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
-		button.BackgroundTransparency = 0.5
+		button.BackgroundTransparency = 0
 		button.BorderSizePixel = 0
 		button.Size = UDim2.new(0.25, -5, 1, 0)
 		button.AutoButtonColor = false
@@ -6352,13 +6686,13 @@ _G["4tog_on_one_frame"] = function(data)
 		button.Parent = rowFrame
 		do
 			local btCorner = Instance.new("UICorner")
-			btCorner.CornerRadius = UDim.new(0, 3)
+			btCorner.CornerRadius = UDim.new(0, 6)
 			btCorner.Parent = button
 		end
 		local enabled = initialState == true
 		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
+			button.BackgroundColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
 			button.TextStrokeTransparency = 1
 		end
 		local control = {}
@@ -6464,7 +6798,7 @@ _G["5tog_on_one_frame"] = function(data)
 	rowLayout.Parent = rowFrame
 	local function createToggle(text, initialState, callback, saveKey)
 		local button = Instance.new("TextButton")
-		button.BackgroundTransparency = 0.5
+		button.BackgroundTransparency = 0
 		button.BorderSizePixel = 0
 		button.Size = UDim2.new(0.2, -4, 1, 0)
 		button.AutoButtonColor = false
@@ -6479,14 +6813,14 @@ _G["5tog_on_one_frame"] = function(data)
 		button.Parent = rowFrame
 		do
 			local bt5Corner = Instance.new("UICorner")
-			bt5Corner.CornerRadius = UDim.new(0, 3)
+			bt5Corner.CornerRadius = UDim.new(0, 6)
 			bt5Corner.Parent = button
 		end
 		local enabled = initialState == true
 		local control = {}
 		local function render()
-			button.BackgroundColor3 = enabled and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(0, 0, 0)
-			button.TextColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(255, 255, 255)
+			button.BackgroundColor3 = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+			button.TextColor3 = enabled and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
 			button.TextStrokeTransparency = 1
 		end
 		function control.SetValue(nextState, suppressCallback)
@@ -6581,10 +6915,10 @@ _G["2tog_on_one_button"] = function(data)
 	local function createSegment(text, isToggle, initialState, callback)
 		local segmentButton = Instance.new("TextButton")
 		segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		segmentButton.BackgroundTransparency = 0.5
+		segmentButton.BackgroundTransparency = 0
 		segmentButton.BorderSizePixel = 0
 		segmentButton.Size = UDim2.new(1 / segmentCount, -5, 1, 0)
-		segmentButton.AutoButtonColor = false
+		segmentButton.AutoButtonColor = not isToggle
 		segmentButton.Font = Enum.Font.GothamBold
 		segmentButton.Text = tostring(text)
 		segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -6596,14 +6930,14 @@ _G["2tog_on_one_button"] = function(data)
 		segmentButton.Parent = rowFrame
 		do
 			local sb2Corner = Instance.new("UICorner")
-			sb2Corner.CornerRadius = UDim.new(0, 3)
+			sb2Corner.CornerRadius = UDim.new(0, 6)
 			sb2Corner.Parent = segmentButton
 		end
 		local enabled = initialState == true
 		local function render()
 			if isToggle and enabled then
-				segmentButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-				segmentButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+				segmentButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				segmentButton.TextColor3 = Color3.fromRGB(0, 0, 0)
 				segmentButton.TextStrokeTransparency = 1
 			else
 				segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -6674,12 +7008,12 @@ function button(data)
 	local holder = makeControlFrame(60)
 	holder.Parent = uiX
 	local actionButton = Instance.new("TextButton")
-	actionButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-	actionButton.BackgroundTransparency = 0.5
+	actionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	actionButton.BackgroundTransparency = 0
 	actionButton.BorderSizePixel = 0
 	actionButton.Position = UDim2.fromScale(0.05, 0.16)
 	actionButton.Size = UDim2.fromScale(0.9, 0.56)
-	actionButton.AutoButtonColor = false
+	actionButton.AutoButtonColor = true
 	actionButton.Font = Enum.Font.GothamBold
 	actionButton.Text = buttonName
 	actionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -6689,6 +7023,11 @@ function button(data)
 	actionButton.TextScaled = false
 	actionButton.TextWrapped = true
 	actionButton.Parent = holder
+	do
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 6)
+		btnCorner.Parent = actionButton
+	end
 	actionButton.MouseButton1Click:Connect(function()
 		if callback then
 			callback()
@@ -7120,8 +7459,8 @@ do
 		end
 	end
 	local addBtn = Instance.new("TextButton")
-	addBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-	addBtn.BackgroundTransparency = 0.4
+	addBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	addBtn.BackgroundTransparency = 0
 	addBtn.BorderSizePixel = 0
 	addBtn.Position = UDim2.new(1, -56, 0, 26)
 	addBtn.Size = UDim2.new(0, 50, 0, 26)
@@ -7133,7 +7472,7 @@ do
 	addBtn.Parent = offlineInputHolder
 	do
 		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 4)
+		btnCorner.CornerRadius = UDim.new(0, 6)
 		btnCorner.Parent = addBtn
 	end
 	local function doAddOffline()
@@ -7306,7 +7645,7 @@ Slider({
 	end,
 })
 flingModeControls = _G["4tog_on_one_frame"]({
-	title = "Fling",
+	title = "Flings System",
 	name1 = "Normal Walkfling",
 	name2 = "Aura Fling",
 	name3 = "Click Fling",
@@ -7579,6 +7918,61 @@ do
 end
 customOffsetFrame.Parent = uiX
 updateCustomUI()
+
+do
+	local keybindHub = makeControlFrame(154)
+	keybindHub.Name = "KeybindSystemHub"
+	keybindHub.Parent = uiX
+	keybindHub.LayoutOrder = 1000000
+	keybindHub.ClipsDescendants = true
+	
+	local hubTitle = Instance.new("TextLabel")
+	hubTitle.BackgroundTransparency = 1
+	hubTitle.Position = UDim2.new(0, 16, 0, 8)
+	hubTitle.Size = UDim2.new(1, -32, 0, 18)
+	hubTitle.Font = Enum.Font.GothamBold
+	hubTitle.Text = "Keybind System"
+	hubTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	hubTitle.TextStrokeTransparency = 1
+	hubTitle.TextSize = 14
+	hubTitle.TextXAlignment = Enum.TextXAlignment.Left
+	hubTitle.Parent = keybindHub
+	
+	local function makeRow(yPos)
+		local row = Instance.new("Frame")
+		row.BackgroundTransparency = 1
+		row.BorderSizePixel = 0
+		row.Position = UDim2.new(0, 4, 0, yPos)
+		row.Size = UDim2.new(1, -8, 0, 26)
+		row.Parent = keybindHub
+		local layout = Instance.new("UIListLayout")
+		layout.FillDirection = Enum.FillDirection.Horizontal
+		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		layout.VerticalAlignment = Enum.VerticalAlignment.Center
+		layout.Padding = UDim.new(0, 4)
+		layout.Parent = row
+		return row
+	end
+	
+	local row1 = makeRow(30)
+	makeHubTog(row1, "Hide Names", function(v) hideNamesKeybindEnabled = v; updateKeybindText() end, "HideNamesKeybind", false, 1/3)
+	makeHubTog(row1, "Speed KB", function(v) keybindToggles.Speed = v; updateKeybindText() end, "KeybindSpeedEnabled", true, 1/3)
+	makeHubTog(row1, "Fly KB", function(v) keybindToggles.Fly = v; updateKeybindText() end, "KeybindFlyEnabled", true, 1/3)
+	
+	local row2 = makeRow(60)
+	makeHubTog(row2, "CamLock KB", function(v) keybindToggles.CamLock = v; updateKeybindText() end, "KeybindCamLockEnabled", true, 1/3)
+	makeHubTog(row2, "Attack TP KB", function(v) keybindToggles.AttackTP = v; updateKeybindText() end, "KeybindAttackTPEnabled", true, 1/3)
+	makeHubTog(row2, "Target KB", function(v) keybindToggles.Target = v; updateKeybindText() end, "KeybindTargetEnabled", true, 1/3)
+	
+	local row3 = makeRow(90)
+	makeHubTog(row3, "WalkFling KB", function(v) keybindToggles.WalkFling = v; updateKeybindText() end, "KeybindWalkFlingEnabled", true, 1/3)
+	makeHubTog(row3, "SetBack KB", function(v) keybindToggles.SetBack = v; updateKeybindText() end, "KeybindSetBackEnabled", true, 1/3)
+	makeHubTog(row3, "Trash KB", function(v) keybindToggles.Trash = v; updateKeybindText() end, "KeybindTrashEnabled", true, 1/3)
+	
+	local row4 = makeRow(120)
+	makeHubTog(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", true, 1/2)
+	makeHubTog(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", true, 1/2)
+end
 task.spawn(function()
 	if game.GameId ~= 3808081382 then
 		return
@@ -7715,10 +8109,10 @@ task.spawn(function()
 	end
 	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
 		local seriousModeState = model and model:GetAttribute("NX_SeriousModeState") or nil
-		if seriousModeState == "weak" then
+		if seriousModeState == "strong" or seriousModeState == "weak" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 255, 255),
+				outline = Color3.fromRGB(255, 0, 0),
 				enabled = true,
 			}
 		end
@@ -7726,13 +8120,6 @@ task.spawn(function()
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
 				outline = Color3.fromRGB(255, 255, 0),
-				enabled = true,
-			}
-		end
-		if seriousModeState == "strong" then
-			return {
-				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(90, 90, 90),
 				enabled = true,
 			}
 		end
@@ -7999,12 +8386,28 @@ task.spawn(function()
 			end
 		end)
 	end
+	local function setupCharacterSpawnCheck(char)
+		task.spawn(function()
+			local elapsed = 0
+			local waitTime = 0.1
+			while elapsed < 10 and char.Parent do
+				local humanoid = char:FindFirstChild("Humanoid")
+				local hrp = char:FindFirstChild("HumanoidRootPart")
+				if humanoid and hrp then
+					updateDropdownsEvent()
+					break
+				end
+				task.wait(waitTime)
+				elapsed = elapsed + waitTime
+				if elapsed >= 1.0 then
+					waitTime = 2.0
+				end
+			end
+		end)
+	end
 	Players.PlayerAdded:Connect(function(p)
 		updateDropdownsEvent()
-		p.CharacterAdded:Connect(function(char)
-			char:WaitForChild("HumanoidRootPart", 5)
-			updateDropdownsEvent()
-		end)
+		p.CharacterAdded:Connect(setupCharacterSpawnCheck)
 		p.CharacterRemoving:Connect(updateDropdownsEvent)
 	end)
 	Players.PlayerRemoving:Connect(function(leavingPlayer)
@@ -8037,10 +8440,7 @@ task.spawn(function()
 		updateDropdownsEvent()
 	end)
 	for _, p in ipairs(Players:GetPlayers()) do
-		p.CharacterAdded:Connect(function(char)
-			char:WaitForChild("HumanoidRootPart", 5)
-			updateDropdownsEvent()
-		end)
+		p.CharacterAdded:Connect(setupCharacterSpawnCheck)
 		p.CharacterRemoving:Connect(updateDropdownsEvent)
 	end
 	while screenGui.Parent do
@@ -8065,21 +8465,37 @@ UserInputService.InputChanged:Connect(function(input)
 	if draggingWindow and input.UserInputType == Enum.UserInputType.MouseMovement then
 		local delta = input.Position - dragStartInputPosition
 		local viewportSize = Workspace.CurrentCamera.ViewportSize
-		local scale = mainScale.Scale
+		
+		local scale = getScaleFactorFor(settingsWindow)
+		local original = scaleRegistry[settingsWindow]
+		if not original then return end
+		
 		local guiViewportSize = viewportSize / scale
-		local guiWindowSize = settingsWindow.AbsoluteSize / scale
-		local newOffsetUX = dragStartPosition.X.Offset + (delta.X / scale)
-		local newOffsetUY = dragStartPosition.Y.Offset + (delta.Y / scale)
+		local guiWindowSize = Vector2.new(original.Size.X.Offset, original.Size.Y.Offset)
+		
+		local startX = dragStartPosition.X.Offset / scale
+		local startY = dragStartPosition.Y.Offset / scale
+		
+		local newOffsetUX = startX + (delta.X / scale)
+		local newOffsetUY = startY + (delta.Y / scale)
+		
 		local anchor = settingsWindow.AnchorPoint
 		local minUX = (guiWindowSize.X * anchor.X) - (guiViewportSize.X * dragStartPosition.X.Scale)
 		local maxUX = (guiViewportSize.X * (1 - dragStartPosition.X.Scale)) - (guiWindowSize.X * (1 - anchor.X))
 		local minUY = (guiWindowSize.Y * anchor.Y) - (guiViewportSize.Y * dragStartPosition.Y.Scale)
 		local maxUY = (guiViewportSize.Y * (1 - dragStartPosition.Y.Scale)) - (guiWindowSize.Y * (1 - anchor.Y))
+		
+		local clampedUX = math.clamp(newOffsetUX, minUX, maxUX)
+		local clampedUY = math.clamp(newOffsetUY, minUY, maxUY)
+		
+		original.Position = UDim2.new(
+			dragStartPosition.X.Scale, clampedUX,
+			dragStartPosition.Y.Scale, clampedUY
+		)
+		
 		settingsWindow.Position = UDim2.new(
-			dragStartPosition.X.Scale,
-			math.clamp(newOffsetUX, minUX, maxUX),
-			dragStartPosition.Y.Scale,
-			math.clamp(newOffsetUY, minUY, maxUY)
+			dragStartPosition.X.Scale, clampedUX * scale,
+			dragStartPosition.Y.Scale, clampedUY * scale
 		)
 	end
 end)
@@ -8123,7 +8539,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 	local key = input.KeyCode
 	local isBacktick = (key.Name == "BackQuote" or key.Name == "Backquote" or key == Enum.KeyCode.Tilde or key.Value == 96 or key.Value == 126)
-	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick then
+	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick and keybindToggles.Places then
 		if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
 			return
 		end
@@ -8162,35 +8578,35 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		setSettingsVisible(not settingsOpen)
 		return
 	end
-	if key == voidDeadKeybind then
+	if key == voidDeadKeybind and keybindToggles.Void then
 		toggleVoidDead()
 		return
 	end
-	if key == speedKeybind then
+	if key == speedKeybind and keybindToggles.Speed then
 		toggleSpeed()
 		return
 	end
-	if key == flyKeybind then
+	if key == flyKeybind and keybindToggles.Fly then
 		toggleFly()
 		return
 	end
-	if key == camLockKeybind then
+	if key == camLockKeybind and keybindToggles.CamLock then
 		toggleCamLock()
 		return
 	end
-	if key == attackTpKeybind then
+	if key == attackTpKeybind and keybindToggles.AttackTP then
 		toggleAttackTp()
 		return
 	end
-	if key == targetSelectKeybind then
+	if key == targetSelectKeybind and keybindToggles.Target then
 		toggleMouseTargetSelection()
 		return
 	end
-	if key == walkFlingKeybind then
+	if key == walkFlingKeybind and keybindToggles.WalkFling then
 		setWalkFlingEnabled()
 		return
 	end
-	if key == setBackKeybind then
+	if key == setBackKeybind and keybindToggles.SetBack then
 		if getTrashState.blockSetBack
 			and not getTrashState.running
 			and not getTrashState.returning
@@ -8204,7 +8620,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		handleSetBackKeybind()
 		return
 	end
-	if key == getTrashState.keybind then
+	if key == getTrashState.keybind and keybindToggles.Trash then
 		if getTrashState.keyHeld then
 			return
 		end
@@ -8523,9 +8939,6 @@ do
 			end
 		end
 	end
-	if isTeleportLocked then
-		return
-	end
 	local function performGodTP(target, allowFling)
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
@@ -8549,12 +8962,14 @@ do
 			end
 		end
 	end
-	if autoTpEnabled then
+	-- autoTP jest blokowane przez Safe Zone (SafeTeleportLock)
+	if autoTpEnabled and not isTeleportLocked then
 		local targetModel = resolveAttackTpTarget()
 		if isValidAttackTpTarget(targetModel) then
 			performGodTP(targetModel, true)
 		end
 	end
+	-- Attack TP (trzymanie klawisza) dziala zawsze - niezaleznie od Safe Zone
 	if attackTpEnabled and attackTpHolding then
 		if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 			clearManualAttackTpTarget()
@@ -8585,7 +9000,7 @@ do
 				steppedConn:Disconnect()
 				return
 			end
-			if _G.SafeTeleportLock == true then return end
+			-- Attack TP dziala niezaleznie od SafeTeleportLock (Safe Zone)
 			local function fastPerform(target, allowFling)
 				local character = player.Character
 				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
@@ -8638,6 +9053,12 @@ UserInputService.InputEnded:Connect(function(input)
 		holdingD = false
 	end
 end)
+
+-- Uruchom zapisane ustawienia po pełnym załadowaniu UI i funkcji
+uiLoaded = true
+for _, cb in ipairs(queuedCallbacks) do
+	pcall(cb)
+end
 task.spawn(function()
 if game.GameId ~= 3808081382 then
     return
