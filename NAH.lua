@@ -520,7 +520,7 @@ local otherPartsCache = {}
 local friendCache = {}
 local function updateFriendCache()
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and friendCache[p.UserId] == nil then
+        if p ~= player and friendCache[p.UserId] ~= true then
             task.spawn(function()
                 pcall(function()
                     friendCache[p.UserId] = player:IsFriendsWith(p.UserId)
@@ -538,7 +538,7 @@ task.spawn(function()
         end)
     end)
     updateFriendCache()
-    while task.wait(5) do
+    while task.wait(2) do
         updateFriendCache()
     end
 end)
@@ -5573,6 +5573,9 @@ if type(controlSaveData.OfflinePlayers) == "table" then
 			blacklistedTargets[lbl] = true
 		end
 	end
+end
+if controlSaveData.BLFriends == nil then
+	controlSaveData.BLFriends = true
 end
 if controlSaveData.BLFriends == true then
 	blacklistedTargets["Friends"] = true
