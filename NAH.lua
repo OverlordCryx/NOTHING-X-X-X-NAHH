@@ -23,6 +23,7 @@ local espOverlayConfig = {
     showUltimate = false,
     showHp = false,
     showEsp = false,
+    showStreak = false,
 }
 local espOverlayState = {}
 function showExistingGuiInfo(gui, title, text, duration)
@@ -340,6 +341,67 @@ updateAllScales()
 task.defer(updateAllScales)
 
 introFinished = true
+
+-- Info frame labels — built after uiX exists (see "buildPlayerInfoFrame" call below)
+local piNameLabel    = nil
+local piHpLabel      = nil
+local piCharLabel    = nil
+local piStreakLabel  = nil
+local piStreakSepObj = nil
+
+local function updatePlayerInfoFrame()
+	if not piNameLabel then return end
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not humanoid then
+		return
+	end
+	-- Name / DisplayName
+	local displayName = player.DisplayName or player.Name
+	local realName = player.Name
+	if displayName ~= realName then
+		piNameLabel.Text = displayName .. " (" .. realName .. ")"
+	else
+		piNameLabel.Text = realName
+	end
+	-- HP%
+	local maxHp = math.max(1, humanoid.MaxHealth)
+	local hpPct = math.clamp((humanoid.Health / maxHp) * 100, 0, 100)
+	piHpLabel.Text = string.format("%.1f%%", hpPct)
+	if hpPct >= 66 then
+		piHpLabel.TextColor3 = Color3.fromRGB(100, 220, 100)
+	elseif hpPct >= 33 then
+		piHpLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+	else
+		piHpLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+	end
+	-- Character
+	local charAttr = char:GetAttribute("Character") or player:GetAttribute("Character") or ""
+	piCharLabel.Text = tostring(charAttr)
+	-- Streak
+	local streak = char:GetAttribute("CurrentStreak")
+	local streakNum = tonumber(streak)
+	if streakNum == nil or streakNum == -1 then
+		piStreakLabel.Visible = false
+		if piStreakSepObj then piStreakSepObj.Visible = false end
+	else
+		piStreakLabel.Text = "Streak: " .. tostring(streakNum)
+		piStreakLabel.Visible = true
+		if piStreakSepObj then piStreakSepObj.Visible = true end
+	end
+end
+
+task.spawn(function()
+	while screenGui.Parent do
+		pcall(updatePlayerInfoFrame)
+		task.wait(0.25)
+	end
+end)
+player.CharacterAdded:Connect(function()
+	task.wait(1)
+	pcall(updatePlayerInfoFrame)
+end)
+
 	keybindFrame = Instance.new("Frame")
 	keybindFrame.Name = "KeybindFrame"
 	keybindFrame.AnchorPoint = Vector2.new(0, 1)
@@ -775,6 +837,103 @@ do
 	settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	settingsLayout.Parent = uiX
 end
+
+-- ══════════════════════════════════════
+--   LOCAL PLAYER INFO FRAME (top of uiX)
+-- ══════════════════════════════════════
+do
+	local infoHub = Instance.new("Frame")
+	infoHub.Name = "PlayerInfoHub"
+	infoHub.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	infoHub.BackgroundTransparency = 0.15
+	infoHub.BorderSizePixel = 0
+	infoHub.Size = UDim2.new(1, 0, 0, 38)
+	infoHub.ClipsDescendants = true
+	infoHub.LayoutOrder = -1
+	do
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 6)
+		c.Parent = infoHub
+		local g = Instance.new("UIGradient")
+		g.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(0, 0, 0))
+		g.Rotation = 90
+		g.Parent = infoHub
+	end
+	infoHub.Parent = uiX
+
+	-- Title "Info"
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Position = UDim2.new(0, 10, 0, 2)
+	titleLbl.Size = UDim2.new(1, -10, 0, 14)
+	titleLbl.Font = Enum.Font.GothamBold
+	titleLbl.Text = "Info"
+	titleLbl.TextColor3 = Color3.fromRGB(180, 180, 180)
+	titleLbl.TextStrokeTransparency = 1
+	titleLbl.TextSize = 11
+	titleLbl.TextScaled = false
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.ZIndex = 12
+	titleLbl.Parent = infoHub
+
+	-- Row with labels
+	local rowFrame = Instance.new("Frame")
+	rowFrame.BackgroundTransparency = 1
+	rowFrame.Position = UDim2.new(0, 6, 0, 16)
+	rowFrame.Size = UDim2.new(1, -12, 0, 20)
+	rowFrame.ZIndex = 12
+	rowFrame.Parent = infoHub
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.Padding = UDim.new(0, 5)
+	rowLayout.Parent = rowFrame
+
+	local function makeIL(name, color)
+		local lbl = Instance.new("TextLabel")
+		lbl.Name = name
+		lbl.BackgroundTransparency = 1
+		lbl.Size = UDim2.fromOffset(0, 18)
+		lbl.AutomaticSize = Enum.AutomaticSize.X
+		lbl.Font = Enum.Font.GothamBold
+		lbl.Text = "-"
+		lbl.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+		lbl.TextStrokeTransparency = 1
+		lbl.TextSize = 12
+		lbl.TextScaled = false
+		lbl.TextWrapped = false
+		lbl.ZIndex = 12
+		lbl.Parent = rowFrame
+		return lbl
+	end
+	local function makeISep()
+		local sep = Instance.new("TextLabel")
+		sep.BackgroundTransparency = 1
+		sep.Size = UDim2.fromOffset(6, 18)
+		sep.Font = Enum.Font.GothamBold
+		sep.Text = "|"
+		sep.TextColor3 = Color3.fromRGB(90, 90, 90)
+		sep.TextStrokeTransparency = 1
+		sep.TextSize = 12
+		sep.TextScaled = false
+		sep.ZIndex = 12
+		sep.Parent = rowFrame
+		return sep
+	end
+
+	piNameLabel   = makeIL("PI_Name",   Color3.fromRGB(255, 255, 255))
+	makeISep()
+	piHpLabel     = makeIL("PI_HP",     Color3.fromRGB(100, 220, 100))
+	makeISep()
+	piCharLabel   = makeIL("PI_Char",   Color3.fromRGB(255, 200, 80))
+	local sep3    = makeISep()
+	piStreakLabel = makeIL("PI_Streak", Color3.fromRGB(100, 180, 255))
+	piStreakSepObj = sep3
+	-- hide streak elements until a real streak value is known
+	piStreakLabel.Visible = false
+	if piStreakSepObj then piStreakSepObj.Visible = false end
+end
 local otherPartsCache = {}
 local friendCache = {}
 local friendsList = {}
@@ -1200,6 +1359,12 @@ function saveSliderSaveData()
 	end)
 end
 loadSliderSaveData()
+-- Auto-load billboard/overlay toggle states from save so they take effect immediately
+if type(controlSaveData.Overlay4HP) == "boolean" then espOverlayConfig.showHp = controlSaveData.Overlay4HP end
+if type(controlSaveData.Overlay4Character) == "boolean" then espOverlayConfig.showCharacter = controlSaveData.Overlay4Character end
+if type(controlSaveData.Overlay4Ultimate) == "boolean" then espOverlayConfig.showUltimate = controlSaveData.Overlay4Ultimate end
+if type(controlSaveData.Overlay4ESP) == "boolean" then espOverlayConfig.showEsp = controlSaveData.Overlay4ESP end
+if type(controlSaveData.Overlay4Streak) == "boolean" then espOverlayConfig.showStreak = controlSaveData.Overlay4Streak end
 if tonumber(controlSaveData.Speed) then
 	Speed = tonumber(controlSaveData.Speed)
 end
@@ -4605,7 +4770,7 @@ task.spawn(function()
     local supportsDashBlock = game.GameId == 3808081382
     local isTSB = supportsDashBlock
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(isTSB and 214 or 124) 
+    local movementHub = makeControlFrame(isTSB and 184 or 94)
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -4675,22 +4840,16 @@ task.spawn(function()
         end, "NoDashCD", false)
         makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
         local row3 = makeRow(90)
-        makeHubTog(row3, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false)
-        makeHubTog(row3, "Name (CH)", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false)
-        makeHubTog(row3, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false)
-        makeHubTog(row3, "ULT ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false)
+        makeHubTog(row3, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
+        makeHubTog(row3, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
+        makeHubTog(row3, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row4 = makeRow(120)
-        makeHubTog(row4, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
-        makeHubTog(row4, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
-        makeHubTog(row4, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+        makeHubTog(row4, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/3)
+        makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/3)
+        makeHubTog(row4, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/3)
         local row5 = makeRow(150)
-        makeHubTog(row5, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/3)
-        makeHubTog(row5, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/3)
-        makeHubTog(row5, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/3)
-        local row6 = makeRow(180)
-        makeHubTog(row6, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/3)
-        makeHubTog(row6, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
-        makeHubTog(row6, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/3)
+        makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/3)
+        makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
     else
         local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
@@ -4698,8 +4857,49 @@ task.spawn(function()
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row3 = makeRow(90)
         makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/2)
-        makeHubTog(row3, "Death Counter ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/2)
     end
+
+    -- ══════════════════════════════════════
+    --   ESP / Billboard frame (below Movement & System)
+    -- ══════════════════════════════════════
+    local espHub = makeControlFrame(isTSB and 124 or 94)
+    espHub.Parent = uiX
+    espHub.LayoutOrder = 2
+    espHub.ClipsDescendants = true
+    local espTitle = Instance.new("TextLabel")
+    espTitle.BackgroundTransparency = 1
+    espTitle.Position = UDim2.new(0, 16, 0, 8)
+    espTitle.Size = UDim2.new(1, -32, 0, 18)
+    espTitle.Font = Enum.Font.GothamBold
+    espTitle.Text = "ESP / Billboard"
+    espTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espTitle.TextStrokeTransparency = 1
+    espTitle.TextSize = 14
+    espTitle.TextXAlignment = Enum.TextXAlignment.Left
+    espTitle.Parent = espHub
+    local function makeEspRow(yPos)
+        local row = Instance.new("Frame")
+        row.BackgroundTransparency = 1
+        row.BorderSizePixel = 0
+        row.Position = UDim2.new(0, 4, 0, yPos)
+        row.Size = UDim2.new(1, -8, 0, 26)
+        row.Parent = espHub
+        local layout = Instance.new("UIListLayout")
+        layout.FillDirection = Enum.FillDirection.Horizontal
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.VerticalAlignment = Enum.VerticalAlignment.Center
+        layout.Padding = UDim.new(0, 4)
+        layout.Parent = row
+        return row
+    end
+    local espRow1 = makeEspRow(30)
+    makeHubTog(espRow1, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false, 1/4)
+    makeHubTog(espRow1, "Name (CH)", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false, 1/4)
+    makeHubTog(espRow1, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false, 1/4)
+    makeHubTog(espRow1, "Streak", function(v) espOverlayConfig.showStreak = v end, "Overlay4Streak", false, 1/4)
+    local espRow2 = makeEspRow(60)
+    makeHubTog(espRow2, "ULT ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false, 1/2)
+    makeHubTog(espRow2, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/2)
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
     fakerPingHub.LayoutOrder = 2
@@ -7918,6 +8118,77 @@ customOffsetFrame.Parent = uiX
 updateCustomUI()
 
 do
+	-- ══════════════════════════════════════
+	--   CHARACTER SELECTOR (standard Dropdown, like all other DropdownHolders)
+	-- ══════════════════════════════════════
+	local charSaveKey = "SelectedCharacter"
+	local characterList = { "Bald", "Hunter", "Monster", "Cyborg", "Ninja", "Batter", "Blade", "Esper", "Purple", "Tech", "Zombie", "KJ", "Sorcerer" }
+
+	local function getCharacterFromAttr()
+		local char = player.Character
+		if char then
+			local attr = char:GetAttribute("Character")
+			if attr and tostring(attr) ~= "" then
+				return tostring(attr)
+			end
+		end
+		local saved = getSavedControlValue(charSaveKey)
+		if saved and saved ~= "" then return saved end
+		return characterList[1]
+	end
+
+	-- charCallbackReady blocks the initial auto-fire from Dropdown init
+	-- so we don't send a Change Character call just because the script loaded
+	local charCallbackReady = false
+	local characterDropdown
+
+	characterDropdown = Dropdown({
+		namedropdown = "Character",
+		inside = characterList,
+		multi = false,
+		deffultin = getCharacterFromAttr(),
+		saveKey = charSaveKey,
+		fun = function(value)
+			if not charCallbackReady then return end
+			if not value or value == "" then return end
+			task.spawn(function()
+				pcall(function()
+					local communicate = player.Character and player.Character:WaitForChild("Communicate", 3)
+					if communicate then
+						communicate:FireServer({ Goal = "Change Character", Character = value })
+					end
+				end)
+			end)
+		end,
+	})
+	characterDropdown.Frame.LayoutOrder = 999997
+
+	-- Sync dropdown display to the character the player is actually playing (no server call)
+	local function syncCharDropdown()
+		if not characterDropdown then return end
+		local char = player.Character
+		if not char then return end
+		local attr = char:GetAttribute("Character")
+		if attr and tostring(attr) ~= "" then
+			characterDropdown.SetValue(tostring(attr), true) -- suppress callback
+			setSavedControlValue(charSaveKey, tostring(attr))
+		end
+	end
+
+	-- When character spawns, update dropdown to show current character
+	player.CharacterAdded:Connect(function(_newChar)
+		task.wait(1.5)
+		pcall(syncCharDropdown)
+	end)
+
+	-- On first load: sync to attribute, then enable user-driven callbacks
+	task.defer(function()
+		pcall(syncCharDropdown)
+		charCallbackReady = true
+	end)
+end
+
+do
 	local keybindHub = makeControlFrame(154)
 	keybindHub.Name = "KeybindSystemHub"
 	keybindHub.Parent = uiX
@@ -8103,6 +8374,8 @@ task.spawn(function()
 		createBillboardLine(frame, "CharacterLine").LayoutOrder = 3
 		createBillboardLine(frame, "SepTwo", Color3.fromRGB(255, 255, 255)).LayoutOrder = 4
 		createBillboardLine(frame, "UltimateLine").LayoutOrder = 5
+		createBillboardLine(frame, "SepThree", Color3.fromRGB(255, 255, 255)).LayoutOrder = 6
+		createBillboardLine(frame, "StreakLine", Color3.fromRGB(100, 180, 255)).LayoutOrder = 7
 		return billboard
 	end
 	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
@@ -8233,16 +8506,18 @@ task.spawn(function()
 			Character = model:GetAttribute("Character"),
 			Ultimate = targetPlayer:GetAttribute("Ultimate"),
 			Ulted = model:GetAttribute("Ulted"),
+			Streak = model:GetAttribute("CurrentStreak"),
 		}
 		local characterAttr = attributes.Character
 		local ultimateAttr = attributes.Ultimate
 		local hasUltimateAttr = ultimateAttr ~= nil
 		local ultedAttr = attributes.Ulted == true
+		local streakAttr = attributes.Streak
 		local isBald = tostring(characterAttr or "") == "Bald"
 		local hpPercent = humanoid.MaxHealth > 0 and ((humanoid.Health / humanoid.MaxHealth) * 100) or 0
 		local hpValue = clampPercent(hpPercent)
 		local ultimateValue = clampPercent(ultimateAttr)
-		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate
+		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate or espOverlayConfig.showStreak
 		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
 		if not showBillboard then
 			if billboard then
@@ -8259,6 +8534,8 @@ task.spawn(function()
 				local characterLine = frame and frame:FindFirstChild("CharacterLine")
 				local sepTwo = frame and frame:FindFirstChild("SepTwo")
 				local ultimateLine = frame and frame:FindFirstChild("UltimateLine")
+				local sepThree = frame and frame:FindFirstChild("SepThree")
+				local streakLine = frame and frame:FindFirstChild("StreakLine")
 				local visibleCount = 0
 				local contentWidth = 0
 				local visibleGuiCount = 0
@@ -8279,6 +8556,19 @@ task.spawn(function()
 					espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
 					string.format("%d%%", ultimateValue), Color3.fromRGB(255, 255, 255)
 				)
+				-- Streak: show if not nil and not -1
+				local streakNum = tonumber(streakAttr)
+				local streakVisible = false
+				if espOverlayConfig.showStreak and streakNum ~= nil and streakNum ~= -1 then
+					streakVisible = updateLine(
+						streakLine,
+						true,
+						tostring(streakNum),
+						Color3.fromRGB(100, 180, 255)
+					)
+				else
+					updateLine(streakLine, false, "", Color3.fromRGB(100, 180, 255))
+				end
 				if hpVisible then
 					visibleCount = visibleCount + 1
 				end
@@ -8288,11 +8578,16 @@ task.spawn(function()
 				if ultimateVisible then
 					visibleCount = visibleCount + 1
 				end
+				if streakVisible then
+					visibleCount = visibleCount + 1
+				end
 				local showSepOne = hpVisible and characterVisible
 				local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
+				local showSepThree = (hpVisible or characterVisible or ultimateVisible) and streakVisible
 				updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 255, 255))
 				updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 255, 255))
-				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine }) do
+				updateLine(sepThree, showSepThree, "//", Color3.fromRGB(255, 255, 255))
+				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine, sepThree, streakLine }) do
 					if guiObject and guiObject.Visible then
 						visibleGuiCount = visibleGuiCount + 1
 						contentWidth = contentWidth + guiObject.Size.X.Offset
@@ -8347,6 +8642,7 @@ task.spawn(function()
 				or espOverlayConfig.showCharacter
 				or espOverlayConfig.showUltimate
 				or espOverlayConfig.showEsp
+				or espOverlayConfig.showStreak
 			for _, targetPlayer in ipairs(Players:GetPlayers()) do
 				if targetPlayer ~= player then
 					updatePlayerOverlay(targetPlayer)
