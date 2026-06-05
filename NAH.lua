@@ -8334,21 +8334,21 @@ task.spawn(function()
 		if seriousModeState == "strong" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(0, 0, 0),
+				outline = Color3.fromRGB(255, 255, 255),
 				enabled = true,
 			}
 		end
 		if seriousModeState == "weak" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 255, 255),
+				outline = Color3.fromRGB(255, 0, 0),
 				enabled = true,
 			}
 		end
 		if canUseUltedHighlight and ultedAttr == true then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(0, 255, 0),
+				outline = Color3.fromRGB(255, 255, 0),
 				enabled = true,
 			}
 		end
