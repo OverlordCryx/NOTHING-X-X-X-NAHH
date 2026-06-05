@@ -105,7 +105,6 @@ screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
 screenGui.Parent = CoreGui
-
 local keybindFrame
 local targetFrame
 local keybindToggles = {
@@ -122,7 +121,6 @@ local keybindToggles = {
 }
 local scaleRegistry = {}
 local baseResolution = Vector2.new(1920, 1080)
-
 local function getViewportScale()
 	local sizeX = screenGui and screenGui.AbsoluteSize.X or 1920
 	local sizeY = screenGui and screenGui.AbsoluteSize.Y or 1080
@@ -142,7 +140,6 @@ local function getViewportScale()
 	local scaleY = sizeY / baseResolution.Y
 	return math.min(scaleX, scaleY)
 end
-
 local function getScaleFactorFor(guiObject)
 	local viewportScale = getViewportScale()
 	local current = guiObject
@@ -162,16 +159,13 @@ local function getScaleFactorFor(guiObject)
 	end
 	return viewportScale
 end
-
 local function registerObject(guiObject)
 	if scaleRegistry[guiObject] then return end
 	if guiObject.Name == "DropdownHolder" or guiObject.Name == "DropdownOptionsFrame" or guiObject.Name == "DropdownChoiceFrame" then
 		return
 	end
-	
 	local original = {}
 	local shouldRegister = false
-	
 	if guiObject:IsA("GuiObject") then
 		original.Size = guiObject.Size
 		original.Position = guiObject.Position
@@ -200,17 +194,14 @@ local function registerObject(guiObject)
 		original.Thickness = guiObject.Thickness
 		shouldRegister = true
 	end
-	
 	if shouldRegister then
 		scaleRegistry[guiObject] = original
 	end
 end
-
 local function applyScaleToObject(guiObject)
 	local original = scaleRegistry[guiObject]
 	if not original then return end
 	local scaleFactor = getScaleFactorFor(guiObject)
-	
 	if guiObject:IsA("GuiObject") then
 		local origSize = original.Size
 		guiObject.Size = UDim2.new(
@@ -242,7 +233,6 @@ local function applyScaleToObject(guiObject)
 		guiObject.Thickness = original.Thickness * scaleFactor
 	end
 end
-
 local function updateAllScales()
 	local w = screenGui and screenGui.AbsoluteSize.X or 1600
 	if w < 10 then
@@ -252,38 +242,27 @@ local function updateAllScales()
 		end
 	end
 	if w < 10 then w = 1600 end
-	
-	-- t=0 -> maly ekran (<=800px), t=1 -> duzy ekran (>=1600px)
 	local t = math.clamp((w - 800) / (1600 - 800), 0, 1)
-	
-	-- Oblicz docelowe pozycje dla keybindFrame i targetFrame
-	local kfYScale = 0.75 - t * 0.15   -- maly: 0.75, duzy: 0.6
-	local tfXOffset = -160 - t * 190   -- maly: -160, duzy: -350
+	local kfYScale = 0.75 - t * 0.15   
+	local tfXOffset = -160 - t * 190   
 	local newKFPos = keybindFrame and UDim2.new(0, 10, kfYScale, 0) or nil
 	local newTFPos = targetFrame and UDim2.new(1, tfXOffset, 0, 10) or nil
-
 	for guiObject, original in pairs(scaleRegistry) do
 		if not guiObject.Parent then
 			scaleRegistry[guiObject] = nil
 		else
-			-- Dla keybindFrame i targetFrame skalujemy rozmiar/tekst dzieci,
-			-- ale NIE pozycje samego frame'u (zrobimy to ręcznie poniżej)
 			if guiObject == keybindFrame or guiObject == targetFrame then
-				-- tylko rozmiar (offset Y = 0 więc bez zmian) – pomijamy position
 			else
 				applyScaleToObject(guiObject)
 			end
 		end
 	end
-	
-	-- Ustaw pozycje bezpośrednio – po applyScaleToObject, żeby nie były nadpisane
 	if keybindFrame and newKFPos then
 		keybindFrame.Position = newKFPos
 	end
 	if targetFrame and newTFPos then
 		targetFrame.Position = newTFPos
 	end
-	
 	if infoContainer then
 		local viewportScale = getViewportScale()
 		local yPos = 0.08 + (1 - viewportScale) * 0.15
@@ -293,7 +272,6 @@ local function updateAllScales()
 		end
 		infoContainer.Position = newPos
 	end
-	
 	if allDropdowns then
 		for state in pairs(allDropdowns) do
 			if state.holder and state.holder.Parent then
@@ -304,7 +282,6 @@ local function updateAllScales()
 		end
 	end
 end
-
 task.spawn(function()
 	local currentConnection = nil
 	local function bindCamera()
@@ -321,7 +298,6 @@ task.spawn(function()
 		screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateAllScales)
 	end
 end)
-
 screenGui.DescendantAdded:Connect(function(desc)
 	task.defer(function()
 		if desc.Parent then
@@ -333,22 +309,17 @@ screenGui.DescendantAdded:Connect(function(desc)
 		end
 	end)
 end)
-
 for _, desc in ipairs(screenGui:GetDescendants()) do
 	registerObject(desc)
 end
 updateAllScales()
 task.defer(updateAllScales)
-
 introFinished = true
-
--- Info frame labels — built after uiX exists (see "buildPlayerInfoFrame" call below)
 local piNameLabel    = nil
 local piHpLabel      = nil
 local piCharLabel    = nil
 local piStreakLabel  = nil
 local piStreakSepObj = nil
-
 local function updatePlayerInfoFrame()
 	if not piNameLabel then return end
 	local char = player.Character
@@ -356,7 +327,6 @@ local function updatePlayerInfoFrame()
 	if not char or not humanoid then
 		return
 	end
-	-- Name / DisplayName
 	local displayName = player.DisplayName or player.Name
 	local realName = player.Name
 	if displayName ~= realName then
@@ -364,7 +334,6 @@ local function updatePlayerInfoFrame()
 	else
 		piNameLabel.Text = realName
 	end
-	-- HP%
 	local maxHp = math.max(1, humanoid.MaxHealth)
 	local hpPct = math.clamp((humanoid.Health / maxHp) * 100, 0, 100)
 	piHpLabel.Text = string.format("%.1f%%", hpPct)
@@ -375,22 +344,19 @@ local function updatePlayerInfoFrame()
 	else
 		piHpLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
 	end
-	-- Character
 	local charAttr = char:GetAttribute("Character") or player:GetAttribute("Character") or ""
 	piCharLabel.Text = tostring(charAttr)
-	-- Streak
 	local streak = char:GetAttribute("CurrentStreak")
 	local streakNum = tonumber(streak)
 	if streakNum == nil or streakNum == -1 then
 		piStreakLabel.Visible = false
 		if piStreakSepObj then piStreakSepObj.Visible = false end
 	else
-		piStreakLabel.Text = "Streak: " .. tostring(streakNum)
+		piStreakLabel.Text = tostring(streakNum)
 		piStreakLabel.Visible = true
 		if piStreakSepObj then piStreakSepObj.Visible = true end
 	end
 end
-
 task.spawn(function()
 	while screenGui.Parent do
 		pcall(updatePlayerInfoFrame)
@@ -401,7 +367,6 @@ player.CharacterAdded:Connect(function()
 	task.wait(1)
 	pcall(updatePlayerInfoFrame)
 end)
-
 	keybindFrame = Instance.new("Frame")
 	keybindFrame.Name = "KeybindFrame"
 	keybindFrame.AnchorPoint = Vector2.new(0, 1)
@@ -434,9 +399,7 @@ keybindPadding.PaddingLeft = UDim.new(0, 10)
 keybindPadding.PaddingRight = UDim.new(0, 10)
 keybindPadding.Parent = keybindFrame
 keybindFrame.Parent = screenGui
--- zastosuj pozycje od razu po stworzeniu
 updateAllScales()
-
 keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
 keybindText.AnchorPoint = Vector2.new(0, 0)
@@ -456,8 +419,6 @@ keybindText.TextWrapped = true
 keybindText.TextYAlignment = Enum.TextYAlignment.Top
 keybindText.TextXAlignment = Enum.TextXAlignment.Center
 keybindText.Parent = keybindFrame
-
-
 targetFrame = Instance.new("Frame")
 targetFrame.Name = "TargetFrame"
 targetFrame.AnchorPoint = Vector2.new(1, 0)
@@ -467,7 +428,6 @@ targetFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 targetFrame.BackgroundTransparency = 0.25
 targetFrame.ClipsDescendants = true
 targetFrame.BorderSizePixel = 0
-
 do
 	local tfCorner = Instance.new("UICorner")
 	tfCorner.CornerRadius = UDim.new(0, 4)
@@ -569,7 +529,6 @@ targetPadding.PaddingTop = UDim.new(0, 5)
 targetPadding.PaddingBottom = UDim.new(0, 5)
 targetPadding.Parent = targetFrame
 targetFrame.Parent = screenGui
--- zastosuj pozycje od razu po stworzeniu targetFrame
 updateAllScales()
 local targetLayout = Instance.new("UIListLayout")
 targetLayout.FillDirection = Enum.FillDirection.Vertical
@@ -718,7 +677,6 @@ do
 	windowAnimScaleVal.Name = "WindowAnimScale"
 	windowAnimScaleVal.Value = 1.0
 	windowAnimScaleVal.Parent = settingsWindow
-
 	local swCorner = Instance.new("UICorner")
 	swCorner.CornerRadius = UDim.new(0, 6)
 	swCorner.Parent = settingsWindow
@@ -837,10 +795,6 @@ do
 	settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	settingsLayout.Parent = uiX
 end
-
--- ══════════════════════════════════════
---   LOCAL PLAYER INFO FRAME (top of uiX)
--- ══════════════════════════════════════
 do
 	local infoHub = Instance.new("Frame")
 	infoHub.Name = "PlayerInfoHub"
@@ -860,8 +814,6 @@ do
 		g.Parent = infoHub
 	end
 	infoHub.Parent = uiX
-
-	-- Title "Info"
 	local titleLbl = Instance.new("TextLabel")
 	titleLbl.BackgroundTransparency = 1
 	titleLbl.Position = UDim2.new(0, 10, 0, 2)
@@ -875,8 +827,6 @@ do
 	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 	titleLbl.ZIndex = 12
 	titleLbl.Parent = infoHub
-
-	-- Row with labels
 	local rowFrame = Instance.new("Frame")
 	rowFrame.BackgroundTransparency = 1
 	rowFrame.Position = UDim2.new(0, 6, 0, 16)
@@ -887,9 +837,9 @@ do
 	rowLayout.FillDirection = Enum.FillDirection.Horizontal
 	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	rowLayout.Padding = UDim.new(0, 5)
 	rowLayout.Parent = rowFrame
-
 	local function makeIL(name, color)
 		local lbl = Instance.new("TextLabel")
 		lbl.Name = name
@@ -921,23 +871,24 @@ do
 		sep.Parent = rowFrame
 		return sep
 	end
-
 	piNameLabel   = makeIL("PI_Name",   Color3.fromRGB(255, 255, 255))
-	makeISep()
-	piHpLabel     = makeIL("PI_HP",     Color3.fromRGB(100, 220, 100))
-	makeISep()
+	piNameLabel.LayoutOrder = 1
+	local sep1 = makeISep(); sep1.LayoutOrder = 2
 	piCharLabel   = makeIL("PI_Char",   Color3.fromRGB(255, 200, 80))
-	local sep3    = makeISep()
+	piCharLabel.LayoutOrder = 3
+	local sep2 = makeISep(); sep2.LayoutOrder = 4
+	piHpLabel     = makeIL("PI_HP",     Color3.fromRGB(100, 220, 100))
+	piHpLabel.LayoutOrder = 5
+	local sep3    = makeISep(); sep3.LayoutOrder = 6
 	piStreakLabel = makeIL("PI_Streak", Color3.fromRGB(100, 180, 255))
+	piStreakLabel.LayoutOrder = 7
 	piStreakSepObj = sep3
-	-- hide streak elements until a real streak value is known
 	piStreakLabel.Visible = false
 	if piStreakSepObj then piStreakSepObj.Visible = false end
 end
 local otherPartsCache = {}
 local friendCache = {}
 local friendsList = {}
-
 task.spawn(function()
 	local success, pages = pcall(function()
 		return Players:GetFriendsAsync(player.UserId)
@@ -958,7 +909,6 @@ task.spawn(function()
 		end
 	end
 end)
-
 local function updateFriendCache()
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= player and friendCache[p.UserId] ~= true then
@@ -983,7 +933,6 @@ local function updateFriendCache()
 		end
 	end
 end
-
 task.spawn(function()
 	Players.PlayerAdded:Connect(function(p)
 		task.spawn(function()
@@ -1072,14 +1021,12 @@ local cam = Workspace.CurrentCamera
 local char = player.Character
 local hum = char and char:FindFirstChild("Humanoid")
 local root = char and char:FindFirstChild("HumanoidRootPart")
-
 local function updateLocalCharacterReferences(newChar)
 	char = newChar
 	characterSpawnTime = os.clock()
 	hum = newChar:WaitForChild("Humanoid")
 	root = newChar:WaitForChild("HumanoidRootPart")
 end
-
 if char then
 	task.spawn(updateLocalCharacterReferences, char)
 end
@@ -1359,7 +1306,6 @@ function saveSliderSaveData()
 	end)
 end
 loadSliderSaveData()
--- Auto-load billboard/overlay toggle states from save so they take effect immediately
 if type(controlSaveData.Overlay4HP) == "boolean" then espOverlayConfig.showHp = controlSaveData.Overlay4HP end
 if type(controlSaveData.Overlay4Character) == "boolean" then espOverlayConfig.showCharacter = controlSaveData.Overlay4Character end
 if type(controlSaveData.Overlay4Ultimate) == "boolean" then espOverlayConfig.showUltimate = controlSaveData.Overlay4Ultimate end
@@ -1463,7 +1409,6 @@ function updateKeybindText()
 		if key == "VoidDead" and not keybindToggles.Void then allowed = false end
 		if key == "GetTrash" and not keybindToggles.Trash then allowed = false end
 		if keybindToggles[key] == false then allowed = false end
-		
 		if allowed then
 			appendEntry(keybindEntries[key])
 		end
@@ -1669,11 +1614,9 @@ local function toggleVoidDead(state)
 		deathConn:Disconnect()
 	end)
 end
-
 local dVoidDeadActive = false
 local dVoidDeadConn = nil
 local DVoidDeadToggle = nil
-
 local function toggleDVoidDead(state)
 	local targetState = state
 	if targetState == nil then
@@ -1719,7 +1662,6 @@ local function toggleDVoidDead(state)
 		local targetModel = resolveAttackTpTarget()
 		local targetPlayer = targetModel and game:GetService("Players"):GetPlayerFromCharacter(targetModel)
 		local targetHumanoid = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
-		
 		if not dVoidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) then
 			if dVoidDeadConn then 
 				dVoidDeadConn:Disconnect() 
@@ -1730,7 +1672,6 @@ local function toggleDVoidDead(state)
 			end
 			return
 		end
-		
 		if targetPlayer and targetHumanoid and targetHumanoid.Health > 0 then
 			hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
 			hrp.AssemblyLinearVelocity = Vector3.zero
@@ -1749,7 +1690,6 @@ local function toggleDVoidDead(state)
 		deathConn:Disconnect()
 	end)
 end
-
 local antiFlingEnabled = false
 local antiFlingConnection = nil
 local function toggleAntiFling(enabled)
@@ -2396,11 +2336,9 @@ local function toggleAFK(enabled)
 			if hrp then
 				hrp.Anchored = false
 				if afkSavedCFrame then
-					-- wróć na zapisaną pozycję przed wejściem do safe zone
 					character:PivotTo(afkSavedCFrame)
 					hrp.AssemblyLinearVelocity = Vector3.zero
 					hrp.AssemblyAngularVelocity = Vector3.zero
-					-- else: postać umarła w safe zone, zostaje gdzie jest (spawner ją zresetuje)
 				end
 			end
 		end
@@ -2552,7 +2490,6 @@ local function toggleSafeZoneHP(enabled)
 	end
 	return safeZoneHPEnabled and "ON" or "OFF"
 end
--- Auto-load Safe Zone N i Safe Zone HP (po zdefiniowaniu obu funkcji)
 do
 	local savedAFK = controlSaveData.AFKEnabled
 	local savedHP = controlSaveData.HPSafeZoneEnabled
@@ -3703,10 +3640,8 @@ function getSelectableTargetModels()
 			end
 		end
 	end
-	
 	scanFolder(Workspace:FindFirstChild("Live"))
 	scanFolder(Workspace)
-	
 	cachedSelectableModels = models
 	return models
 end
@@ -4183,12 +4118,10 @@ local SM_playerState = {}
 local SM_activeTimers = {}
 local SM_playerConnections = {}
 local SM_PlayersAddedConn = nil
-
 local function toggleSeriousModeTracker(state)
 	SeriousModeTrackerEnabled = state == true
 	local Players = game:GetService("Players")
 	local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
-	
 	if not SeriousModeTrackerEnabled then
 		if SM_PlayersAddedConn then SM_PlayersAddedConn:Disconnect(); SM_PlayersAddedConn = nil end
 		for plr, tracked in pairs(SM_playerConnections) do
@@ -4206,7 +4139,6 @@ local function toggleSeriousModeTracker(state)
 		end
 		return
 	end
-
 	local RunService = game:GetService("RunService")
 	local SHARED_HIGHLIGHT_NAME = "NOTHING-X"
 	local strongSkills = {
@@ -4221,13 +4153,11 @@ local function toggleSeriousModeTracker(state)
 		["Shove"] = true,
 		["Uppercut"] = true
 	}
-	
 	local function callInfo(title, text, duration)
 		if type(INFO) == "function" then
 			pcall(function() INFO(title, text, duration or 5) end)
 		end
 	end
-	
 	local function ensureSharedHighlight(model)
 		if not model or not model:FindFirstChild("HumanoidRootPart") then return nil end
 		local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
@@ -4363,7 +4293,6 @@ local function toggleSeriousModeTracker(state)
 		table.insert(SM_playerConnections[plr], cAdded)
 		table.insert(SM_playerConnections[plr], aChanged)
 	end
-	
 	startGlobalChecker()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		setupPlayer(plr)
@@ -4372,7 +4301,6 @@ local function toggleSeriousModeTracker(state)
 end
 local CharacterCleanupEnabled = false
 local ModConnections = {}
-
 local function toggleCharacterCleanupRuntime(state)
 	CharacterCleanupEnabled = state == true
 	if not CharacterCleanupEnabled then
@@ -4382,12 +4310,10 @@ local function toggleCharacterCleanupRuntime(state)
 		if ModConnections.CharacterAdded then ModConnections.CharacterAdded:Disconnect(); ModConnections.CharacterAdded = nil end
 		return
 	end
-
 	local Players = game:GetService("Players")
 	local speaker = Players.LocalPlayer
 	local speed = 25.50
 	local jpower = 50.50
-
 	local function SetupHumanoid(Char, Human)
 		if not Human or not Human.Parent then return end
 		if ModConnections.wsLoop then ModConnections.wsLoop:Disconnect() end
@@ -4474,7 +4400,6 @@ local function toggleCharacterCleanupRuntime(state)
 		end
 	end)
 end
-
 local function initInvisibleBorderCleanup()
 	task.spawn(function()
 		local map = workspace:FindFirstChild("Map")
@@ -4858,10 +4783,6 @@ task.spawn(function()
         local row3 = makeRow(90)
         makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/2)
     end
-
-    -- ══════════════════════════════════════
-    --   ESP / Billboard frame (below Movement & System)
-    -- ══════════════════════════════════════
     local espHub = makeControlFrame(isTSB and 124 or 94)
     espHub.Parent = uiX
     espHub.LayoutOrder = 2
@@ -5345,7 +5266,6 @@ function Slider(data)
 		barCorner.CornerRadius = UDim.new(0, 3)
 		barCorner.Parent = bar
 	end
-
 	local fill = Instance.new("Frame")
 	fill.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
 	fill.BorderSizePixel = 0
@@ -8116,14 +8036,9 @@ do
 end
 customOffsetFrame.Parent = uiX
 updateCustomUI()
-
 do
-	-- ══════════════════════════════════════
-	--   CHARACTER SELECTOR (standard Dropdown, like all other DropdownHolders)
-	-- ══════════════════════════════════════
 	local charSaveKey = "SelectedCharacter"
 	local characterList = { "Bald", "Hunter", "Monster", "Cyborg", "Ninja", "Batter", "Blade", "Esper", "Purple", "Tech", "Zombie", "KJ", "Sorcerer" }
-
 	local function getCharacterFromAttr()
 		local char = player.Character
 		if char then
@@ -8136,12 +8051,8 @@ do
 		if saved and saved ~= "" then return saved end
 		return characterList[1]
 	end
-
-	-- charCallbackReady blocks the initial auto-fire from Dropdown init
-	-- so we don't send a Change Character call just because the script loaded
 	local charCallbackReady = false
 	local characterDropdown
-
 	characterDropdown = Dropdown({
 		namedropdown = "Character",
 		inside = characterList,
@@ -8152,49 +8063,50 @@ do
 			if not charCallbackReady then return end
 			if not value or value == "" then return end
 			task.spawn(function()
-				pcall(function()
-					local communicate = player.Character and player.Character:WaitForChild("Communicate", 3)
-					if communicate then
-						communicate:FireServer({ Goal = "Change Character", Character = value })
-					end
-				end)
+				local retryToken = (characterDropdown and characterDropdown._retryToken or 0) + 1
+				if characterDropdown then characterDropdown._retryToken = retryToken end
+				while true do
+					pcall(function()
+						local communicate = player.Character and player.Character:WaitForChild("Communicate", 3)
+						if communicate then
+							communicate:FireServer({ Goal = "Change Character", Character = value })
+						end
+					end)
+					task.wait(0.88)
+					if characterDropdown and characterDropdown._retryToken ~= retryToken then break end
+					local char = player.Character
+					local attr = char and char:GetAttribute("Character")
+					if attr and tostring(attr) == value then break end
+				end
 			end)
 		end,
 	})
 	characterDropdown.Frame.LayoutOrder = 999997
-
-	-- Sync dropdown display to the character the player is actually playing (no server call)
 	local function syncCharDropdown()
 		if not characterDropdown then return end
 		local char = player.Character
 		if not char then return end
 		local attr = char:GetAttribute("Character")
 		if attr and tostring(attr) ~= "" then
-			characterDropdown.SetValue(tostring(attr), true) -- suppress callback
+			characterDropdown.SetValue(tostring(attr), true) 
 			setSavedControlValue(charSaveKey, tostring(attr))
 		end
 	end
-
-	-- When character spawns, update dropdown to show current character
 	player.CharacterAdded:Connect(function(_newChar)
 		task.wait(1.5)
 		pcall(syncCharDropdown)
 	end)
-
-	-- On first load: sync to attribute, then enable user-driven callbacks
 	task.defer(function()
 		pcall(syncCharDropdown)
 		charCallbackReady = true
 	end)
 end
-
 do
 	local keybindHub = makeControlFrame(154)
 	keybindHub.Name = "KeybindSystemHub"
 	keybindHub.Parent = uiX
 	keybindHub.LayoutOrder = 1000000
 	keybindHub.ClipsDescendants = true
-	
 	local hubTitle = Instance.new("TextLabel")
 	hubTitle.BackgroundTransparency = 1
 	hubTitle.Position = UDim2.new(0, 16, 0, 8)
@@ -8206,7 +8118,6 @@ do
 	hubTitle.TextSize = 14
 	hubTitle.TextXAlignment = Enum.TextXAlignment.Left
 	hubTitle.Parent = keybindHub
-	
 	local function makeRow(yPos)
 		local row = Instance.new("Frame")
 		row.BackgroundTransparency = 1
@@ -8222,22 +8133,18 @@ do
 		layout.Parent = row
 		return row
 	end
-	
 	local row1 = makeRow(30)
 	makeHubTog(row1, "Hide Names", function(v) hideNamesKeybindEnabled = v; updateKeybindText() end, "HideNamesKeybind", false, 1/3)
 	makeHubTog(row1, "Speed KB", function(v) keybindToggles.Speed = v; updateKeybindText() end, "KeybindSpeedEnabled", true, 1/3)
 	makeHubTog(row1, "Fly KB", function(v) keybindToggles.Fly = v; updateKeybindText() end, "KeybindFlyEnabled", true, 1/3)
-	
 	local row2 = makeRow(60)
 	makeHubTog(row2, "CamLock KB", function(v) keybindToggles.CamLock = v; updateKeybindText() end, "KeybindCamLockEnabled", true, 1/3)
 	makeHubTog(row2, "Attack TP KB", function(v) keybindToggles.AttackTP = v; updateKeybindText() end, "KeybindAttackTPEnabled", true, 1/3)
 	makeHubTog(row2, "Target KB", function(v) keybindToggles.Target = v; updateKeybindText() end, "KeybindTargetEnabled", true, 1/3)
-	
 	local row3 = makeRow(90)
 	makeHubTog(row3, "WalkFling KB", function(v) keybindToggles.WalkFling = v; updateKeybindText() end, "KeybindWalkFlingEnabled", true, 1/3)
 	makeHubTog(row3, "SetBack KB", function(v) keybindToggles.SetBack = v; updateKeybindText() end, "KeybindSetBackEnabled", true, 1/3)
 	makeHubTog(row3, "Trash KB", function(v) keybindToggles.Trash = v; updateKeybindText() end, "KeybindTrashEnabled", true, 1/3)
-	
 	local row4 = makeRow(120)
 	makeHubTog(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", true, 1/2)
 	makeHubTog(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", true, 1/2)
@@ -8556,7 +8463,6 @@ task.spawn(function()
 					espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
 					string.format("%d%%", ultimateValue), Color3.fromRGB(255, 255, 255)
 				)
-				-- Streak: show if not nil and not -1
 				local streakNum = tonumber(streakAttr)
 				local streakVisible = false
 				if espOverlayConfig.showStreak and streakNum ~= nil and streakNum ~= -1 then
@@ -8759,34 +8665,26 @@ UserInputService.InputChanged:Connect(function(input)
 	if draggingWindow and input.UserInputType == Enum.UserInputType.MouseMovement then
 		local delta = input.Position - dragStartInputPosition
 		local viewportSize = Workspace.CurrentCamera.ViewportSize
-		
 		local scale = getScaleFactorFor(settingsWindow)
 		local original = scaleRegistry[settingsWindow]
 		if not original then return end
-		
 		local guiViewportSize = viewportSize / scale
 		local guiWindowSize = Vector2.new(original.Size.X.Offset, original.Size.Y.Offset)
-		
 		local startX = dragStartPosition.X.Offset / scale
 		local startY = dragStartPosition.Y.Offset / scale
-		
 		local newOffsetUX = startX + (delta.X / scale)
 		local newOffsetUY = startY + (delta.Y / scale)
-		
 		local anchor = settingsWindow.AnchorPoint
 		local minUX = (guiWindowSize.X * anchor.X) - (guiViewportSize.X * dragStartPosition.X.Scale)
 		local maxUX = (guiViewportSize.X * (1 - dragStartPosition.X.Scale)) - (guiWindowSize.X * (1 - anchor.X))
 		local minUY = (guiWindowSize.Y * anchor.Y) - (guiViewportSize.Y * dragStartPosition.Y.Scale)
 		local maxUY = (guiViewportSize.Y * (1 - dragStartPosition.Y.Scale)) - (guiWindowSize.Y * (1 - anchor.Y))
-		
 		local clampedUX = math.clamp(newOffsetUX, minUX, maxUX)
 		local clampedUY = math.clamp(newOffsetUY, minUY, maxUY)
-		
 		original.Position = UDim2.new(
 			dragStartPosition.X.Scale, clampedUX,
 			dragStartPosition.Y.Scale, clampedUY
 		)
-		
 		settingsWindow.Position = UDim2.new(
 			dragStartPosition.X.Scale, clampedUX * scale,
 			dragStartPosition.Y.Scale, clampedUY * scale
@@ -9130,7 +9028,6 @@ do
 	if shouldRefreshTargetDisplay or targetDisplayAccumulator >= 0.15 then
 		targetDisplayAccumulator = 0
 		updateTargetDisplay()
-		
 		local seenCurrentModels = {}
 		for _, targetModel in ipairs(getSelectableTargetModels()) do
 			if isSelectableModelDropdownTarget(targetModel) then
@@ -9167,7 +9064,6 @@ do
 				end
 			end
 		end
-
 		if updateDynamicDropdownDisplays then
 			updateDynamicDropdownDisplays()
 		end
@@ -9219,7 +9115,6 @@ do
 			else
 				if not hasDropdown then stopView() end
 			end
-			
 			if viewing and currentViewTarget then
 				local currHum = currentViewTarget:FindFirstChildOfClass("Humanoid")
 				if currHum and cam and cam.CameraSubject ~= currHum then
@@ -9256,14 +9151,12 @@ do
 			end
 		end
 	end
-	-- autoTP jest blokowane przez Safe Zone (SafeTeleportLock)
 	if autoTpEnabled and not isTeleportLocked then
 		local targetModel = resolveAttackTpTarget()
 		if isValidAttackTpTarget(targetModel) then
 			performGodTP(targetModel, true)
 		end
 	end
-	-- Attack TP (trzymanie klawisza) dziala zawsze - niezaleznie od Safe Zone
 	if attackTpEnabled and attackTpHolding then
 		if manualAttackTpPlayer and manualAttackTpPlayer.Parent ~= Players then
 			clearManualAttackTpTarget()
@@ -9294,7 +9187,6 @@ do
 				steppedConn:Disconnect()
 				return
 			end
-			-- Attack TP dziala niezaleznie od SafeTeleportLock (Safe Zone)
 			local function fastPerform(target, allowFling)
 				local character = player.Character
 				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
@@ -9347,8 +9239,6 @@ UserInputService.InputEnded:Connect(function(input)
 		holdingD = false
 	end
 end)
-
--- Uruchom zapisane ustawienia po pełnym załadowaniu UI i funkcji
 uiLoaded = true
 for _, cb in ipairs(queuedCallbacks) do
 	pcall(cb)
