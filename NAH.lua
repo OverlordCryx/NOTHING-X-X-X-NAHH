@@ -5543,6 +5543,7 @@ function Dropdown(data)
 	local defaultValue = data.deffultin or data.defaultin or data.default
 	local initialDefault = defaultValue
 	local multi = data.multi == true
+	local noDeselect = data.noDeselect == true
 	local hideSelectionText = data.hideSelectionText == true
 	local callback = data.fun
 	local saveKey = tostring(data.saveKey or data.namedropdown or data.nameDropdown or data.name or "")
@@ -5848,6 +5849,7 @@ function Dropdown(data)
 			optionButtons[item] = optionButton
 			optionButton.Activated:Connect(function()
 				if disabledItems[item] then return end
+				if noDeselect and selected[item] then return end
 				setSelectedValue(item, not selected[item])
 				refreshLabels()
 				saveDropdownSelection()
@@ -8057,11 +8059,15 @@ do
 		namedropdown = "Character",
 		inside = characterList,
 		multi = false,
+		noDeselect = true,
 		deffultin = getCharacterFromAttr(),
 		saveKey = charSaveKey,
 		fun = function(value)
 			if not charCallbackReady then return end
 			if not value or value == "" then return end
+			local char = player.Character
+			local currentAttr = char and char:GetAttribute("Character")
+			if currentAttr and tostring(currentAttr) == value then return end
 			task.spawn(function()
 				local retryToken = (characterDropdown and characterDropdown._retryToken or 0) + 1
 				if characterDropdown then characterDropdown._retryToken = retryToken end
@@ -8081,7 +8087,7 @@ do
 			end)
 		end,
 	})
-	characterDropdown.Frame.LayoutOrder = 999997
+	characterDropdown.Frame.LayoutOrder = 999999
 	local function syncCharDropdown()
 		if not characterDropdown then return end
 		local char = player.Character
