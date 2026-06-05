@@ -513,6 +513,15 @@ function makeHubTog(parent, text, callback, saveKey, default, widthMult)
 				task.spawn(callback, true)
 			end)
 		end
+	elseif not enabled and callback then
+		-- Also queue callback for false so keybindToggles stay in sync
+		if uiLoaded then
+			task.spawn(callback, false)
+		else
+			table.insert(queuedCallbacks, function()
+				task.spawn(callback, false)
+			end)
+		end
 	end
 	render()
 	return {
@@ -1361,6 +1370,27 @@ do
 	local savedGetTrashKeybind = decodeKeybindValue(controlSaveData.GetTrashKeybind)
 	if savedGetTrashKeybind then
 		getTrashState.keybind = savedGetTrashKeybind
+	end
+end
+-- Restore keybindToggles from saved data (Auto Load fix)
+do
+	local keybindToggleSaveKeys = {
+		Speed    = "KeybindSpeedEnabled",
+		Fly      = "KeybindFlyEnabled",
+		CamLock  = "KeybindCamLockEnabled",
+		AttackTP = "KeybindAttackTPEnabled",
+		Target   = "KeybindTargetEnabled",
+		WalkFling= "KeybindWalkFlingEnabled",
+		SetBack  = "KeybindSetBackEnabled",
+		Trash    = "KeybindTrashEnabled",
+		Void     = "KeybindVoidEnabled",
+		Places   = "KeybindPlacesEnabled",
+	}
+	for toggleKey, saveKey in pairs(keybindToggleSaveKeys) do
+		local saved = controlSaveData[saveKey]
+		if type(saved) == "boolean" then
+			keybindToggles[toggleKey] = saved
+		end
 	end
 end
 function parseEnabledValue(value)
@@ -8151,6 +8181,8 @@ do
 	local row4 = makeRow(120)
 	makeHubTog(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", true, 1/2)
 	makeHubTog(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", true, 1/2)
+	-- Sync keybind display with restored toggle states (fixes auto-load hide/off/block)
+	task.defer(updateKeybindText)
 end
 task.spawn(function()
 	if game.GameId ~= 3808081382 then
