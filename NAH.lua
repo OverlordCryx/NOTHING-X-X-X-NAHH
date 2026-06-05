@@ -8307,7 +8307,7 @@ task.spawn(function()
 		if canUseUltedHighlight and ultedAttr == true then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(88, 88, 88),
+				outline = Color3.fromRGB(0, 255, 0),
 				enabled = true,
 			}
 		end
