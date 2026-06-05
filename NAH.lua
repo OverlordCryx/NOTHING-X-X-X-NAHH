@@ -1,7 +1,7 @@
 repeat
     task.wait();
 until game:IsLoaded();
-task.wait(7)
+
 warn("NOTHING _X -X_X-")
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
