@@ -348,7 +348,7 @@ local function updatePlayerInfoFrame()
 	piCharLabel.Text = tostring(charAttr)
 	local streak = char:GetAttribute("CurrentStreak")
 	local streakNum = tonumber(streak)
-	if streakNum == nil or streakNum == -1 then
+	if streakNum == nil or streakNum <= 0 then
 		piStreakLabel.Visible = false
 		if piStreakSepObj then piStreakSepObj.Visible = false end
 	else
@@ -8287,17 +8287,24 @@ task.spawn(function()
 	end
 	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
 		local seriousModeState = model and model:GetAttribute("NX_SeriousModeState") or nil
-		if seriousModeState == "strong" or seriousModeState == "weak" then
+		if seriousModeState == "strong" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 0, 0),
+				outline = Color3.fromRGB(0, 0, 0),
+				enabled = true,
+			}
+		end
+		if seriousModeState == "weak" then
+			return {
+				fill = Color3.fromRGB(0, 0, 0),
+				outline = Color3.fromRGB(255, 255, 255),
 				enabled = true,
 			}
 		end
 		if canUseUltedHighlight and ultedAttr == true then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
-				outline = Color3.fromRGB(255, 255, 0),
+				outline = Color3.fromRGB(150, 150, 150),
 				enabled = true,
 			}
 		end
@@ -8465,7 +8472,7 @@ task.spawn(function()
 				)
 				local streakNum = tonumber(streakAttr)
 				local streakVisible = false
-				if espOverlayConfig.showStreak and streakNum ~= nil and streakNum ~= -1 then
+				if espOverlayConfig.showStreak and streakNum ~= nil and streakNum > 0 then
 					streakVisible = updateLine(
 						streakLine,
 						true,
