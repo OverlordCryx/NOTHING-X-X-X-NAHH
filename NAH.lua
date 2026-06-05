@@ -5582,6 +5582,7 @@ function Dropdown(data)
 	local defaultValue = data.deffultin or data.defaultin or data.default
 	local initialDefault = defaultValue
 	local multi = data.multi == true
+	local allowDeselect = data.allowDeselect == true
 	local hideSelectionText = data.hideSelectionText == true
 	local callback = data.fun
 	local saveKey = tostring(data.saveKey or data.namedropdown or data.nameDropdown or data.name or "")
@@ -5885,8 +5886,9 @@ function Dropdown(data)
 				obCorner.Parent = optionButton
 			end
 			optionButtons[item] = optionButton
-			optionButton.Activated:Connect(function()
+			optionButton.MouseButton1Click:Connect(function()
 				if disabledItems[item] then return end
+				if not multi and selected[item] and not allowDeselect then return end
 				setSelectedValue(item, not selected[item])
 				refreshLabels()
 				saveDropdownSelection()
@@ -6210,7 +6212,7 @@ do
 				end
 				usedLabels[label] = true
 				allItems[#allItems + 1] = label
-				if entry.player and (savedBLPlayerNames[entry.baseName] or offlinePlayers[entry.baseName]) then
+				if entry.player and offlinePlayers[entry.baseName] then
 					blacklistedTargets[label] = true
 				end
 				local isFriend = entry.player and friendCache[entry.player.UserId]
@@ -6225,13 +6227,18 @@ do
 						hpStr = formatHPPercent(hum)
 					end
 				end
-				local baseNameStr = string.sub(entry.baseName, 1, 20)
+				local baseNameStr = string.sub(entry.baseName, 1, 12)
 				local dispNameStr = nil
 				local isFriend = entry.player and friendCache[entry.player.UserId]
-				local fStr = isFriend and "F | " or ""
+				local fStr = isFriend and "F|" or ""
 				if entry.player then
-					dispNameStr = string.sub(entry.player.DisplayName or entry.baseName, 1, 20)
-					displayNames[label] = string.format("@%s | %s | %s%% | %s%s", baseNameStr, dispNameStr, hpStr, fStr, pOrM)
+					local rawDisp = entry.player.DisplayName or entry.baseName
+					dispNameStr = string.sub(rawDisp, 1, 12)
+					if dispNameStr == baseNameStr then
+						displayNames[label] = string.format("@%s | %s%% | %s%s", baseNameStr, hpStr, fStr, pOrM)
+					else
+						displayNames[label] = string.format("@%s|%s | %s%% | %s%s", baseNameStr, dispNameStr, hpStr, fStr, pOrM)
+					end
 				else
 					displayNames[label] = string.format("%s | %s%% | %s", baseNameStr, hpStr, pOrM)
 				end
@@ -6250,8 +6257,8 @@ do
 		for offName, offData in pairs(offlinePlayers) do
 			if not Players:FindFirstChild(offName) then
 				local label = "[P] " .. offName .. " (Offline)"
-				local truncName = string.sub(offName, 1, 20)
-				local dispStr = offData == true and truncName or string.sub(tostring(offData.displayName or offName), 1, 20)
+				local truncName = string.sub(offName, 1, 12)
+				local dispStr = offData == true and truncName or string.sub(tostring(offData.displayName or offName), 1, 12)
 				if not usedLabels[label] then
 					usedLabels[label] = true
 					allItems[#allItems + 1] = label
@@ -6264,7 +6271,7 @@ do
 						isOffline = true,
 						offlineName = offName,
 					}
-					displayNames[label] = string.format("%s | %s | P | Offline", truncName, dispStr)
+					displayNames[label] = string.format("%s | P | Offline", truncName)
 					blacklistedTargets[label] = true
 				end
 			end
@@ -6393,9 +6400,7 @@ local function updateDynamicDropdownDisplays()
 	local displayNames = {}
 	for label, entry in pairs(modelDropdownLookup) do
 		if entry.isOffline then
-			local offData = offlinePlayers[entry.offlineName]
-			local dispStr = (type(offData) == "table" and offData.displayName) and string.sub(offData.displayName, 1, 20) or entry.baseNameStr
-			displayNames[label] = string.format("%s | %s | P | Offline", entry.baseNameStr, dispStr)
+			displayNames[label] = string.format("%s | P | Offline", entry.baseNameStr)
 		else
 			local hpStr = "0"
 			if entry.model then
@@ -6405,9 +6410,13 @@ local function updateDynamicDropdownDisplays()
 				end
 			end
 			local isFriend = entry.player and friendCache[entry.player.UserId]
-			local fStr = isFriend and "F | " or ""
+			local fStr = isFriend and "F|" or ""
 			if entry.player then
-				displayNames[label] = string.format("@%s | %s | %s%% | %s%s", entry.baseNameStr, entry.dispNameStr, hpStr, fStr, entry.pOrM)
+				if entry.dispNameStr and entry.dispNameStr ~= entry.baseNameStr then
+					displayNames[label] = string.format("@%s|%s | %s%% | %s%s", entry.baseNameStr, entry.dispNameStr, hpStr, fStr, entry.pOrM)
+				else
+					displayNames[label] = string.format("@%s | %s%% | %s%s", entry.baseNameStr, hpStr, fStr, entry.pOrM)
+				end
 			else
 				displayNames[label] = string.format("%s | %s%% | %s", entry.baseNameStr, hpStr, entry.pOrM)
 			end
@@ -7412,6 +7421,7 @@ modelDropdownControl = Dropdown({
 	saveKey = "",
 	inside = {},
 	multi = false,
+	allowDeselect = true,
 	deffultin = nil,
 	fun = function(value)
 		applyModelDropdownSelection(value)
