@@ -235,16 +235,25 @@ local function applyScaleToObject(guiObject)
 end
 local function updateAllScales()
 	local w = screenGui and screenGui.AbsoluteSize.X or 1600
+	local h = screenGui and screenGui.AbsoluteSize.Y or 900
 	if w < 10 then
 		local cam = workspace.CurrentCamera
 		if cam then
 			w = cam.ViewportSize.X
+			h = cam.ViewportSize.Y
 		end
 	end
 	if w < 10 then w = 1600 end
-	local t = math.clamp((w - 800) / (1600 - 800), 0, 1)
-	local kfYScale = 0.75 - t * 0.15   
-	local tfXOffset = -160 - t * 190   
+	if h < 10 then h = 900 end
+	local kfYScale
+	if w <= 800 and h <= 600 then
+		kfYScale = 0.74
+	else
+		local t2 = math.clamp((w - 800) / (1900 - 800), 0, 1)
+		kfYScale = 0.74 - t2 * 0.14
+	end
+	local tOffset = math.clamp((w - 800) / (1900 - 800), 0, 1)
+	local tfXOffset = -160 - tOffset * 190   
 	local newKFPos = keybindFrame and UDim2.new(0, 10, kfYScale, 0) or nil
 	local newTFPos = targetFrame and UDim2.new(1, tfXOffset, 0, 10) or nil
 	for guiObject, original in pairs(scaleRegistry) do
@@ -375,7 +384,7 @@ end)
 keybindFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 keybindFrame.BackgroundTransparency = 0.2
 keybindFrame.BorderSizePixel = 0
-keybindFrame.ClipsDescendants = true 
+keybindFrame.ClipsDescendants = false 
 do
 	local kfCorner = Instance.new("UICorner")
 	kfCorner.CornerRadius = UDim.new(0, 6)
@@ -404,7 +413,7 @@ keybindText = Instance.new("TextLabel")
 keybindText.Name = "KeybindText"
 keybindText.AnchorPoint = Vector2.new(0, 0)
 keybindText.Position = UDim2.fromScale(0, 0)
-keybindText.Size = UDim2.new(1, 0, 0, 0)
+keybindText.Size = UDim2.new(0, 160, 0, 0)
 keybindText.AutomaticSize = Enum.AutomaticSize.Y
 keybindText.BackgroundTransparency = 1
 keybindText.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -8135,11 +8144,11 @@ do
 	end)
 end
 do
-	local keybindHub = makeControlFrame(154)
+	local keybindHub = makeControlFrame(170)
 	keybindHub.Name = "KeybindSystemHub"
 	keybindHub.Parent = uiX
 	keybindHub.LayoutOrder = 1000000
-	keybindHub.ClipsDescendants = true
+	keybindHub.ClipsDescendants = false
 	local hubTitle = Instance.new("TextLabel")
 	hubTitle.BackgroundTransparency = 1
 	hubTitle.Position = UDim2.new(0, 16, 0, 8)
