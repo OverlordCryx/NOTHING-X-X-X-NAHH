@@ -120,7 +120,7 @@ local keybindToggles = {
 	Places = true
 }
 local scaleRegistry = {}
-local baseResolution = Vector2.new(1920, 1080)
+local baseResolution = Vector2.new(1900, 1200)
 local function getViewportScale()
 	local sizeX = screenGui and screenGui.AbsoluteSize.X or 1920
 	local sizeY = screenGui and screenGui.AbsoluteSize.Y or 1080
