@@ -26,6 +26,7 @@ local espOverlayConfig = {
     showStreak = false,
 }
 local espOverlayState = {}
+local refreshAllOverlays = function() end
 function showExistingGuiInfo(gui, title, text, duration)
 	local infoContainer = gui:FindFirstChild("InfoContainer")
 	local infoTitle = infoContainer and infoContainer:FindFirstChild("InfoTitle")
@@ -4291,18 +4292,20 @@ local function toggleSeriousModeTracker(state)
 	local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
 	if not SeriousModeTrackerEnabled then
 		if SM_PlayersAddedConn then SM_PlayersAddedConn:Disconnect(); SM_PlayersAddedConn = nil end
-		for plr, tracked in pairs(SM_playerConnections) do
-			if tracked then
-				for _, conn in ipairs(tracked) do
-					if conn and conn.Disconnect then conn:Disconnect() end
-				end
+		for plr, tracker in pairs(SM_playerConnections) do
+			if tracker and tracker.Disconnect then
+				pcall(function() tracker.Disconnect() end)
 			end
 		end
 		SM_playerConnections = {}
 		SM_playerState = {}
 		for _, plr in ipairs(Players:GetPlayers()) do
 			local char = plr.Character
-			if char then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+			if char then
+				if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
+					char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+				end
+			end
 		end
 		return
 	end
@@ -4325,33 +4328,6 @@ local function toggleSeriousModeTracker(state)
 			pcall(function() INFO(title, text, duration or 5) end)
 		end
 	end
-	local function ensureSharedHighlight(model)
-		if not model or not model:FindFirstChild("HumanoidRootPart") then return nil end
-		local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
-		if hl and not hl:IsA("Highlight") then hl:Destroy(); hl = nil end
-		if hl then return hl end
-		hl = Instance.new("Highlight")
-		hl.Name = SHARED_HIGHLIGHT_NAME
-		hl.Adornee = model
-		hl.Parent = model
-		hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		hl.FillTransparency = 0.8
-		hl.OutlineTransparency = 0
-		return hl
-	end
-	local function addHighlight(model, fillColor, enabled, outlineColor)
-		local hl = ensureSharedHighlight(model)
-		if not hl then return end
-		hl.OutlineColor = outlineColor or Color3.fromRGB(0, 0, 0)
-		hl.FillColor = fillColor
-		hl.Enabled = enabled
-	end
-	local function removeHighlight(model)
-		if model then
-			local hl = model:FindFirstChild(SHARED_HIGHLIGHT_NAME)
-			if hl then hl:Destroy() end
-		end
-	end
 	local function getSkillType(backpack)
 		for _, tool in ipairs(backpack:GetChildren()) do
 			if strongSkills[tool.Name] then return "strong" end
@@ -4367,7 +4343,9 @@ local function toggleSeriousModeTracker(state)
 		local humanoid = char:FindFirstChildOfClass("Humanoid")
 		if not humanoid or humanoid.Health <= 0 then
 			SM_playerState[plr] = nil
-			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+			if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
+				char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+			end
 			return
 		end
 		local skill = getSkillType(backpack)
@@ -4385,7 +4363,11 @@ local function toggleSeriousModeTracker(state)
 			task.delay(9.4, function()
 				if SM_activeTimers[plr] == timerId and SM_playerState[plr] == "weak" then
 					SM_playerState[plr] = nil
-					if char and char.Parent then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
+					if char and char.Parent then
+						if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
+							char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+						end
+					end
 					callInfo("SERIOUS MODE", plr.Name .. " - END", 5)
 				end
 			end)
@@ -4394,16 +4376,15 @@ local function toggleSeriousModeTracker(state)
 	local function startGlobalChecker()
 		task.spawn(function()
 			while SeriousModeTrackerEnabled do
-				task.wait(0.25) 
+				task.wait(0.1) 
 				for _, plr in ipairs(Players:GetPlayers()) do
 					if plr == Players.LocalPlayer then continue end
 					local char = plr.Character
 					if not char then continue end
 					local shouldHaveState = SM_playerState[plr]
-					if shouldHaveState then
+					local currentState = char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE)
+					if currentState ~= shouldHaveState then
 						char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, shouldHaveState)
-					else
-						char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
 					end
 				end
 			end
@@ -4411,54 +4392,73 @@ local function toggleSeriousModeTracker(state)
 	end
 	local function setupPlayer(plr)
 		if plr == Players.LocalPlayer then return end
-		local function disconnectTrackedConnections()
-			local tracked = SM_playerConnections[plr]
-			if not tracked then return end
-			for _, conn in ipairs(tracked) do
+		local playerConns = {}
+		local charConns = {}
+		local function disconnectCharConnections()
+			for _, conn in ipairs(charConns) do
 				if conn and conn.Disconnect then conn:Disconnect() end
 			end
+			table.clear(charConns)
+		end
+		local function disconnectAllConnections()
+			disconnectCharConnections()
+			for _, conn in ipairs(playerConns) do
+				if conn and conn.Disconnect then conn:Disconnect() end
+			end
+			table.clear(playerConns)
 			SM_playerConnections[plr] = nil
 		end
+		SM_playerConnections[plr] = {
+			Disconnect = disconnectAllConnections
+		}
 		local function onCharacterAdded(char)
-			task.wait(0.4)
 			SM_playerState[plr] = nil
-			if char and char.Parent then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
-			char = char or plr.Character
-			if not char or char ~= plr.Character then return end
-			disconnectTrackedConnections()
-			local backpack = plr:WaitForChild("Backpack", 6)
-			if not backpack then return end
-			SM_playerConnections[plr] = {
-				backpack.ChildAdded:Connect(function()
-					task.wait(0.1)
-					if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
-				end),
-				backpack.ChildRemoved:Connect(function()
-					task.wait(0.1)
-					if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
-				end)
-			}
-			local hum = char:FindFirstChild("Humanoid") or char:WaitForChild("Humanoid", 3)
-			if hum and char == plr.Character then
-				table.insert(SM_playerConnections[plr], hum.Died:Connect(function()
-					SM_playerState[plr] = nil
-					if char and char.Parent then char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
-				end))
-				updatePlayer(plr)
+			if char and char.Parent then
+				if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
+					char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+				end
 			end
+			disconnectCharConnections()
+			task.spawn(function()
+				local backpack = plr:WaitForChild("Backpack", 10)
+				if not backpack or plr.Character ~= char then return end
+				local cAdded = backpack.ChildAdded:Connect(function()
+					task.defer(function()
+						if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+					end)
+				end)
+				local cRemoved = backpack.ChildRemoved:Connect(function()
+					task.defer(function()
+						if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+					end)
+				end)
+				table.insert(charConns, cAdded)
+				table.insert(charConns, cRemoved)
+				local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+				if hum and plr.Character == char then
+					local diedConn = hum.Died:Connect(function()
+						SM_playerState[plr] = nil
+						if char and char.Parent then
+							if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
+								char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+							end
+						end
+					end)
+					table.insert(charConns, diedConn)
+				end
+				if SeriousModeTrackerEnabled then updatePlayer(plr) end
+			end)
 		end
 		if plr.Character then onCharacterAdded(plr.Character) end
 		local cAdded = plr.CharacterAdded:Connect(onCharacterAdded)
 		local aChanged = plr.AncestryChanged:Connect(function(_, parent)
 			if parent == nil then
-				disconnectTrackedConnections()
+				disconnectAllConnections()
 				SM_playerState[plr] = nil
-				if plr.Character then plr.Character:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil) end
 			end
 		end)
-		if not SM_playerConnections[plr] then SM_playerConnections[plr] = {} end
-		table.insert(SM_playerConnections[plr], cAdded)
-		table.insert(SM_playerConnections[plr], aChanged)
+		table.insert(playerConns, cAdded)
+		table.insert(playerConns, aChanged)
 	end
 	startGlobalChecker()
 	for _, plr in ipairs(Players:GetPlayers()) do
@@ -4845,6 +4845,7 @@ task.spawn(function()
             end
         end)
     end
+    local localAnimConn = nil
     local function setupCharacter(char)
         local comm = char:FindFirstChild("Communicate")
         if comm then
@@ -4856,6 +4857,18 @@ task.spawn(function()
         char.ChildAdded:Connect(function(child)
             if child.Name == "Communicate" then
                 communicate = child
+            end
+        end)
+        if localAnimConn then pcall(function() localAnimConn:Disconnect() end); localAnimConn = nil end
+        task.spawn(function()
+            local humanoid = char:WaitForChild("Humanoid", 10)
+            local animator = humanoid and humanoid:WaitForChild("Animator", 10)
+            if animator and char.Parent then
+                localAnimConn = animator.AnimationPlayed:Connect(function(track)
+                    if antiDeathEnabled and not isProcessingAntiDeath and track.Animation and track.Animation.AnimationId == "rbxassetid://11343250001" then
+                        task.spawn(bypassDeathCounter)
+                    end
+                end)
             end
         end)
     end
@@ -4981,13 +4994,13 @@ task.spawn(function()
         return row
     end
     local espRow1 = makeEspRow(30)
-    makeHubTog(espRow1, "HP %", function(v) espOverlayConfig.showHp = v end, "Overlay4HP", false, 1/4)
-    makeHubTog(espRow1, "Name (CH)", function(v) espOverlayConfig.showCharacter = v end, "Overlay4Character", false, 1/4)
-    makeHubTog(espRow1, "ULT %", function(v) espOverlayConfig.showUltimate = v end, "Overlay4Ultimate", false, 1/4)
-    makeHubTog(espRow1, "Streak", function(v) espOverlayConfig.showStreak = v end, "Overlay4Streak", false, 1/4)
+    makeHubTog(espRow1, "HP %", function(v) espOverlayConfig.showHp = v; refreshAllOverlays() end, "Overlay4HP", false, 1/4)
+    makeHubTog(espRow1, "Name (CH)", function(v) espOverlayConfig.showCharacter = v; refreshAllOverlays() end, "Overlay4Character", false, 1/4)
+    makeHubTog(espRow1, "ULT %", function(v) espOverlayConfig.showUltimate = v; refreshAllOverlays() end, "Overlay4Ultimate", false, 1/4)
+    makeHubTog(espRow1, "Streak", function(v) espOverlayConfig.showStreak = v; refreshAllOverlays() end, "Overlay4Streak", false, 1/4)
     local espRow2 = makeEspRow(60)
-    makeHubTog(espRow2, "ULT ESP", function(v) espOverlayConfig.showEsp = v end, "Overlay4ESP", false, 1/2)
-    makeHubTog(espRow2, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v) end, "DeathCounterESPEnabled", false, 1/2)
+    makeHubTog(espRow2, "ULT ESP", function(v) espOverlayConfig.showEsp = v; refreshAllOverlays() end, "Overlay4ESP", false, 1/2) 
+    makeHubTog(espRow2, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v); refreshAllOverlays() end, "DeathCounterESPEnabled", false, 1/2)
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
     fakerPingHub.LayoutOrder = 2
@@ -8718,7 +8731,22 @@ task.spawn(function()
 		state.model = model
 		espOverlayState[targetPlayer] = state
 	end
+	local playerOverlayConnections = {}
+
+	local function disconnectOverlayConnections(targetPlayer)
+		local conns = playerOverlayConnections[targetPlayer]
+		if conns then
+			for _, conn in ipairs(conns) do
+				if conn and conn.Disconnect then
+					pcall(function() conn:Disconnect() end)
+				end
+			end
+			playerOverlayConnections[targetPlayer] = nil
+		end
+	end
+
 	local function cleanupPlayerOverlay(targetPlayer)
+		disconnectOverlayConnections(targetPlayer)
 		local state = espOverlayState[targetPlayer]
 		local model = state and state.model
 		if model and model.Parent then
@@ -8728,10 +8756,109 @@ task.spawn(function()
 				highlight.OutlineColor = Color3.fromRGB(128, 128, 128)
 				scheduleHighlightDestroy(model)
 			end
+			local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
+			if billboard then
+				pcall(function() billboard:Destroy() end)
+			end
 		end
 		espOverlayState[targetPlayer] = nil
 	end
-	Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
+
+	local function setupPlayerOverlay(targetPlayer)
+		disconnectOverlayConnections(targetPlayer)
+		if targetPlayer == player then return end
+
+		local conns = {}
+		playerOverlayConnections[targetPlayer] = conns
+
+		local function onCharAdded(char)
+			pcall(updatePlayerOverlay, targetPlayer)
+
+			-- Wait for humanoid and listen to changes
+			task.spawn(function()
+				local humanoid = char:WaitForChild("Humanoid", 10)
+				if humanoid and playerOverlayConnections[targetPlayer] == conns and char.Parent then
+					local hpConn = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+						pcall(updatePlayerOverlay, targetPlayer)
+					end)
+					local maxHpConn = humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+						pcall(updatePlayerOverlay, targetPlayer)
+					end)
+					table.insert(conns, hpConn)
+					table.insert(conns, maxHpConn)
+					pcall(updatePlayerOverlay, targetPlayer)
+				end
+			end)
+
+			-- Attribute changes on Character
+			local attrConn = char.AttributeChanged:Connect(function(attr)
+				if attr == "Character" or attr == "Ulted" or attr == "CurrentStreak" or attr == "NX_SeriousModeState" then
+					pcall(updatePlayerOverlay, targetPlayer)
+				end
+			end)
+			table.insert(conns, attrConn)
+
+			-- Check for humanoid recreation/child addition
+			local childConn = char.ChildAdded:Connect(function(child)
+				if child:IsA("Humanoid") then
+					local hpConn = child:GetPropertyChangedSignal("Health"):Connect(function()
+						pcall(updatePlayerOverlay, targetPlayer)
+					end)
+					local maxHpConn = child:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+						pcall(updatePlayerOverlay, targetPlayer)
+					end)
+					table.insert(conns, hpConn)
+					table.insert(conns, maxHpConn)
+					pcall(updatePlayerOverlay, targetPlayer)
+				end
+			end)
+			table.insert(conns, childConn)
+
+			pcall(updatePlayerOverlay, targetPlayer)
+		end
+
+		if targetPlayer.Character then
+			task.spawn(onCharAdded, targetPlayer.Character)
+		end
+
+		local charAddedConn = targetPlayer.CharacterAdded:Connect(function(char)
+			task.spawn(onCharAdded, char)
+		end)
+		table.insert(conns, charAddedConn)
+
+		local charRemovingConn = targetPlayer.CharacterRemoving:Connect(function()
+			cleanupPlayerOverlay(targetPlayer)
+		end)
+		table.insert(conns, charRemovingConn)
+
+		-- Attribute changes on Player object
+		local playerAttrConn = targetPlayer.AttributeChanged:Connect(function(attr)
+			if attr == "Ultimate" then
+				pcall(updatePlayerOverlay, targetPlayer)
+			end
+		end)
+		table.insert(conns, playerAttrConn)
+	end
+
+	-- Expose refresh function to other scopes
+	refreshAllOverlays = function()
+		for _, targetPlayer in ipairs(Players:GetPlayers()) do
+			if targetPlayer ~= player then
+				pcall(updatePlayerOverlay, targetPlayer)
+			end
+		end
+	end
+
+	-- Initialize overlays for existing players
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		setupPlayerOverlay(targetPlayer)
+	end
+
+	-- Listen for new and departing players
+	local playerAddedOverlayConn = Players.PlayerAdded:Connect(setupPlayerOverlay)
+	local playerRemovingOverlayConn = Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
+
+	-- Slow backup loop to handle Roblox character quirks and highlight desyncs
 	task.spawn(function()
 		while screenGui.Parent do
 			local overlayEnabled = espOverlayConfig.showHp
@@ -8739,12 +8866,27 @@ task.spawn(function()
 				or espOverlayConfig.showUltimate
 				or espOverlayConfig.showEsp
 				or espOverlayConfig.showStreak
-			for _, targetPlayer in ipairs(Players:GetPlayers()) do
-				if targetPlayer ~= player then
-					updatePlayerOverlay(targetPlayer)
+				or SeriousModeTrackerEnabled
+			if overlayEnabled then
+				for _, targetPlayer in ipairs(Players:GetPlayers()) do
+					if targetPlayer ~= player then
+						pcall(updatePlayerOverlay, targetPlayer)
+					end
 				end
 			end
-			task.wait(overlayEnabled and 0.2 or 0.5)
+			task.wait(1.5)
+		end
+	end)
+
+	-- Cleanup when UI is destroyed
+	task.spawn(function()
+		while screenGui.Parent do
+			task.wait(1.5)
+		end
+		pcall(function() playerAddedOverlayConn:Disconnect() end)
+		pcall(function() playerRemovingOverlayConn:Disconnect() end)
+		for _, targetPlayer in ipairs(Players:GetPlayers()) do
+			cleanupPlayerOverlay(targetPlayer)
 		end
 	end)
 end)
