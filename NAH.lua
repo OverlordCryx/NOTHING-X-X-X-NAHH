@@ -108,17 +108,18 @@ screenGui.Parent = CoreGui
 local keybindFrame
 local targetFrame
 local keybindToggles = {
-	Speed = true,
-	Fly = true,
-	CamLock = true,
-	AttackTP = true,
-	Target = true,
-	WalkFling = true,
-	SetBack = true,
-	Trash = true,
-	Void = true,
-	Places = true
+	Speed = "off",
+	Fly = "off",
+	CamLock = "off",
+	AttackTP = "off",
+	Target = "off",
+	WalkFling = "off",
+	SetBack = "off",
+	Trash = "off",
+	Void = "off",
+	Places = "off"
 }
+local hideNamesEnabled = false
 local scaleRegistry = {}
 local baseResolution = Vector2.new(1900, 1200)
 local function getViewportScale()
@@ -537,6 +538,99 @@ function makeHubTog(parent, text, callback, saveKey, default, widthMult)
 		Button = btn,
 		SetValue = setValue,
 		GetValue = function() return enabled end,
+		tog_change = setValue
+	}
+end
+function makeHubTogKB(parent, text, callback, saveKey, default, widthMult)
+	local btn = Instance.new("TextButton")
+	btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	btn.BackgroundTransparency = 0
+	btn.BorderSizePixel = 0
+	btn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Size = UDim2.new(widthMult or 0.25, 0, 1, 0)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	btn.AutoButtonColor = false
+	btn.Font = Enum.Font.GothamBold
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextStrokeTransparency = 1
+	btn.TextSize = 13
+	btn.TextScaled = false
+	btn.Parent = parent
+	local kbStates = { "off", "hide", "block" }
+	local state = default or "off"
+	if saveKey and getSavedControlValue(saveKey) ~= nil then
+		local saved = getSavedControlValue(saveKey)
+		if saved == "hide" or saved == "block" then
+			state = saved
+		elseif saved == true then
+			state = "block"
+		else
+			state = "off"
+		end
+	end
+	local function render()
+		if state == "hide" then
+			btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			btn.TextColor3 = Color3.fromRGB(0, 0, 0)
+			btn.Text = text .. " (H)"
+		elseif state == "block" then
+			btn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			btn.Text = text .. " (B)"
+		else
+			btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			btn.Text = text
+		end
+	end
+	local function nextState()
+		if state == "off" then
+			return "hide"
+		elseif state == "hide" then
+			return "block"
+		else
+			return "off"
+		end
+	end
+	local function setValue(val, skipCallback)
+		if val == "hide" or val == "block" then
+			state = val
+		else
+			state = "off"
+		end
+		render()
+		if saveKey then setSavedControlValue(saveKey, state) end
+		if not skipCallback and callback then callback(state) end
+	end
+	btn.MouseButton1Click:Connect(function()
+		setValue(nextState())
+	end)
+	if state ~= "off" and callback then
+		if uiLoaded then
+			task.spawn(callback, state)
+		else
+			local capturedState = state
+			table.insert(queuedCallbacks, function()
+				task.spawn(callback, capturedState)
+			end)
+		end
+	elseif state == "off" and callback then
+		if uiLoaded then
+			task.spawn(callback, "off")
+		else
+			table.insert(queuedCallbacks, function()
+				task.spawn(callback, "off")
+			end)
+		end
+	end
+	render()
+	return {
+		Button = btn,
+		SetValue = setValue,
+		GetValue = function() return state end,
 		tog_change = setValue
 	}
 end
@@ -1204,8 +1298,8 @@ local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneHPCharacter = nil
-local safeZoneHPThresholdEnter = 26
-local safeZoneHPThresholdExit = 34
+local safeZoneHPThresholdEnter = 33
+local safeZoneHPThresholdExit = 37
 local safeZoneCycleIndex = 0
 local safeZonePositions = {
 	Vector3.new(9e9, -6666, 9e9),
@@ -1324,6 +1418,9 @@ function saveSliderSaveData()
 	end)
 end
 loadSliderSaveData()
+if type(controlSaveData.KeybindHideNamesEnabled) == "boolean" then
+	hideNamesEnabled = controlSaveData.KeybindHideNamesEnabled
+end
 if type(controlSaveData.Overlay4HP) == "boolean" then espOverlayConfig.showHp = controlSaveData.Overlay4HP end
 if type(controlSaveData.Overlay4Character) == "boolean" then espOverlayConfig.showCharacter = controlSaveData.Overlay4Character end
 if type(controlSaveData.Overlay4Ultimate) == "boolean" then espOverlayConfig.showUltimate = controlSaveData.Overlay4Ultimate end
@@ -1397,34 +1494,47 @@ do
 	}
 	for toggleKey, saveKey in pairs(keybindToggleSaveKeys) do
 		local saved = controlSaveData[saveKey]
-		if type(saved) == "boolean" then
+		if saved == "hide" or saved == "block" or saved == "off" then
 			keybindToggles[toggleKey] = saved
+		elseif saved == true then
+			keybindToggles[toggleKey] = "block"
+		elseif saved == false then
+			keybindToggles[toggleKey] = "off"
+		else
+			keybindToggles[toggleKey] = "off"
 		end
 	end
 end
 function parseEnabledValue(value)
 	if type(value) == "boolean" then
 		return value
+	elseif value == "true" or value == 1 then
+		return true
+	elseif value == "false" or value == 0 then
+		return false
 	end
-	if value == nil then
-		return farmEnabled
-	end
-	local normalized = string.lower(tostring(value))
-	return normalized == "on" or normalized == "true" or normalized == "1"
+	return nil
 end
-local hideNamesKeybindEnabled = false
 function updateKeybindText()
 	local lines = {}
 	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places" }
-	local function appendEntry(entry)
+	-- Map keybindEntries keys to keybindToggles keys
+	local toggleKeyMap = {
+		TargetPick = "Target",
+		VoidDead = "Void",
+		GetTrash = "Trash",
+	}
+	local function appendEntry(entry, toggleState)
 		if not entry then
 			return
 		end
-		local name = hideNamesKeybindEnabled and "" or tostring(entry.name or "")
+		local name = tostring(entry.name or "")
 		local keybind = tostring(entry.keybind or "")
-		local hideState = entry.hideState == true
-		local stateText = tostring(entry.stateText or ((entry.enabled == true) and "ON" or "OFF"))
-		if hideState then
+		if hideNamesEnabled then
+			name = ""
+		end
+		-- In "hide" mode: show name and keybind but hide the state text
+		if toggleState == "hide" or entry.hideState == true then
 			if name ~= "" and keybind ~= "" then
 				lines[#lines + 1] = string.format("%s (%s)", name, keybind)
 			elseif name ~= "" then
@@ -1434,6 +1544,8 @@ function updateKeybindText()
 			end
 			return
 		end
+		-- In "block" mode: show name, keybind, and state text
+		local stateText = tostring(entry.stateText or ((entry.enabled == true) and "ON" or "OFF"))
 		if name ~= "" and keybind ~= "" then
 			lines[#lines + 1] = string.format("%s (%s) (%s)", name, keybind, stateText)
 		elseif name ~= "" then
@@ -1443,13 +1555,16 @@ function updateKeybindText()
 		end
 	end
 	for _, key in ipairs(orderedKeys) do
-		local allowed = true
-		if key == "TargetPick" and not keybindToggles.Target then allowed = false end
-		if key == "VoidDead" and not keybindToggles.Void then allowed = false end
-		if key == "GetTrash" and not keybindToggles.Trash then allowed = false end
-		if keybindToggles[key] == false then allowed = false end
-		if allowed then
-			appendEntry(keybindEntries[key])
+		local toggleKey = toggleKeyMap[key] or key
+		local toggleState = keybindToggles[toggleKey]
+		-- Under the new rules:
+		-- "off" state (default) -> shown in the keybind frame (with state text, i.e., "block" style).
+		-- "hide" or "block" -> hidden from the keybind frame.
+		if toggleState == "off" or toggleState == nil then
+			appendEntry(keybindEntries[key], "block")
+		elseif key == "Custom" then
+			-- Custom entries are always shown if they exist
+			appendEntry(keybindEntries[key], "block")
 		end
 	end
 	if #lines == 0 then
@@ -2411,10 +2526,12 @@ local function safeZoneTeleportToSafe(character, hrp)
 	hrp.AssemblyLinearVelocity = Vector3.zero
 	hrp.AssemblyAngularVelocity = Vector3.zero
 end
+local safeZoneHPStuckTimer = 0
 local function safeZoneExitCleanup(hrp)
 	local exitCharacter = safeZoneHPCharacter
 	safeZoneHPInSafeZone = false
 	safeZoneHPCharacter = nil
+	safeZoneHPStuckTimer = 0
 	if not afkEnabled then
 		safeZoneRestoreProtection()
 		if hrp and safeZoneHPSavedCFrame then
@@ -2467,6 +2584,7 @@ local function handleSafeZoneHP()
 			safeZoneHPInSafeZone = false
 			safeZoneHPCharacter = nil
 			safeZoneHPSavedCFrame = nil
+			safeZoneHPStuckTimer = 0
 			safeZoneRestoreProtection()
 			if getTrashState.running then
 				stopGetTrashImmediate()
@@ -2479,11 +2597,20 @@ local function handleSafeZoneHP()
 	if safeZoneHPInSafeZone then
 		local exitHp = math.min(safeZoneHPThresholdExit, maxHp)
 		if hp >= exitHp then
+			safeZoneHPStuckTimer = 0
 			safeZoneExitCleanup(hrp)
 		else
-			if safeZonePositions[safeZoneCycleIndex] then
+			local targetPos = safeZonePositions[safeZoneCycleIndex]
+			if targetPos then
+				-- Bug fix: if the game moved us far from safe position, switch to next slot
+				local distFromSafe = (hrp.Position - targetPos).Magnitude
+				if distFromSafe > 50 then
+					safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+					targetPos = safeZonePositions[safeZoneCycleIndex]
+					safeZoneHPStuckTimer = 0
+				end
 				hrp.Anchored = false
-				character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
+				character:PivotTo(CFrame.new(targetPos))
 				hrp.AssemblyLinearVelocity = Vector3.zero
 				hrp.AssemblyAngularVelocity = Vector3.zero
 			end
@@ -2519,6 +2646,7 @@ local function toggleSafeZoneHP(enabled)
 			safeZoneHPInSafeZone = false
 			safeZoneHPCharacter = nil
 			safeZoneHPSavedCFrame = nil
+			safeZoneHPStuckTimer = 0
 			safeZoneRestoreProtection()
 			if getTrashState.running then
 				stopGetTrashImmediate()
@@ -8154,7 +8282,7 @@ do
 	end)
 end
 do
-	local keybindHub = makeControlFrame(170)
+	local keybindHub = makeControlFrame(200)
 	keybindHub.Name = "KeybindSystemHub"
 	keybindHub.Parent = uiX
 	keybindHub.LayoutOrder = 1000000
@@ -8185,21 +8313,22 @@ do
 		layout.Parent = row
 		return row
 	end
-	local row1 = makeRow(30)
-	makeHubTog(row1, "Hide Names", function(v) hideNamesKeybindEnabled = v; updateKeybindText() end, "HideNamesKeybind", false, 1/3)
-	makeHubTog(row1, "Speed KB", function(v) keybindToggles.Speed = v; updateKeybindText() end, "KeybindSpeedEnabled", true, 1/3)
-	makeHubTog(row1, "Fly KB", function(v) keybindToggles.Fly = v; updateKeybindText() end, "KeybindFlyEnabled", true, 1/3)
-	local row2 = makeRow(60)
-	makeHubTog(row2, "CamLock KB", function(v) keybindToggles.CamLock = v; updateKeybindText() end, "KeybindCamLockEnabled", true, 1/3)
-	makeHubTog(row2, "Attack TP KB", function(v) keybindToggles.AttackTP = v; updateKeybindText() end, "KeybindAttackTPEnabled", true, 1/3)
-	makeHubTog(row2, "Target KB", function(v) keybindToggles.Target = v; updateKeybindText() end, "KeybindTargetEnabled", true, 1/3)
-	local row3 = makeRow(90)
-	makeHubTog(row3, "WalkFling KB", function(v) keybindToggles.WalkFling = v; updateKeybindText() end, "KeybindWalkFlingEnabled", true, 1/3)
-	makeHubTog(row3, "SetBack KB", function(v) keybindToggles.SetBack = v; updateKeybindText() end, "KeybindSetBackEnabled", true, 1/3)
-	makeHubTog(row3, "Trash KB", function(v) keybindToggles.Trash = v; updateKeybindText() end, "KeybindTrashEnabled", true, 1/3)
-	local row4 = makeRow(120)
-	makeHubTog(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", true, 1/2)
-	makeHubTog(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", true, 1/2)
+	local rowHideNames = makeRow(30)
+	makeHubTog(rowHideNames, "Hide Names", function(v) hideNamesEnabled = v; updateKeybindText() end, "KeybindHideNamesEnabled", false, 1.0)
+	local row1 = makeRow(60)
+	makeHubTogKB(row1, "Speed KB", function(v) keybindToggles.Speed = v; updateKeybindText() end, "KeybindSpeedEnabled", "off", 1/2)
+	makeHubTogKB(row1, "Fly KB", function(v) keybindToggles.Fly = v; updateKeybindText() end, "KeybindFlyEnabled", "off", 1/2)
+	local row2 = makeRow(90)
+	makeHubTogKB(row2, "CamLock KB", function(v) keybindToggles.CamLock = v; updateKeybindText() end, "KeybindCamLockEnabled", "off", 1/3)
+	makeHubTogKB(row2, "Attack TP KB", function(v) keybindToggles.AttackTP = v; updateKeybindText() end, "KeybindAttackTPEnabled", "off", 1/3)
+	makeHubTogKB(row2, "Target KB", function(v) keybindToggles.Target = v; updateKeybindText() end, "KeybindTargetEnabled", "off", 1/3)
+	local row3 = makeRow(120)
+	makeHubTogKB(row3, "WalkFling KB", function(v) keybindToggles.WalkFling = v; updateKeybindText() end, "KeybindWalkFlingEnabled", "off", 1/3)
+	makeHubTogKB(row3, "SetBack KB", function(v) keybindToggles.SetBack = v; updateKeybindText() end, "KeybindSetBackEnabled", "off", 1/3)
+	makeHubTogKB(row3, "Trash KB", function(v) keybindToggles.Trash = v; updateKeybindText() end, "KeybindTrashEnabled", "off", 1/3)
+	local row4 = makeRow(150)
+	makeHubTogKB(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", "off", 1/2)
+	makeHubTogKB(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", "off", 1/2)
 	-- Sync keybind display with restored toggle states (fixes auto-load hide/off/block)
 	task.defer(updateKeybindText)
 end
@@ -8792,7 +8921,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 	local key = input.KeyCode
 	local isBacktick = (key.Name == "BackQuote" or key.Name == "Backquote" or key == Enum.KeyCode.Tilde or key.Value == 96 or key.Value == 126)
-	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick and keybindToggles.Places then
+	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick and keybindToggles.Places ~= "block" then
 		if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
 			return
 		end
@@ -8831,35 +8960,35 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		setSettingsVisible(not settingsOpen)
 		return
 	end
-	if key == voidDeadKeybind and keybindToggles.Void then
+	if key == voidDeadKeybind and keybindToggles.Void ~= "block" then
 		toggleVoidDead()
 		return
 	end
-	if key == speedKeybind and keybindToggles.Speed then
+	if key == speedKeybind and keybindToggles.Speed ~= "block" then
 		toggleSpeed()
 		return
 	end
-	if key == flyKeybind and keybindToggles.Fly then
+	if key == flyKeybind and keybindToggles.Fly ~= "block" then
 		toggleFly()
 		return
 	end
-	if key == camLockKeybind and keybindToggles.CamLock then
+	if key == camLockKeybind and keybindToggles.CamLock ~= "block" then
 		toggleCamLock()
 		return
 	end
-	if key == attackTpKeybind and keybindToggles.AttackTP then
+	if key == attackTpKeybind and keybindToggles.AttackTP ~= "block" then
 		toggleAttackTp()
 		return
 	end
-	if key == targetSelectKeybind and keybindToggles.Target then
+	if key == targetSelectKeybind and keybindToggles.Target ~= "block" then
 		toggleMouseTargetSelection()
 		return
 	end
-	if key == walkFlingKeybind and keybindToggles.WalkFling then
+	if key == walkFlingKeybind and keybindToggles.WalkFling ~= "block" then
 		setWalkFlingEnabled()
 		return
 	end
-	if key == setBackKeybind and keybindToggles.SetBack then
+	if key == setBackKeybind and keybindToggles.SetBack ~= "block" then
 		if getTrashState.blockSetBack
 			and not getTrashState.running
 			and not getTrashState.returning
@@ -8873,7 +9002,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		handleSetBackKeybind()
 		return
 	end
-	if key == getTrashState.keybind and keybindToggles.Trash then
+	if key == getTrashState.keybind and keybindToggles.Trash ~= "block" then
 		if getTrashState.keyHeld then
 			return
 		end
