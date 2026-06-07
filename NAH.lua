@@ -1299,9 +1299,14 @@ local safeZoneHPEnabled = false
 local safeZoneHPSavedCFrame = nil
 local safeZoneHPInSafeZone = false
 local safeZoneHPCharacter = nil
+local safeZoneRestoring = false
 local safeZoneHPThresholdEnter = 33
 local safeZoneHPThresholdExit = 37
 local safeZoneCycleIndex = 0
+local activeSafeZonePosition = nil
+local function isSafeZoneActive()
+	return afkEnabled or (safeZoneHPEnabled and safeZoneHPInSafeZone) or safeZoneRestoring
+end
 local safeZonePositions = {
 	Vector3.new(9e9, -6666, 9e9),
 	Vector3.new(-9e9, -6666, 9e9),
@@ -1708,6 +1713,10 @@ local function toggleVoidDead(state)
 	if targetState == nil then
 		targetState = not voidDeadActive
 	end
+	if targetState and isSafeZoneActive() then
+		if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
+		return
+	end
 	if voidDeadActive == targetState then return end
 	local plr = game:GetService("Players").LocalPlayer
 	local character = plr.Character
@@ -1747,7 +1756,7 @@ local function toggleVoidDead(state)
 	end)
 	if voidDeadConn then voidDeadConn:Disconnect() end
 	voidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
-		if not voidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) then
+		if not voidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) or isSafeZoneActive() then
 			if voidDeadConn then 
 				voidDeadConn:Disconnect() 
 				voidDeadConn = nil
@@ -1776,6 +1785,10 @@ local function toggleDVoidDead(state)
 	local targetState = state
 	if targetState == nil then
 		targetState = not dVoidDeadActive
+	end
+	if targetState and isSafeZoneActive() then
+		if DVoidDeadToggle then DVoidDeadToggle.SetValue(false, true) end
+		return
 	end
 	if dVoidDeadActive == targetState then return end
 	local plr = game:GetService("Players").LocalPlayer
@@ -1817,7 +1830,7 @@ local function toggleDVoidDead(state)
 		local targetModel = resolveAttackTpTarget()
 		local targetPlayer = targetModel and game:GetService("Players"):GetPlayerFromCharacter(targetModel)
 		local targetHumanoid = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
-		if not dVoidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) then
+		if not dVoidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) or isSafeZoneActive() then
 			if dVoidDeadConn then 
 				dVoidDeadConn:Disconnect() 
 				dVoidDeadConn = nil
@@ -2027,9 +2040,9 @@ function applyOrbitFlingStep(myRoot, targetRoot, dt, power)
 end
 function setWalkFlingEnabled(enabled)
 	local nextState = enabled == nil and not walkFlingEnabled or enabled == true
-	if walkFlingEnabled == nextState then
+	if nextState and isSafeZoneActive() then
 		syncWalkFlingKeybindDisplay()
-		return walkFlingEnabled and "ON" or "OFF"
+		return "OFF"
 	end
 	walkFlingEnabled = nextState
 	if walkFlingEnabled then
@@ -2039,6 +2052,7 @@ function setWalkFlingEnabled(enabled)
 			local moveOffset = 0.1
 			while walkFlingEnabled and walkFlingTaskToken == currentToken do
 				RunService.Heartbeat:Wait()
+				if isSafeZoneActive() then continue end
 				local currentCharacter = player.Character
 				local rootPart = getRootUniversal(currentCharacter)
 				if currentCharacter and rootPart then
@@ -2078,6 +2092,10 @@ function setWalkFlingEnabled(enabled)
 end
 function setAuraFlingEnabled(enabled)
 	local nextState = enabled == nil and not auraFlingEnabled or enabled == true
+	if nextState and isSafeZoneActive() then
+		syncFlingModeControls()
+		return "OFF"
+	end
 	auraFlingEnabled = nextState
 	if auraFlingHeartbeat then
 		pcall(function()
@@ -2088,6 +2106,10 @@ function setAuraFlingEnabled(enabled)
 	if auraFlingEnabled then
 		auraFlingHeartbeat = task.spawn(function()
 			while auraFlingEnabled do
+				if isSafeZoneActive() then
+					nextFrame()
+					continue
+				end
 				local myCharacter = player.Character
 				local myRoot = getRootUniversal(myCharacter)
 				if myRoot then
@@ -2135,6 +2157,7 @@ function setAuraFlingEnabled(enabled)
 	return auraFlingEnabled and "ON" or "OFF"
 end
 function clickFlingTargetModel(targetModel)
+	if isSafeZoneActive() then return end
 	if isTargetBlacklisted and isTargetBlacklisted(targetModel, Players:GetPlayerFromCharacter(targetModel)) then
 		return
 	end
@@ -2153,7 +2176,7 @@ function clickFlingTargetModel(targetModel)
 		local startedAt = tick()
 		resetGlobalFlingMotion()
 		while tick() - startedAt < 5 do
-			if not clickFlingEnabled then
+			if not clickFlingEnabled or isSafeZoneActive() then
 				break
 			end
 			local targetRoot = getRootUniversal(targetModel)
@@ -2189,6 +2212,10 @@ function getTargetModelFromClickedPart(part)
 end
 function setClickFlingEnabled(enabled)
 	local nextState = enabled == nil and not clickFlingEnabled or enabled == true
+	if nextState and isSafeZoneActive() then
+		syncFlingModeControls()
+		return "OFF"
+	end
 	clickFlingEnabled = nextState
 	if clickFlingConnection then
 		clickFlingConnection:Disconnect()
@@ -2213,6 +2240,10 @@ function setClickFlingEnabled(enabled)
 end
 function setFlingAllEnabled(enabled)
 	local nextState = enabled == nil and not flingAllEnabled or enabled == true
+	if nextState and isSafeZoneActive() then
+		syncFlingModeControls()
+		return "OFF"
+	end
 	flingAllEnabled = nextState
 	if flingAllHeartbeat then
 		flingAllHeartbeat:Disconnect()
@@ -2228,6 +2259,9 @@ function setFlingAllEnabled(enabled)
 					flingAllHeartbeat = nil
 				end
 				resetGlobalFlingMotion()
+				return
+			end
+			if isSafeZoneActive() then
 				return
 			end
 			local myRoot = getRootUniversal(player.Character)
@@ -2258,6 +2292,45 @@ function setFlingAllEnabled(enabled)
 	end
 	syncFlingModeControls()
 	return flingAllEnabled and "ON" or "OFF"
+end
+local function disableConflictingFeatures()
+	if walkFlingEnabled then setWalkFlingEnabled(false) end
+	if auraFlingEnabled then setAuraFlingEnabled(false) end
+	if clickFlingEnabled then setClickFlingEnabled(false) end
+	if flingAllEnabled then setFlingAllEnabled(false) end
+	if voidDeadActive then toggleVoidDead(false) end
+	if dVoidDeadActive then toggleDVoidDead(false) end
+	stopSetBackTravel()
+end
+local function restorePosition(savedCFrame)
+	safeZoneRestoring = true
+	local character = player.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if hrp and savedCFrame then
+		hrp.Anchored = false
+		
+		-- Step 1: Teleport to 0, -6666, 0
+		hrp.CFrame = CFrame.new(0, -6666, 0)
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+		task.wait()
+		
+		-- Step 2: Teleport to saved X/Z, Y -6666
+		if hrp.Parent then
+			hrp.CFrame = CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z)
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			task.wait()
+		end
+		
+		-- Step 3: Teleport to saved X/Y/Z
+		if hrp.Parent then
+			hrp.CFrame = savedCFrame
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+	safeZoneRestoring = false
 end
 function WalkFling_bind(value)
 	local decoded = decodeKeybindValue(value)
@@ -2398,235 +2471,102 @@ local function toggleSpeed(nextState)
 end
 local function toggleAFK(enabled)
 	afkEnabled = enabled
+	-- Disconnect old connections
 	if afkConnection then
 		afkConnection:Disconnect()
 		afkConnection = nil
 	end
+	if afkCharAddedConnection then
+		afkCharAddedConnection:Disconnect()
+		afkCharAddedConnection = nil
+	end
 	if afkEnabled then
-		if voidDeadActive then
-			toggleVoidDead(false)
-		end
-		local protection = _G.NOTHINGX_Protection
-		if protection then
-			protection.Enabled = false
-			protection.oldBoundarySize = protection.boundarySize
-			protection.boundarySize = Vector3.new(2e10, 0, 2e10)
-		end
-		_G.SafeTeleportLock = true
-		safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
+		-- Save current position instantly
 		local character = player.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			if not safeZoneHPInSafeZone then
-				afkSavedCFrame = hrp.CFrame
-			else
-				afkSavedCFrame = safeZoneHPSavedCFrame
-			end
+			afkSavedCFrame = hrp.CFrame
 			afkCharacter = character
-			local targetPos = safeZonePositions[safeZoneCycleIndex]
-			hrp.Anchored = false
-			character:PivotTo(CFrame.new(targetPos))
-			hrp.AssemblyLinearVelocity = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
 		else
 			afkSavedCFrame = nil
 			afkCharacter = nil
 		end
-		afkCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
-			afkSavedCFrame = nil
-			afkCharacter = nil
-			local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
-			if newRoot and afkEnabled then
-				afkCharacter = newChar
-				local targetPos = safeZonePositions[safeZoneCycleIndex]
-				newRoot.Anchored = false
-				newChar:PivotTo(CFrame.new(targetPos))
-				newRoot.AssemblyLinearVelocity = Vector3.zero
-				newRoot.AssemblyAngularVelocity = Vector3.zero
-			end
-		end)
-		afkConnection = game:GetService("RunService").Stepped:Connect(function()
+		-- Turn off conflicting features
+		disableConflictingFeatures()
+		-- Teleport instantly to same X/Z, Y -6666
+		if hrp then
+			hrp.Anchored = false
+			hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end
+		-- Heartbeat loop: keep player looping under map every frame
+		local loopIndex = 1
+		local loopPositions = {
+			Vector3.new(0, -6666, 0),
+			Vector3.new(10000, -6666, 0),
+			Vector3.new(0, -6666, 10000)
+		}
+		local isFirstTp = false -- already teleported initially above
+		afkConnection = RunService.Heartbeat:Connect(function()
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if char and afkCharacter and char ~= afkCharacter then
-				afkSavedCFrame = nil
+			if not root then return end
+			-- If character changed, update tracking
+			if char ~= afkCharacter then
 				afkCharacter = char
 			end
-			if root and not afkSavedCFrame and (hum and hum.Health > 0) then
-				if not safeZoneHPInSafeZone then
-					afkSavedCFrame = root.CFrame
+			-- Save position if we don't have one yet (new character)
+			if not afkSavedCFrame then
+				afkSavedCFrame = root.CFrame
+			end
+			-- Force unanchor and teleport
+			root.Anchored = false
+			if isFirstTp then
+				isFirstTp = false
+				if afkSavedCFrame then
+					root.CFrame = CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z)
 				else
-					afkSavedCFrame = safeZoneHPSavedCFrame
+					root.CFrame = CFrame.new(root.Position.X, -6666, root.Position.Z)
 				end
-				afkCharacter = char
+			else
+				root.CFrame = CFrame.new(loopPositions[loopIndex])
+				loopIndex = (loopIndex % #loopPositions) + 1
 			end
-			if hum and hum.Health <= 0 then
-				afkSavedCFrame = nil
-			end
-			if root then
-				local targetPos = safeZonePositions[safeZoneCycleIndex]
-				root.Anchored = false
-				char:PivotTo(CFrame.new(targetPos))
-				root.AssemblyLinearVelocity = Vector3.zero
-				root.AssemblyAngularVelocity = Vector3.zero
-			end
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+		end)
+		-- Handle respawn: save no position, just keep teleporting
+		afkCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
+			afkSavedCFrame = nil
+			afkCharacter = newChar
+			task.spawn(function()
+				local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
+				if newRoot and afkEnabled then
+					newRoot.Anchored = false
+					newRoot.CFrame = CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z)
+					newRoot.AssemblyLinearVelocity = Vector3.zero
+					newRoot.AssemblyAngularVelocity = Vector3.zero
+					isFirstTp = true
+				end
+			end)
 		end)
 	else
-		if afkCharAddedConnection then
-			afkCharAddedConnection:Disconnect()
-			afkCharAddedConnection = nil
-		end
-		local protection = _G.NOTHINGX_Protection
-		if not safeZoneHPInSafeZone then
-			if protection then
-				protection.Enabled = true
-				if protection.oldBoundarySize then
-					protection.boundarySize = protection.oldBoundarySize
-				end
-			end
-			_G.SafeTeleportLock = false
-			local character = player.Character
-			local hrp = character and character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.Anchored = false
-				if afkSavedCFrame then
-					character:PivotTo(afkSavedCFrame)
-					hrp.AssemblyLinearVelocity = Vector3.zero
-					hrp.AssemblyAngularVelocity = Vector3.zero
-				end
-			end
+		-- Toggle OFF: restore saved position
+		if afkSavedCFrame then
+			task.spawn(restorePosition, afkSavedCFrame)
 		end
 		afkSavedCFrame = nil
+		afkCharacter = nil
 	end
 	return afkEnabled and "ON" or "OFF"
 end
-local function safeZoneRestoreProtection()
-	local protection = _G.NOTHINGX_Protection
-	if protection then
-		protection.Enabled = true
-		if protection.oldBoundarySize then
-			protection.boundarySize = protection.oldBoundarySize
-		end
-	end
-	_G.SafeTeleportLock = false
-end
-local function safeZoneDisableProtection()
-	local protection = _G.NOTHINGX_Protection
-	if protection then
-		protection.Enabled = false
-		protection.oldBoundarySize = protection.boundarySize
-		protection.boundarySize = Vector3.new(2e10, 0, 2e10)
-	end
-	_G.SafeTeleportLock = true
-end
-local function safeZoneTeleportToSafe(character, hrp)
-	safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-	hrp.Anchored = false
-	character:PivotTo(CFrame.new(safeZonePositions[safeZoneCycleIndex]))
-	hrp.AssemblyLinearVelocity = Vector3.zero
-	hrp.AssemblyAngularVelocity = Vector3.zero
-end
-local safeZoneHPStuckTimer = 0
-local function safeZoneExitCleanup(hrp)
-	local exitCharacter = safeZoneHPCharacter
-	safeZoneHPInSafeZone = false
-	safeZoneHPCharacter = nil
-	safeZoneHPStuckTimer = 0
-	if not afkEnabled then
-		safeZoneRestoreProtection()
-		if hrp and safeZoneHPSavedCFrame then
-			local char = exitCharacter or (hrp and hrp.Parent)
-			hrp.Anchored = false
-			if char and char:FindFirstChild("HumanoidRootPart") then
-				char:PivotTo(safeZoneHPSavedCFrame)
-			else
-				hrp.CFrame = safeZoneHPSavedCFrame
-			end
-			hrp.AssemblyLinearVelocity = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-		end
-	end
-	if getTrashState.running then
-		stopGetTrashImmediate()
-	else
-		getTrashState.blockSetBack = false
-	end
-	safeZoneHPSavedCFrame = nil
-end
-local function safeZoneEnterSafeZone(character, hrp)
-	safeZoneHPInSafeZone = true
-	safeZoneHPCharacter = character
-	if getTrashState.running and getTrashState.savedCFrame then
-		safeZoneHPSavedCFrame = getTrashState.savedCFrame
-	else
-		safeZoneHPSavedCFrame = hrp.CFrame
-	end
-	if voidDeadActive then
-		toggleVoidDead(false)
-	end
-	if attackTpEnabled then
-		toggleAttackTp(false)
-	end
-	safeZoneDisableProtection()
-	safeZoneTeleportToSafe(character, hrp)
-end
-local function handleSafeZoneHP()
-	if not safeZoneHPEnabled or afkEnabled then return end
-	if os.clock() - characterSpawnTime < 3.5 then return end
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local hrp = character and character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or not hrp then return end
-	local hp = humanoid.Health
-	local maxHp = humanoid.MaxHealth
-	if hp <= 0 or (safeZoneHPInSafeZone and safeZoneHPCharacter and character ~= safeZoneHPCharacter) then
-		if safeZoneHPInSafeZone then
-			safeZoneHPInSafeZone = false
-			safeZoneHPCharacter = nil
-			safeZoneHPSavedCFrame = nil
-			safeZoneHPStuckTimer = 0
-			safeZoneRestoreProtection()
-			if getTrashState.running then
-				stopGetTrashImmediate()
-			else
-				getTrashState.blockSetBack = false
-			end
-		end
-		return
-	end
-	if safeZoneHPInSafeZone then
-		local exitHp = math.min(safeZoneHPThresholdExit, maxHp)
-		if hp >= exitHp then
-			safeZoneHPStuckTimer = 0
-			safeZoneExitCleanup(hrp)
-		else
-			local targetPos = safeZonePositions[safeZoneCycleIndex]
-			if targetPos then
-				-- Bug fix: if the game moved us far from safe position, switch to next slot
-				local distFromSafe = (hrp.Position - targetPos).Magnitude
-				if distFromSafe > 50 then
-					safeZoneCycleIndex = (safeZoneCycleIndex % #safeZonePositions) + 1
-					targetPos = safeZonePositions[safeZoneCycleIndex]
-					safeZoneHPStuckTimer = 0
-				end
-				hrp.Anchored = false
-				character:PivotTo(CFrame.new(targetPos))
-				hrp.AssemblyLinearVelocity = Vector3.zero
-				hrp.AssemblyAngularVelocity = Vector3.zero
-			end
-		end
-	else
-		local hpPercent = (maxHp > 0) and (hp / maxHp * 100) or 100
-		if hpPercent < safeZoneHPThresholdEnter then
-			safeZoneEnterSafeZone(character, hrp)
-		end
-	end
-end
+-- Safe Zone HP variables
 local safeZoneHPConnection = nil
 local safeZoneHPCharAddedConnection = nil
 local function toggleSafeZoneHP(enabled)
 	safeZoneHPEnabled = enabled
+	-- Disconnect old connections
 	if safeZoneHPConnection then
 		safeZoneHPConnection:Disconnect()
 		safeZoneHPConnection = nil
@@ -2635,29 +2575,105 @@ local function toggleSafeZoneHP(enabled)
 		safeZoneHPCharAddedConnection:Disconnect()
 		safeZoneHPCharAddedConnection = nil
 	end
+	-- If turning off while in safe zone, restore position
 	if not enabled and safeZoneHPInSafeZone then
-		local character = player.Character
-		local hrp = character and character:FindFirstChild("HumanoidRootPart")
-		safeZoneExitCleanup(hrp)
+		if safeZoneHPSavedCFrame then
+			task.spawn(restorePosition, safeZoneHPSavedCFrame)
+		end
+		safeZoneHPInSafeZone = false
+		safeZoneHPCharacter = nil
+		safeZoneHPSavedCFrame = nil
 	end
 	if enabled then
-		safeZoneHPConnection = RunService.Stepped:Connect(handleSafeZoneHP)
+		local loopIndex = 1
+		local loopPositions = {
+			Vector3.new(0, -6666, 0),
+			Vector3.new(10000, -6666, 0),
+			Vector3.new(0, -6666, 10000)
+		}
+		local isFirstTp = false
+		-- Heartbeat loop: check HP every frame
+		safeZoneHPConnection = RunService.Heartbeat:Connect(function()
+			if not safeZoneHPEnabled or afkEnabled then return end
+			local character = player.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			if not humanoid or not hrp then return end
+			local hp = humanoid.Health
+			local maxHp = humanoid.MaxHealth
+			if hp <= 0 then
+				-- Player died while in safe zone, reset state
+				if safeZoneHPInSafeZone then
+					safeZoneHPInSafeZone = false
+					safeZoneHPCharacter = nil
+					safeZoneHPSavedCFrame = nil
+				end
+				return
+			end
+			-- If character changed while in safe zone, reset
+			if safeZoneHPInSafeZone and safeZoneHPCharacter and character ~= safeZoneHPCharacter then
+				safeZoneHPInSafeZone = false
+				safeZoneHPCharacter = nil
+				safeZoneHPSavedCFrame = nil
+				return
+			end
+			if safeZoneHPInSafeZone then
+				-- Currently in safe zone, check if HP >= 40 to exit
+				if hp >= 40 then
+					-- Restore saved position
+					if safeZoneHPSavedCFrame then
+						task.spawn(restorePosition, safeZoneHPSavedCFrame)
+					end
+					safeZoneHPInSafeZone = false
+					safeZoneHPCharacter = nil
+					safeZoneHPSavedCFrame = nil
+				else
+					-- Stay in safe zone: keep teleporting every frame
+					hrp.Anchored = false
+					if isFirstTp then
+						isFirstTp = false
+						if safeZoneHPSavedCFrame then
+							hrp.CFrame = CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z)
+						else
+							hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+						end
+					else
+						hrp.CFrame = CFrame.new(loopPositions[loopIndex])
+						loopIndex = (loopIndex % #loopPositions) + 1
+					end
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					hrp.AssemblyAngularVelocity = Vector3.zero
+				end
+			else
+				-- Not in safe zone, check if HP <= 30 to enter
+				if hp <= 30 then
+					-- Turn off conflicting features
+					disableConflictingFeatures()
+					-- Save current position
+					safeZoneHPSavedCFrame = hrp.CFrame
+					safeZoneHPCharacter = character
+					safeZoneHPInSafeZone = true
+					-- Teleport instantly to same X/Z, Y -6666
+					hrp.Anchored = false
+					hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					hrp.AssemblyAngularVelocity = Vector3.zero
+					isFirstTp = false -- already did first teleport here
+					loopIndex = 1
+				end
+			end
+		end)
+		-- Handle respawn: reset safe zone HP state cleanly
 		safeZoneHPCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
 			characterSpawnTime = os.clock()
 			safeZoneHPInSafeZone = false
 			safeZoneHPCharacter = nil
 			safeZoneHPSavedCFrame = nil
-			safeZoneHPStuckTimer = 0
-			safeZoneRestoreProtection()
-			if getTrashState.running then
-				stopGetTrashImmediate()
-			else
-				getTrashState.blockSetBack = false
-			end
 		end)
 	end
 	return safeZoneHPEnabled and "ON" or "OFF"
 end
+-- Auto-enable from saved settings on load
 do
 	local savedAFK = controlSaveData.AFKEnabled
 	local savedHP = controlSaveData.HPSafeZoneEnabled
@@ -3119,6 +3135,7 @@ runGetTrash = function()
 	return "ON"
 end
 function saveSetBackPosition()
+	if isSafeZoneActive() then return false end
 	local currentCharacter = player.Character
 	local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
 	local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
@@ -3217,7 +3234,7 @@ function getSetBackTravelPosition(currentRoot, destination, step)
 	return currentRoot.Position + Vector3.new(0, 8, 0)
 end
 function startSetBackTravel()
-	if (_G.SafeTeleportLock == true) then
+	if (_G.SafeTeleportLock == true) or isSafeZoneActive() then
 		return false
 	end
 	local character = player.Character
@@ -3256,6 +3273,7 @@ function startSetBackTravel()
 	return true
 end
 function handleSetBackKeybind()
+	if isSafeZoneActive() then return end
 	if getTrashState.blockSetBack
 		and not getTrashState.running
 		and not getTrashState.returning
@@ -4328,10 +4346,20 @@ local function toggleSeriousModeTracker(state)
 			pcall(function() INFO(title, text, duration or 5) end)
 		end
 	end
-	local function getSkillType(backpack)
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if strongSkills[tool.Name] then return "strong" end
-			if weakSkills[tool.Name] then return "weak" end
+	local function getSkillType(backpack, character)
+		if backpack then
+			for _, tool in ipairs(backpack:GetChildren()) do
+				if strongSkills[tool.Name] then return "strong" end
+				if weakSkills[tool.Name] then return "weak" end
+			end
+		end
+		if character then
+			for _, tool in ipairs(character:GetChildren()) do
+				if tool:IsA("Tool") then
+					if strongSkills[tool.Name] then return "strong" end
+					if weakSkills[tool.Name] then return "weak" end
+				end
+			end
 		end
 		return nil
 	end
@@ -4339,24 +4367,26 @@ local function toggleSeriousModeTracker(state)
 		local char = plr.Character
 		if not char then return end
 		local backpack = plr:FindFirstChild("Backpack")
-		if not backpack then return end
 		local humanoid = char:FindFirstChildOfClass("Humanoid")
 		if not humanoid or humanoid.Health <= 0 then
 			SM_playerState[plr] = nil
 			if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
 				char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+				pcall(updatePlayerOverlay, plr)
 			end
 			return
 		end
-		local skill = getSkillType(backpack)
+		local skill = getSkillType(backpack, char)
 		local currentState = SM_playerState[plr]
 		if skill == "strong" and currentState ~= "strong" then
 			SM_playerState[plr] = "strong"
 			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "strong")
+			pcall(updatePlayerOverlay, plr)
 			callInfo("SERIOUS MODE", plr.Name .. " - ACTIVE", 5)
 		elseif skill == "weak" and currentState == "strong" then
 			SM_playerState[plr] = "weak"
 			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "weak")
+			pcall(updatePlayerOverlay, plr)
 			callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 7)
 			local timerId = tick()
 			SM_activeTimers[plr] = timerId
@@ -4366,27 +4396,29 @@ local function toggleSeriousModeTracker(state)
 					if char and char.Parent then
 						if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
 							char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+							pcall(updatePlayerOverlay, plr)
 						end
 					end
 					callInfo("SERIOUS MODE", plr.Name .. " - END", 5)
 				end
 			end)
+		elseif skill == nil and (currentState == "strong" or currentState == "weak") then
+			SM_playerState[plr] = nil
+			if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
+				char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
+				pcall(updatePlayerOverlay, plr)
+			end
 		end
 	end
 	local function startGlobalChecker()
 		task.spawn(function()
 			while SeriousModeTrackerEnabled do
-				task.wait(0.1) 
 				for _, plr in ipairs(Players:GetPlayers()) do
-					if plr == Players.LocalPlayer then continue end
-					local char = plr.Character
-					if not char then continue end
-					local shouldHaveState = SM_playerState[plr]
-					local currentState = char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE)
-					if currentState ~= shouldHaveState then
-						char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, shouldHaveState)
+					if plr ~= Players.LocalPlayer then
+						pcall(updatePlayer, plr)
 					end
 				end
+				task.wait(0) 
 			end
 		end)
 	end
@@ -4432,8 +4464,24 @@ local function toggleSeriousModeTracker(state)
 						if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
 					end)
 				end)
+				local charAdded = char.ChildAdded:Connect(function(child)
+					if child:IsA("Tool") then
+						task.defer(function()
+							if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+						end)
+					end
+				end)
+				local charRemoved = char.ChildRemoved:Connect(function(child)
+					if child:IsA("Tool") then
+						task.defer(function()
+							if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+						end)
+					end
+				end)
 				table.insert(charConns, cAdded)
 				table.insert(charConns, cRemoved)
+				table.insert(charConns, charAdded)
+				table.insert(charConns, charRemoved)
 				local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
 				if hum and plr.Character == char then
 					local diedConn = hum.Died:Connect(function()
@@ -6700,7 +6748,7 @@ toggleView = function(nextState)
 	return viewing and "ON" or "OFF"
 end
 function teleportToSelectedTarget(modeOverride)
-	if (_G.SafeTeleportLock == true) then
+	if (_G.SafeTeleportLock == true) or isSafeZoneActive() then
 		return
 	end
 	if not hasSelectedTargetOrPendingPlayer() then
@@ -8792,7 +8840,7 @@ task.spawn(function()
 
 			-- Attribute changes on Character
 			local attrConn = char.AttributeChanged:Connect(function(attr)
-				if attr == "Character" or attr == "Ulted" or attr == "CurrentStreak" or attr == "NX_SeriousModeState" then
+				if attr == "Character" or attr == "Ulted" or attr == "Ultimate" or attr == "CurrentStreak" or attr == "NX_SeriousModeState" then
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
@@ -8833,7 +8881,7 @@ task.spawn(function()
 
 		-- Attribute changes on Player object
 		local playerAttrConn = targetPlayer.AttributeChanged:Connect(function(attr)
-			if attr == "Ultimate" then
+			if attr == "Ultimate" or attr == "Ulted" then
 				pcall(updatePlayerOverlay, targetPlayer)
 			end
 		end)
@@ -8874,7 +8922,7 @@ task.spawn(function()
 					end
 				end
 			end
-			task.wait(1.5)
+			task.wait(0)
 		end
 	end)
 
@@ -9064,6 +9112,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local key = input.KeyCode
 	local isBacktick = (key.Name == "BackQuote" or key.Name == "Backquote" or key == Enum.KeyCode.Tilde or key.Value == 96 or key.Value == 126)
 	if game.GameId == 3808081382 and input.UserInputType == Enum.UserInputType.Keyboard and isBacktick and keybindToggles.Places ~= "block" then
+		if isSafeZoneActive() then return end
 		if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
 			return
 		end
@@ -9461,6 +9510,7 @@ do
 		end
 	end
 	local function performGodTP(target, allowFling)
+		if isSafeZoneActive() then return end
 		local character = player.Character
 		local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 		local characterHumanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -9520,6 +9570,7 @@ do
 				return
 			end
 			local function fastPerform(target, allowFling)
+				if isSafeZoneActive() then return end
 				local character = player.Character
 				local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
 				if characterRoot and not isTpBlocked(target) then
