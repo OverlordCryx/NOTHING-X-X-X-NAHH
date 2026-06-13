@@ -3981,7 +3981,8 @@ local function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
 		if offsetVec.Magnitude < 0.1 then
 			offsetVec = Vector3.new(0, 0.1, 0)
 		end
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + offsetVec + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+		local rotatedOffset = targetRoot.CFrame:VectorToWorldSpace(offsetVec)
+		finalCFrame = CFrame.lookAt(predictedTargetPosition + rotatedOffset + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
 	end
 	if not finalCFrame then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 6.8, 0), predictedTargetPosition, worldUpVector)
