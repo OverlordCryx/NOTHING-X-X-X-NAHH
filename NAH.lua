@@ -4271,15 +4271,17 @@ function INFO(title, text, time)
 	showInfo(title, text, time)
 end
 local SeriousModeTrackerEnabled = false
+local SeriousModeTrackerActive = false
 local SM_playerState = {}     
 local SM_activeTimers = {}
 local SM_playerConnections = {}
 local SM_PlayersAddedConn = nil
-local function toggleSeriousModeTracker(state)
-	SeriousModeTrackerEnabled = state == true
+
+local function toggleSeriousModeTrackerInternal(state)
+	SeriousModeTrackerActive = state == true
 	local Players = game:GetService("Players")
 	local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
-	if not SeriousModeTrackerEnabled then
+	if not SeriousModeTrackerActive then
 		if SM_PlayersAddedConn then SM_PlayersAddedConn:Disconnect(); SM_PlayersAddedConn = nil end
 		for plr, tracker in pairs(SM_playerConnections) do
 			if tracker and tracker.Disconnect then
@@ -4354,7 +4356,7 @@ local function toggleSeriousModeTracker(state)
 			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "strong")
 			pcall(updatePlayerOverlay, plr)
 			callInfo("SERIOUS MODE", plr.Name .. " - ACTIVE", 5)
-		elseif skill == "weak" and currentState == "strong" then
+		elseif currentState == "strong" and skill ~= "strong" then
 			SM_playerState[plr] = "weak"
 			char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, "weak")
 			pcall(updatePlayerOverlay, plr)
@@ -4373,17 +4375,11 @@ local function toggleSeriousModeTracker(state)
 					callInfo("SERIOUS MODE", plr.Name .. " - END", 5)
 				end
 			end)
-		elseif skill == nil and (currentState == "strong" or currentState == "weak") then
-			SM_playerState[plr] = nil
-			if char:GetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE) ~= nil then
-				char:SetAttribute(SERIOUS_MODE_STATE_ATTRIBUTE, nil)
-				pcall(updatePlayerOverlay, plr)
-			end
 		end
 	end
 	local function startGlobalChecker()
 		task.spawn(function()
-			while SeriousModeTrackerEnabled do
+			while SeriousModeTrackerActive do
 				for _, plr in ipairs(Players:GetPlayers()) do
 					if plr ~= Players.LocalPlayer then
 						pcall(updatePlayer, plr)
@@ -4427,25 +4423,25 @@ local function toggleSeriousModeTracker(state)
 				if not backpack or plr.Character ~= char then return end
 				local cAdded = backpack.ChildAdded:Connect(function()
 					task.defer(function()
-						if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+						if plr.Parent and SeriousModeTrackerActive then updatePlayer(plr) end
 					end)
 				end)
 				local cRemoved = backpack.ChildRemoved:Connect(function()
 					task.defer(function()
-						if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+						if plr.Parent and SeriousModeTrackerActive then updatePlayer(plr) end
 					end)
 				end)
 				local charAdded = char.ChildAdded:Connect(function(child)
 					if child:IsA("Tool") then
 						task.defer(function()
-							if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+							if plr.Parent and SeriousModeTrackerActive then updatePlayer(plr) end
 						end)
 					end
 				end)
 				local charRemoved = char.ChildRemoved:Connect(function(child)
 					if child:IsA("Tool") then
 						task.defer(function()
-							if plr.Parent and SeriousModeTrackerEnabled then updatePlayer(plr) end
+							if plr.Parent and SeriousModeTrackerActive then updatePlayer(plr) end
 						end)
 					end
 				end)
@@ -4465,7 +4461,7 @@ local function toggleSeriousModeTracker(state)
 					end)
 					table.insert(charConns, diedConn)
 				end
-				if SeriousModeTrackerEnabled then updatePlayer(plr) end
+				if SeriousModeTrackerActive then updatePlayer(plr) end
 			end)
 		end
 		if plr.Character then onCharacterAdded(plr.Character) end
@@ -4484,6 +4480,16 @@ local function toggleSeriousModeTracker(state)
 		setupPlayer(plr)
 	end
 	SM_PlayersAddedConn = Players.PlayerAdded:Connect(setupPlayer)
+end
+
+local function syncSeriousModeTracker()
+	local shouldActive = SeriousModeTrackerEnabled or espOverlayConfig.showDeath
+	toggleSeriousModeTrackerInternal(shouldActive)
+end
+
+local function toggleSeriousModeTracker(state)
+	SeriousModeTrackerEnabled = state == true
+	syncSeriousModeTracker()
 end
 local CharacterCleanupEnabled = false
 local ModConnections = {}
@@ -5217,7 +5223,7 @@ task.spawn(function()
     makeHubTog(espRow2, "ULT ESP", function(v) espOverlayConfig.showEsp = v; refreshAllOverlays() end, "Overlay4ESP", false, 1/2) 
     makeHubTog(espRow2, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v); refreshAllOverlays() end, "DeathCounterESPEnabled", false, 1/2)
     local espRow3 = makeEspRow(90)
-    makeHubTog(espRow3, "Death Cntr", function(v) espOverlayConfig.showDeath = v; refreshAllOverlays() end, "Overlay4Death", false, 1/2)
+    makeHubTog(espRow3, "Death Cntr", function(v) espOverlayConfig.showDeath = v; syncSeriousModeTracker(); refreshAllOverlays() end, "Overlay4Death", false, 1/2)
     makeHubTog(espRow3, "Ulted Info", function(v) espOverlayConfig.showUlted = v; refreshAllOverlays() end, "Overlay4Ulted", false, 1/2)
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
@@ -8704,21 +8710,22 @@ task.spawn(function()
 	end
 	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
 		local seriousModeState = model and model:GetAttribute("NX_SeriousModeState") or nil
-		if seriousModeState == "strong" then
-			return {
-				fill = Color3.fromRGB(0, 0, 0),
-				fillTransparency = 0.6,
-				outline = Color3.fromRGB(255, 255, 255),
-				enabled = true,
-			}
-		end
-		if seriousModeState == "weak" then
-			return {
-				fill = Color3.fromRGB(0, 0, 0),
-				fillTransparency = 0.6,
-				outline = Color3.fromRGB(255, 0, 0),
-				enabled = true,
-			}
+		if SeriousModeTrackerEnabled then
+			if seriousModeState == "strong" then
+				return {
+					fill = Color3.fromRGB(0, 0, 0),
+					fillTransparency = 0.6,
+					outline = Color3.fromRGB(255, 255, 255),
+					enabled = true,
+				}
+			elseif seriousModeState == "weak" then
+				return {
+					fill = Color3.fromRGB(0, 0, 0),
+					fillTransparency = 0.6,
+					outline = Color3.fromRGB(0, 0, 0),
+					enabled = true,
+				}
+			end
 		end
 		if canUseUltedHighlight and ultedAttr == true then
 			return {
@@ -8906,7 +8913,7 @@ task.spawn(function()
 					tostring(characterAttr or ""),
 					getCharacterNameColor(characterAttr)
 				)
-				local hideUltimateForBaldUlted = ultedAttr
+				local hideUltimateForBaldUlted = ultedAttr or showDeathState
 				local ultimateVisible = updateLine(
 					ultimateLine,
 					espOverlayConfig.showUltimate and hasUltimateAttr and not hideUltimateForBaldUlted,
@@ -8925,16 +8932,19 @@ task.spawn(function()
 					updateLine(streakLine, false, "", Color3.fromRGB(100, 180, 255))
 				end
 				local deathStateText = ""
+				local deathStateColor = Color3.fromRGB(255, 255, 255)
 				if smState == "strong" then
 					deathStateText = "-"
+					deathStateColor = Color3.fromRGB(255, 255, 255)
 				elseif smState == "weak" then
 					deathStateText = "DEATH"
+					deathStateColor = Color3.fromRGB(0, 0, 0)
 				end
 				local deathStateVisible = updateLine(
 					deathStateLine,
 					showDeathState,
 					deathStateText,
-					Color3.fromRGB(0, 255, 0)
+					deathStateColor
 				)
 				local ultedTextVisible = updateLine(
 					ultedTextLine,
