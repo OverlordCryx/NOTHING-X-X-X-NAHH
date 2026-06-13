@@ -4480,13 +4480,191 @@ local function toggleSeriousModeTracker(state)
 end
 local CharacterCleanupEnabled = false
 local ModConnections = {}
+local hooksRegistered = false
 local function toggleCharacterCleanupRuntime(state)
 	CharacterCleanupEnabled = state == true
+	if CharacterCleanupEnabled then
+		task.spawn(function()
+			local Players = game:GetService("Players")
+			local lp = Players.LocalPlayer
+			repeat
+				CharacterCleanupEnabled = true
+				pcall(function()
+					local char = lp.Character
+					if char then
+						for _, v in ipairs(char:GetDescendants()) do
+							if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
+								or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
+							then
+								pcall(function() v:Destroy() end)
+							end
+						end
+						local hrp = char:FindFirstChild("HumanoidRootPart")
+						if hrp then
+							hrp.AssemblyLinearVelocity  = Vector3.zero
+							hrp.AssemblyAngularVelocity = Vector3.zero
+						end
+					end
+				end)
+				task.wait(10) 
+			until not CharacterCleanupEnabled
+		end)
+	end
+	if state == true and not hooksRegistered then
+		hooksRegistered = true
+		task.spawn(function()
+			pcall(function()
+				local STUN_EFFECTS = {
+					["Velocity Up"] = true,
+					["StunCheck"]   = true,
+					["Wavey Velocity"]  = true,
+					["Velocity Aerial"] = true,
+					["RagdollCheck"]    = true,
+					["Stay Velocity"]   = true,
+					["MechStun"]        = true,
+				}
+				local C_list = {
+					["moveme"] = true,
+					["Slowed"] = true,
+					["Freeze"] = true,
+					["RagdollCheck"] = true,
+					["Ragdoll"] = true,
+					["StunCheck"] = true,
+					["Fallout"] = true,
+					["Position"] = true,
+					["pairs"] = true,
+					["Side"] = true,
+					["SideInversion"] = true,
+					["rightVector"] = true,
+					["SideFallout"] = true,
+				}
+				local replicationEvent = game:GetService("ReplicatedStorage"):WaitForChild("Replication", 10)
+				if replicationEvent then
+					local rbxSignal = replicationEvent.OnClientEvent
+					local function shouldBlockEffect(tbl)
+						if typeof(tbl) ~= "table" then return false end
+						local success, eff = pcall(function() return tbl.Effect end)
+						if not success or eff == nil then return false end
+						if STUN_EFFECTS[eff] ~= true then return false end
+						if eff == "Velocity Up" then
+							local successK, k1 = pcall(next, tbl)
+							if not successK then return false end
+							local successK2, k2 = pcall(next, tbl, k1)
+							return successK and k1 ~= nil and successK2 and k2 == nil
+						end
+						return true
+					end
+					local function shouldBlockCommunicate(tbl)
+						if typeof(tbl) ~= "table" then return false end
+						local success, goal = pcall(function() return tbl.Goal end)
+						if not success or goal == nil then return false end
+						if C_list[goal] ~= true then return false end
+						return true
+					end
+					local activeCommunicateSignals = setmetatable({}, { __mode = "k" })
+					local activeCommunicateEvents = setmetatable({}, { __mode = "k" })
+					local function registerCommunicate(instance)
+						if instance.Name == "Communicate" and instance:IsA("RemoteEvent") then
+							activeCommunicateEvents[instance] = true
+							local success, signal = pcall(function() return instance.OnClientEvent end)
+							if success and signal then
+								activeCommunicateSignals[signal] = true
+							end
+						end
+					end
+					game.DescendantAdded:Connect(registerCommunicate)
+					for _, desc in ipairs(game:GetDescendants()) do
+						registerCommunicate(desc)
+					end
+					if hookfunction then
+						local oldConnect
+						oldConnect = hookfunction(rbxSignal.Connect, function(self, callback)
+							if CharacterCleanupEnabled then
+								if rawequal(self, rbxSignal) then
+									return oldConnect(self, function(data, ...)
+										if typeof(data) == "table" and data.Effect and shouldBlockEffect(data) then
+											return
+										end
+										return callback(data, ...)
+									end)
+								elseif activeCommunicateSignals[self] then
+									return oldConnect(self, function(data, ...)
+										if typeof(data) == "table" and data.Goal and C_list[data.Goal] then
+											return
+										end
+										return callback(data, ...)
+									end)
+								end
+							end
+							return oldConnect(self, callback)
+						end)
+					end
+					if getconnections and hookfunction then
+						for _, conn in ipairs(getconnections(rbxSignal)) do
+							local oldConn; oldConn = hookfunction(conn.Function, function(data, ...)
+								if CharacterCleanupEnabled and typeof(data) == "table" and data.Effect and shouldBlockEffect(data) then
+									return
+								end
+								return oldConn(data, ...)
+							end)
+						end
+					end
+					if hookmetamethod then
+						local oldNamecall; oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+							if CharacterCleanupEnabled and getnamecallmethod() == "FireServer" then
+								if rawequal(self, replicationEvent) then
+									if shouldBlockEffect((...)) then return end
+								elseif activeCommunicateEvents[self] then
+									if shouldBlockCommunicate((...)) then return end
+								end
+							end
+							return oldNamecall(self, ...)
+						end))
+					elseif hookfunction then
+						local remoteEventClass = Instance.new("RemoteEvent")
+						local oldFireServer
+						oldFireServer = hookfunction(remoteEventClass.FireServer, function(self, arg1, ...)
+							if CharacterCleanupEnabled then
+								if rawequal(self, replicationEvent) and shouldBlockEffect(arg1) then return end
+								if activeCommunicateEvents[self] and shouldBlockCommunicate(arg1) then return end
+							end
+							return oldFireServer(self, arg1, ...)
+						end)
+					end
+					task.spawn(function()
+						local lp = game:GetService("Players").LocalPlayer
+						local hookedComm = {}
+						local function setupComm(char)
+							local Communicate = char:WaitForChild("Communicate", 9e9)
+							registerCommunicate(Communicate) 
+							if getconnections and hookfunction then
+								for _, connection in ipairs(getconnections(Communicate.OnClientEvent)) do
+									local func = connection.Function
+									if func and not hookedComm[func] then
+										hookedComm[func] = true
+										local oldConn; oldConn = hookfunction(func, function(data, ...)
+											if CharacterCleanupEnabled and typeof(data) == "table" and data.Goal and C_list[data.Goal] then
+												return
+											end
+											return oldConn(data, ...)
+										end)
+									end
+								end
+							end
+						end
+						if lp.Character then setupComm(lp.Character) end
+						lp.CharacterAdded:Connect(setupComm)
+					end)
+				end
+			end)
+		end)
+	end
 	if not CharacterCleanupEnabled then
 		if ModConnections.wsLoop then ModConnections.wsLoop:Disconnect(); ModConnections.wsLoop = nil end
 		if ModConnections.jpLoop then ModConnections.jpLoop:Disconnect(); ModConnections.jpLoop = nil end
 		if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect(); ModConnections.hrpLoop = nil end
 		if ModConnections.CharacterAdded then ModConnections.CharacterAdded:Disconnect(); ModConnections.CharacterAdded = nil end
+		if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
 		return
 	end
 	local Players = game:GetService("Players")
@@ -4552,9 +4730,27 @@ local function toggleCharacterCleanupRuntime(state)
 			end
 		end
 	end
+	local function SetupCharacterCleanup(Char)
+		if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
+		local function handleObj(v)
+			if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity") then
+				local Communicate = Char:FindFirstChild("Communicate") or Char:WaitForChild("Communicate", 2)
+				if Communicate then
+					pcall(function()
+						Communicate:FireServer({ Goal = "delete bv", BV = v })
+					end)
+				end
+			end
+		end
+		for _, v in ipairs(Char:GetDescendants()) do
+			handleObj(v)
+		end
+		ModConnections.descAdded = Char.DescendantAdded:Connect(handleObj)
+	end
 	local function OnCharacterAdded(Char)
 		local Human = Char:WaitForChild("Humanoid", 5)
 		if Human then SetupHumanoid(Char, Human) end
+		SetupCharacterCleanup(Char)
 		task.wait(0.25)
 		if CharacterCleanupEnabled then usunPusteAccessory(Char) end
 	end
@@ -4575,7 +4771,7 @@ local function toggleCharacterCleanupRuntime(state)
 		while CharacterCleanupEnabled do 
 			local args = { { Goal = "delete bv", BV = Instance.new("BodyVelocity", nil) } }
 			pcall(function() speaker.Character:WaitForChild("Communicate"):FireServer(unpack(args)) end)
-			task.wait(0.15)
+			task.wait()
 		end
 	end)
 end
