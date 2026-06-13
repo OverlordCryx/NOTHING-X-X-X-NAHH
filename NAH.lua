@@ -25,6 +25,8 @@ local espOverlayConfig = {
     showHp = false,
     showEsp = false,
     showStreak = false,
+    showDeath = false,
+    showUlted = false,
 }
 local espOverlayState = {}
 local refreshAllOverlays = function() end
@@ -1433,6 +1435,8 @@ if type(controlSaveData.Overlay4Character) == "boolean" then espOverlayConfig.sh
 if type(controlSaveData.Overlay4Ultimate) == "boolean" then espOverlayConfig.showUltimate = controlSaveData.Overlay4Ultimate end
 if type(controlSaveData.Overlay4ESP) == "boolean" then espOverlayConfig.showEsp = controlSaveData.Overlay4ESP end
 if type(controlSaveData.Overlay4Streak) == "boolean" then espOverlayConfig.showStreak = controlSaveData.Overlay4Streak end
+if type(controlSaveData.Overlay4Death) == "boolean" then espOverlayConfig.showDeath = controlSaveData.Overlay4Death end
+if type(controlSaveData.Overlay4Ulted) == "boolean" then espOverlayConfig.showUlted = controlSaveData.Overlay4Ulted end
 if tonumber(controlSaveData.Speed) then
 	Speed = tonumber(controlSaveData.Speed)
 end
@@ -5174,7 +5178,7 @@ task.spawn(function()
         local row3 = makeRow(90)
         makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/2)
     end
-    local espHub = makeControlFrame(isTSB and 124 or 94)
+    local espHub = makeControlFrame(isTSB and 154 or 94)
     espHub.Parent = uiX
     espHub.LayoutOrder = 2
     espHub.ClipsDescendants = true
@@ -5212,6 +5216,9 @@ task.spawn(function()
     local espRow2 = makeEspRow(60)
     makeHubTog(espRow2, "ULT ESP", function(v) espOverlayConfig.showEsp = v; refreshAllOverlays() end, "Overlay4ESP", false, 1/2) 
     makeHubTog(espRow2, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v); refreshAllOverlays() end, "DeathCounterESPEnabled", false, 1/2)
+    local espRow3 = makeEspRow(90)
+    makeHubTog(espRow3, "Death Cntr", function(v) espOverlayConfig.showDeath = v; refreshAllOverlays() end, "Overlay4Death", false, 1/2)
+    makeHubTog(espRow3, "Ulted Info", function(v) espOverlayConfig.showUlted = v; refreshAllOverlays() end, "Overlay4Ulted", false, 1/2)
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
     fakerPingHub.LayoutOrder = 2
@@ -8582,35 +8589,6 @@ task.spawn(function()
 		end
 		return math.clamp(math.floor(numericValue + 0.5), 0, 999)
 	end
-	local function getPlayerDeathCounterState(targetPlayer)
-		local char = targetPlayer.Character
-		if not char then return false, false end
-		local humanoid = char:FindFirstChildOfClass("Humanoid")
-		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-		local isHoldingCounter = false
-		if animator then
-			local success, tracks = pcall(function() return animator:GetPlayingAnimationTracks() end)
-			if success and tracks then
-				for _, track in ipairs(tracks) do
-					if track.Animation then
-						local animId = tostring(track.Animation.AnimationId)
-						if string.find(animId, "11343250001") then
-							isHoldingCounter = true
-							break
-						end
-					end
-				end
-			end
-		end
-		local hasTool = false
-		local backpack = targetPlayer:FindFirstChild("Backpack")
-		if backpack and backpack:FindFirstChild("Death Counter") then
-			hasTool = true
-		elseif char:FindFirstChild("Death Counter") then
-			hasTool = true
-		end
-		return isHoldingCounter, hasTool
-	end
 	local function getCharacterNameColor(characterName)
 		return Color3.fromRGB(255, 255, 255)
 	end
@@ -8655,7 +8633,7 @@ task.spawn(function()
 		line.TextScaled = false
 		line.TextSize = 14
 		line.TextWrapped = false
-		line.TextTruncate = Enum.TextTruncate.AtEnd
+		line.TextTruncate = Enum.TextTruncate.None
 		line.TextXAlignment = Enum.TextXAlignment.Left
 		line.TextYAlignment = Enum.TextYAlignment.Center
 		line.Visible = false
@@ -8719,29 +8697,12 @@ task.spawn(function()
 		createBillboardLine(frame, "SepThree", Color3.fromRGB(255, 255, 255)).LayoutOrder = 6
 		createBillboardLine(frame, "StreakLine", Color3.fromRGB(100, 180, 255)).LayoutOrder = 7
 		createBillboardLine(frame, "SepFour", Color3.fromRGB(255, 255, 255)).LayoutOrder = 8
-		createBillboardLine(frame, "DeathCounterLine", Color3.fromRGB(255, 0, 0)).LayoutOrder = 9
+		createBillboardLine(frame, "DeathStateLine", Color3.fromRGB(0, 255, 0)).LayoutOrder = 9
+		createBillboardLine(frame, "SepFive", Color3.fromRGB(255, 255, 255)).LayoutOrder = 10
+		createBillboardLine(frame, "UltedTextLine", Color3.fromRGB(255, 255, 0)).LayoutOrder = 11
 		return billboard
 	end
 	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
-		local targetPlayer = Players:GetPlayerFromCharacter(model)
-		if targetPlayer and canUseUltedHighlight then
-			local isHoldingCounter, hasCounterTool = getPlayerDeathCounterState(targetPlayer)
-			if isHoldingCounter then
-				return {
-					fill = Color3.fromRGB(150, 0, 0),
-					fillTransparency = 0.5,
-					outline = Color3.fromRGB(255, 0, 0),
-					enabled = true,
-				}
-			elseif hasCounterTool then
-				return {
-					fill = Color3.fromRGB(0, 0, 0),
-					fillTransparency = 0.6,
-					outline = Color3.fromRGB(255, 120, 0),
-					enabled = true,
-				}
-			end
-		end
 		local seriousModeState = model and model:GetAttribute("NX_SeriousModeState") or nil
 		if seriousModeState == "strong" then
 			return {
@@ -8831,7 +8792,22 @@ task.spawn(function()
 	end
 	local function measureTextWidth(text)
 		local str = tostring(text or "")
-		return math.max(#str * 8 + 2, 1)
+		local width = 0
+		for i = 1, #str do
+			local char = string.sub(str, i, i)
+			if char == "%" then
+				width = width + 12
+			elseif char == "M" or char == "W" then
+				width = width + 11
+			elseif char == "/" then
+				width = width + 7
+			elseif string.match(char, "%u") then
+				width = width + 9
+			else
+				width = width + 7.5
+			end
+		end
+		return math.max(math.ceil(width + 4), 1)
 	end
 	local function updateLine(line, isVisible, text, color)
 		if not line then
@@ -8890,9 +8866,10 @@ task.spawn(function()
 		local hpPercent = humanoid.MaxHealth > 0 and ((humanoid.Health / humanoid.MaxHealth) * 100) or 0
 		local hpValue = clampPercent(hpPercent)
 		local ultimateValue = clampPercent(ultimateAttr)
-		local isHoldingCounter, hasCounterTool = getPlayerDeathCounterState(targetPlayer)
-		local showDC = isHoldingCounter or hasCounterTool
-		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate or espOverlayConfig.showStreak or showDC
+		local smState = model:GetAttribute("NX_SeriousModeState")
+		local showDeathState = espOverlayConfig.showDeath and (smState == "strong" or smState == "weak")
+		local showUltedText = espOverlayConfig.showUlted and ultedAttr
+		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate or espOverlayConfig.showStreak or showDeathState or showUltedText
 		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
 		if not showBillboard then
 			if billboard then
@@ -8912,7 +8889,9 @@ task.spawn(function()
 				local sepThree = frame and frame:FindFirstChild("SepThree")
 				local streakLine = frame and frame:FindFirstChild("StreakLine")
 				local sepFour = frame and frame:FindFirstChild("SepFour")
-				local deathCounterLine = frame and frame:FindFirstChild("DeathCounterLine")
+				local deathStateLine = frame and frame:FindFirstChild("DeathStateLine")
+				local sepFive = frame and frame:FindFirstChild("SepFive")
+				local ultedTextLine = frame and frame:FindFirstChild("UltedTextLine")
 				local visibleCount = 0
 				local contentWidth = 0
 				local visibleGuiCount = 0
@@ -8945,20 +8924,23 @@ task.spawn(function()
 				else
 					updateLine(streakLine, false, "", Color3.fromRGB(100, 180, 255))
 				end
-				local dcText = ""
-				local dcColor = Color3.fromRGB(255, 0, 0)
-				if isHoldingCounter then
-					dcText = "[COUNTERING]"
-					dcColor = Color3.fromRGB(255, 0, 0)
-				elseif hasCounterTool then
-					dcText = "[DC]"
-					dcColor = Color3.fromRGB(255, 120, 0)
+				local deathStateText = ""
+				if smState == "strong" then
+					deathStateText = "-"
+				elseif smState == "weak" then
+					deathStateText = "DEATH"
 				end
-				local dcVisible = updateLine(
-					deathCounterLine,
-					showDC,
-					dcText,
-					dcColor
+				local deathStateVisible = updateLine(
+					deathStateLine,
+					showDeathState,
+					deathStateText,
+					Color3.fromRGB(0, 255, 0)
+				)
+				local ultedTextVisible = updateLine(
+					ultedTextLine,
+					showUltedText,
+					"ULT",
+					Color3.fromRGB(255, 255, 0)
 				)
 				if hpVisible then
 					visibleCount = visibleCount + 1
@@ -8972,18 +8954,23 @@ task.spawn(function()
 				if streakVisible then
 					visibleCount = visibleCount + 1
 				end
-				if dcVisible then
+				if deathStateVisible then
+					visibleCount = visibleCount + 1
+				end
+				if ultedTextVisible then
 					visibleCount = visibleCount + 1
 				end
 				local showSepOne = hpVisible and characterVisible
 				local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
 				local showSepThree = (hpVisible or characterVisible or ultimateVisible) and streakVisible
-				local showSepFour = (hpVisible or characterVisible or ultimateVisible or streakVisible) and dcVisible
+				local showSepFour = (hpVisible or characterVisible or ultimateVisible or streakVisible) and deathStateVisible
+				local showSepFive = (hpVisible or characterVisible or ultimateVisible or streakVisible or deathStateVisible) and ultedTextVisible
 				updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 255, 255))
 				updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 255, 255))
 				updateLine(sepThree, showSepThree, "//", Color3.fromRGB(255, 255, 255))
 				updateLine(sepFour, showSepFour, "//", Color3.fromRGB(255, 255, 255))
-				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine, sepThree, streakLine, sepFour, deathCounterLine }) do
+				updateLine(sepFive, showSepFive, "//", Color3.fromRGB(255, 255, 255))
+				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine, sepThree, streakLine, sepFour, deathStateLine, sepFive, ultedTextLine }) do
 					if guiObject and guiObject.Visible then
 						visibleGuiCount = visibleGuiCount + 1
 						contentWidth = contentWidth + guiObject.Size.X.Offset
@@ -9066,26 +9053,6 @@ task.spawn(function()
 					end)
 					table.insert(conns, hpConn)
 					table.insert(conns, maxHpConn)
-					
-					-- Monitor animator for Death Counter pose changes
-					local animator = humanoid:WaitForChild("Animator", 5)
-					if animator then
-						local animConn = animator.AnimationPlayed:Connect(function(track)
-							if track.Animation then
-								local animId = tostring(track.Animation.AnimationId)
-								if string.find(animId, "11343250001") then
-									pcall(updatePlayerOverlay, targetPlayer)
-									local stopConn
-									stopConn = track.Stopped:Connect(function()
-										stopConn:Disconnect()
-										pcall(updatePlayerOverlay, targetPlayer)
-									end)
-								end
-							end
-						end)
-						table.insert(conns, animConn)
-					end
-					
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
@@ -9105,39 +9072,10 @@ task.spawn(function()
 					end)
 					table.insert(conns, hpConn)
 					table.insert(conns, maxHpConn)
-					
-					local animator = child:WaitForChild("Animator", 5)
-					if animator then
-						local animConn = animator.AnimationPlayed:Connect(function(track)
-							if track.Animation then
-								local animId = tostring(track.Animation.AnimationId)
-								if string.find(animId, "11343250001") then
-									pcall(updatePlayerOverlay, targetPlayer)
-									local stopConn
-									stopConn = track.Stopped:Connect(function()
-										stopConn:Disconnect()
-										pcall(updatePlayerOverlay, targetPlayer)
-									end)
-								end
-							end
-						end)
-						table.insert(conns, animConn)
-					end
-					
-					pcall(updatePlayerOverlay, targetPlayer)
-				elseif child:IsA("Tool") then
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
 			table.insert(conns, childConn)
-			
-			local childRemovedConn = char.ChildRemoved:Connect(function(child)
-				if child:IsA("Tool") then
-					pcall(updatePlayerOverlay, targetPlayer)
-				end
-			end)
-			table.insert(conns, childRemovedConn)
-			
 			pcall(updatePlayerOverlay, targetPlayer)
 		end
 		if targetPlayer.Character then
@@ -9157,22 +9095,6 @@ task.spawn(function()
 			end
 		end)
 		table.insert(conns, playerAttrConn)
-		
-		-- Monitor backpack additions/removals
-		task.spawn(function()
-			local backpack = targetPlayer:WaitForChild("Backpack", 10)
-			if backpack and playerOverlayConnections[targetPlayer] == conns then
-				local bAdded = backpack.ChildAdded:Connect(function(child)
-					pcall(updatePlayerOverlay, targetPlayer)
-				end)
-				local bRemoved = backpack.ChildRemoved:Connect(function(child)
-					pcall(updatePlayerOverlay, targetPlayer)
-				end)
-				table.insert(conns, bAdded)
-				table.insert(conns, bRemoved)
-				pcall(updatePlayerOverlay, targetPlayer)
-			end
-		end)
 	end
 	refreshAllOverlays = function()
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
