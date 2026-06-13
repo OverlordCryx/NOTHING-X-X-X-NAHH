@@ -4271,13 +4271,13 @@ function INFO(title, text, time)
 	showInfo(title, text, time)
 end
 local SeriousModeTrackerEnabled = false
-local SeriousModeTrackerActive = false
+SeriousModeTrackerActive = false
 local SM_playerState = {}     
 local SM_activeTimers = {}
 local SM_playerConnections = {}
 local SM_PlayersAddedConn = nil
 
-local function toggleSeriousModeTrackerInternal(state)
+function toggleSeriousModeTrackerInternal(state)
 	SeriousModeTrackerActive = state == true
 	local Players = game:GetService("Players")
 	local SERIOUS_MODE_STATE_ATTRIBUTE = "NX_SeriousModeState"
@@ -4482,12 +4482,12 @@ local function toggleSeriousModeTrackerInternal(state)
 	SM_PlayersAddedConn = Players.PlayerAdded:Connect(setupPlayer)
 end
 
-local function syncSeriousModeTracker()
+function syncSeriousModeTracker()
 	local shouldActive = SeriousModeTrackerEnabled or espOverlayConfig.showDeath
 	toggleSeriousModeTrackerInternal(shouldActive)
 end
 
-local function toggleSeriousModeTracker(state)
+function toggleSeriousModeTracker(state)
 	SeriousModeTrackerEnabled = state == true
 	syncSeriousModeTracker()
 end
@@ -4822,26 +4822,26 @@ local function initInvisibleBorderCleanup()
 	end)
 end
 initInvisibleBorderCleanup()
-local StayToggle = nil
-local DashToggle = nil
-local stayPos = nil
-local stayConn = nil
-local stayGyro = nil
-local isActive = false
-local directions = {
+StayToggle = nil
+DashToggle = nil
+stayPos = nil
+stayConn = nil
+stayGyro = nil
+isActive = false
+directions = {
     Enum.KeyCode.A,
     Enum.KeyCode.D,
     Enum.KeyCode.S,
 }
-local DashBlockRunning = false
-local DashThread = nil
-local communicate = nil
-local autoFixCamEnabled = false
-local antiDeathEnabled = false
-local noclipEnabled = false
-local noclipConnection = nil
-local isProcessingAntiDeath = false
-local localAnimConn = nil
+DashBlockRunning = false
+DashThread = nil
+communicate = nil
+autoFixCamEnabled = false
+antiDeathEnabled = false
+noclipEnabled = false
+noclipConnection = nil
+isProcessingAntiDeath = false
+localAnimConn = nil
 
 task.spawn(function()
     stayPos = nil
