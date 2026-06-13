@@ -8741,7 +8741,7 @@ task.spawn(function()
 				return {
 					fill = Color3.fromRGB(0, 0, 0),
 					fillTransparency = 0.6,
-					outline = Color3.fromRGB(0, 0, 0),
+					outline = Color3.fromRGB(150, 150, 150),
 					enabled = true,
 				}
 			end
@@ -8894,7 +8894,7 @@ task.spawn(function()
 		local ultimateValue = clampPercent(ultimateAttr)
 		local smState = model:GetAttribute("NX_SeriousModeState")
 		local showDeathState = espOverlayConfig.showDeath and (smState == "strong" or smState == "weak")
-		local showUltedText = espOverlayConfig.showUlted and ultedAttr
+		local showUltedText = espOverlayConfig.showUlted and ultedAttr and not showDeathState
 		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate or espOverlayConfig.showStreak or showDeathState or showUltedText
 		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
 		if not showBillboard then
@@ -8957,7 +8957,7 @@ task.spawn(function()
 					deathStateColor = Color3.fromRGB(255, 255, 255)
 				elseif smState == "weak" then
 					deathStateText = "DEATH"
-					deathStateColor = Color3.fromRGB(0, 0, 0)
+					deathStateColor = Color3.fromRGB(150, 150, 150)
 				end
 				local deathStateVisible = updateLine(
 					deathStateLine,
