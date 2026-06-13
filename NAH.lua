@@ -1,3 +1,5 @@
+--!nocheck
+--!nolint
 repeat
     task.wait();
 until game:IsLoaded();
@@ -1271,6 +1273,7 @@ local function resolvePlaceCF(name)
 			local model = atoms and atoms:FindFirstChild("sphere")
 			return model and (model:GetPivot() * CFrame.new(0, 45, 0))
 		end
+		return nil
 	end)
 	if success and result then
 		return result
@@ -2330,7 +2333,7 @@ function WalkFling_key(value)
 	return WalkFling_bind(value)
 end
 function WalkFling_tog(value)
-	return setWalkFlingEnabled(value == nil and nil or parseEnabledValue(value))
+	return setWalkFlingEnabled(if value == nil then nil else parseEnabledValue(value))
 end
 function WalkFling_on()
 	return setWalkFlingEnabled(true)
@@ -2358,7 +2361,7 @@ function GetTrash_use()
 	return runGetTrash()
 end
 function AuraFling_tog(value)
-	return setAuraFlingEnabled(value == nil and nil or parseEnabledValue(value))
+	return setAuraFlingEnabled(if value == nil then nil else parseEnabledValue(value))
 end
 function NormalWalkFling_tog(value)
 	if value == nil then
@@ -2369,10 +2372,10 @@ function NormalWalkFling_tog(value)
 	return walkFlingUseNormal and "ON" or "OFF"
 end
 function ClickFling_tog(value)
-	return setClickFlingEnabled(value == nil and nil or parseEnabledValue(value))
+	return setClickFlingEnabled(if value == nil then nil else parseEnabledValue(value))
 end
 function FlingAll_tog(value)
-	return setFlingAllEnabled(value == nil and nil or parseEnabledValue(value))
+	return setFlingAllEnabled(if value == nil then nil else parseEnabledValue(value))
 end
 function WalkFlingPower_set(value)
 	if value == nil then
