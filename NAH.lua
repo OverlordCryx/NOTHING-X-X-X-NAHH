@@ -8977,11 +8977,10 @@ task.spawn(function()
 		local conns = {}
 		playerOverlayConnections[targetPlayer] = conns
 		local function onCharAdded(char)
+			pcall(updatePlayerOverlay, targetPlayer)
 			task.spawn(function()
 				local humanoid = char:WaitForChild("Humanoid", 10)
-				local head = char:WaitForChild("Head", 10)
-				local rootPart = char:WaitForChild("HumanoidRootPart", 10)
-				if humanoid and head and rootPart and playerOverlayConnections[targetPlayer] == conns and char.Parent then
+				if humanoid and playerOverlayConnections[targetPlayer] == conns and char.Parent then
 					local hpConn = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
 						pcall(updatePlayerOverlay, targetPlayer)
 					end)
@@ -9001,24 +9000,19 @@ task.spawn(function()
 			table.insert(conns, attrConn)
 			local childConn = char.ChildAdded:Connect(function(child)
 				if child:IsA("Humanoid") then
-					task.spawn(function()
-						local head = char:WaitForChild("Head", 10)
-						local rootPart = char:WaitForChild("HumanoidRootPart", 10)
-						if head and rootPart and playerOverlayConnections[targetPlayer] == conns and char.Parent then
-							local hpConn = child:GetPropertyChangedSignal("Health"):Connect(function()
-								pcall(updatePlayerOverlay, targetPlayer)
-							end)
-							local maxHpConn = child:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-								pcall(updatePlayerOverlay, targetPlayer)
-							end)
-							table.insert(conns, hpConn)
-							table.insert(conns, maxHpConn)
-							pcall(updatePlayerOverlay, targetPlayer)
-						end
+					local hpConn = child:GetPropertyChangedSignal("Health"):Connect(function()
+						pcall(updatePlayerOverlay, targetPlayer)
 					end)
+					local maxHpConn = child:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+						pcall(updatePlayerOverlay, targetPlayer)
+					end)
+					table.insert(conns, hpConn)
+					table.insert(conns, maxHpConn)
+					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
 			table.insert(conns, childConn)
+			pcall(updatePlayerOverlay, targetPlayer)
 		end
 		if targetPlayer.Character then
 			task.spawn(onCharAdded, targetPlayer.Character)
