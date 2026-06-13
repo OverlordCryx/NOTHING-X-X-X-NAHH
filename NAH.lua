@@ -4385,7 +4385,7 @@ local function toggleSeriousModeTracker(state)
 						pcall(updatePlayer, plr)
 					end
 				end
-				task.wait(0) 
+				task.wait(0.3) 
 			end
 		end)
 	end
@@ -8582,6 +8582,35 @@ task.spawn(function()
 		end
 		return math.clamp(math.floor(numericValue + 0.5), 0, 999)
 	end
+	local function getPlayerDeathCounterState(targetPlayer)
+		local char = targetPlayer.Character
+		if not char then return false, false end
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+		local isHoldingCounter = false
+		if animator then
+			local success, tracks = pcall(function() return animator:GetPlayingAnimationTracks() end)
+			if success and tracks then
+				for _, track in ipairs(tracks) do
+					if track.Animation then
+						local animId = tostring(track.Animation.AnimationId)
+						if string.find(animId, "11343250001") then
+							isHoldingCounter = true
+							break
+						end
+					end
+				end
+			end
+		end
+		local hasTool = false
+		local backpack = targetPlayer:FindFirstChild("Backpack")
+		if backpack and backpack:FindFirstChild("Death Counter") then
+			hasTool = true
+		elseif char:FindFirstChild("Death Counter") then
+			hasTool = true
+		end
+		return isHoldingCounter, hasTool
+	end
 	local function getCharacterNameColor(characterName)
 		return Color3.fromRGB(255, 255, 255)
 	end
@@ -8689,13 +8718,35 @@ task.spawn(function()
 		createBillboardLine(frame, "UltimateLine").LayoutOrder = 5
 		createBillboardLine(frame, "SepThree", Color3.fromRGB(255, 255, 255)).LayoutOrder = 6
 		createBillboardLine(frame, "StreakLine", Color3.fromRGB(100, 180, 255)).LayoutOrder = 7
+		createBillboardLine(frame, "SepFour", Color3.fromRGB(255, 255, 255)).LayoutOrder = 8
+		createBillboardLine(frame, "DeathCounterLine", Color3.fromRGB(255, 0, 0)).LayoutOrder = 9
 		return billboard
 	end
 	local function getSharedHighlightColors(model, ultedAttr, canUseUltedHighlight)
+		local targetPlayer = Players:GetPlayerFromCharacter(model)
+		if targetPlayer and canUseUltedHighlight then
+			local isHoldingCounter, hasCounterTool = getPlayerDeathCounterState(targetPlayer)
+			if isHoldingCounter then
+				return {
+					fill = Color3.fromRGB(150, 0, 0),
+					fillTransparency = 0.5,
+					outline = Color3.fromRGB(255, 0, 0),
+					enabled = true,
+				}
+			elseif hasCounterTool then
+				return {
+					fill = Color3.fromRGB(0, 0, 0),
+					fillTransparency = 0.6,
+					outline = Color3.fromRGB(255, 120, 0),
+					enabled = true,
+				}
+			end
+		end
 		local seriousModeState = model and model:GetAttribute("NX_SeriousModeState") or nil
 		if seriousModeState == "strong" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
+				fillTransparency = 0.6,
 				outline = Color3.fromRGB(255, 255, 255),
 				enabled = true,
 			}
@@ -8703,6 +8754,7 @@ task.spawn(function()
 		if seriousModeState == "weak" then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
+				fillTransparency = 0.6,
 				outline = Color3.fromRGB(255, 0, 0),
 				enabled = true,
 			}
@@ -8710,6 +8762,7 @@ task.spawn(function()
 		if canUseUltedHighlight and ultedAttr == true then
 			return {
 				fill = Color3.fromRGB(0, 0, 0),
+				fillTransparency = 0.6,
 				outline = Color3.fromRGB(255, 255, 0),
 				enabled = true,
 			}
@@ -8777,8 +8830,8 @@ task.spawn(function()
 		return highlight
 	end
 	local function measureTextWidth(text)
-		local textSize = TextService:GetTextSize(tostring(text or ""), 14, Enum.Font.GothamBold, Vector2.new(1000, BILLBOARD_LINE_HEIGHT))
-		return math.max(textSize.X + 2, 1)
+		local str = tostring(text or "")
+		return math.max(#str * 8 + 2, 1)
 	end
 	local function updateLine(line, isVisible, text, color)
 		if not line then
@@ -8837,7 +8890,9 @@ task.spawn(function()
 		local hpPercent = humanoid.MaxHealth > 0 and ((humanoid.Health / humanoid.MaxHealth) * 100) or 0
 		local hpValue = clampPercent(hpPercent)
 		local ultimateValue = clampPercent(ultimateAttr)
-		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate or espOverlayConfig.showStreak
+		local isHoldingCounter, hasCounterTool = getPlayerDeathCounterState(targetPlayer)
+		local showDC = isHoldingCounter or hasCounterTool
+		local showBillboard = espOverlayConfig.showHp or espOverlayConfig.showCharacter or espOverlayConfig.showUltimate or espOverlayConfig.showStreak or showDC
 		local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
 		if not showBillboard then
 			if billboard then
@@ -8856,6 +8911,8 @@ task.spawn(function()
 				local ultimateLine = frame and frame:FindFirstChild("UltimateLine")
 				local sepThree = frame and frame:FindFirstChild("SepThree")
 				local streakLine = frame and frame:FindFirstChild("StreakLine")
+				local sepFour = frame and frame:FindFirstChild("SepFour")
+				local deathCounterLine = frame and frame:FindFirstChild("DeathCounterLine")
 				local visibleCount = 0
 				local contentWidth = 0
 				local visibleGuiCount = 0
@@ -8888,6 +8945,21 @@ task.spawn(function()
 				else
 					updateLine(streakLine, false, "", Color3.fromRGB(100, 180, 255))
 				end
+				local dcText = ""
+				local dcColor = Color3.fromRGB(255, 0, 0)
+				if isHoldingCounter then
+					dcText = "[COUNTERING]"
+					dcColor = Color3.fromRGB(255, 0, 0)
+				elseif hasCounterTool then
+					dcText = "[DC]"
+					dcColor = Color3.fromRGB(255, 120, 0)
+				end
+				local dcVisible = updateLine(
+					deathCounterLine,
+					showDC,
+					dcText,
+					dcColor
+				)
 				if hpVisible then
 					visibleCount = visibleCount + 1
 				end
@@ -8900,13 +8972,18 @@ task.spawn(function()
 				if streakVisible then
 					visibleCount = visibleCount + 1
 				end
+				if dcVisible then
+					visibleCount = visibleCount + 1
+				end
 				local showSepOne = hpVisible and characterVisible
 				local showSepTwo = (hpVisible or characterVisible) and ultimateVisible
 				local showSepThree = (hpVisible or characterVisible or ultimateVisible) and streakVisible
+				local showSepFour = (hpVisible or characterVisible or ultimateVisible or streakVisible) and dcVisible
 				updateLine(sepOne, showSepOne, "//", Color3.fromRGB(255, 255, 255))
 				updateLine(sepTwo, showSepTwo, "//", Color3.fromRGB(255, 255, 255))
 				updateLine(sepThree, showSepThree, "//", Color3.fromRGB(255, 255, 255))
-				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine, sepThree, streakLine }) do
+				updateLine(sepFour, showSepFour, "//", Color3.fromRGB(255, 255, 255))
+				for _, guiObject in ipairs({ hpLine, sepOne, characterLine, sepTwo, ultimateLine, sepThree, streakLine, sepFour, deathCounterLine }) do
 					if guiObject and guiObject.Visible then
 						visibleGuiCount = visibleGuiCount + 1
 						contentWidth = contentWidth + guiObject.Size.X.Offset
@@ -8926,7 +9003,7 @@ task.spawn(function()
 			cancelHighlightDestroy(highlight)
 			highlight.Enabled = highlightSpec.enabled
 			highlight.FillColor = highlightSpec.fill
-			highlight.FillTransparency = 0.6
+			highlight.FillTransparency = highlightSpec.fillTransparency or 0.6
 			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 			highlight.OutlineColor = highlightSpec.outline
 		else
@@ -8989,6 +9066,26 @@ task.spawn(function()
 					end)
 					table.insert(conns, hpConn)
 					table.insert(conns, maxHpConn)
+					
+					-- Monitor animator for Death Counter pose changes
+					local animator = humanoid:WaitForChild("Animator", 5)
+					if animator then
+						local animConn = animator.AnimationPlayed:Connect(function(track)
+							if track.Animation then
+								local animId = tostring(track.Animation.AnimationId)
+								if string.find(animId, "11343250001") then
+									pcall(updatePlayerOverlay, targetPlayer)
+									local stopConn
+									stopConn = track.Stopped:Connect(function()
+										stopConn:Disconnect()
+										pcall(updatePlayerOverlay, targetPlayer)
+									end)
+								end
+							end
+						end)
+						table.insert(conns, animConn)
+					end
+					
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
@@ -9008,10 +9105,39 @@ task.spawn(function()
 					end)
 					table.insert(conns, hpConn)
 					table.insert(conns, maxHpConn)
+					
+					local animator = child:WaitForChild("Animator", 5)
+					if animator then
+						local animConn = animator.AnimationPlayed:Connect(function(track)
+							if track.Animation then
+								local animId = tostring(track.Animation.AnimationId)
+								if string.find(animId, "11343250001") then
+									pcall(updatePlayerOverlay, targetPlayer)
+									local stopConn
+									stopConn = track.Stopped:Connect(function()
+										stopConn:Disconnect()
+										pcall(updatePlayerOverlay, targetPlayer)
+									end)
+								end
+							end
+						end)
+						table.insert(conns, animConn)
+					end
+					
+					pcall(updatePlayerOverlay, targetPlayer)
+				elseif child:IsA("Tool") then
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
 			table.insert(conns, childConn)
+			
+			local childRemovedConn = char.ChildRemoved:Connect(function(child)
+				if child:IsA("Tool") then
+					pcall(updatePlayerOverlay, targetPlayer)
+				end
+			end)
+			table.insert(conns, childRemovedConn)
+			
 			pcall(updatePlayerOverlay, targetPlayer)
 		end
 		if targetPlayer.Character then
@@ -9031,6 +9157,22 @@ task.spawn(function()
 			end
 		end)
 		table.insert(conns, playerAttrConn)
+		
+		-- Monitor backpack additions/removals
+		task.spawn(function()
+			local backpack = targetPlayer:WaitForChild("Backpack", 10)
+			if backpack and playerOverlayConnections[targetPlayer] == conns then
+				local bAdded = backpack.ChildAdded:Connect(function(child)
+					pcall(updatePlayerOverlay, targetPlayer)
+				end)
+				local bRemoved = backpack.ChildRemoved:Connect(function(child)
+					pcall(updatePlayerOverlay, targetPlayer)
+				end)
+				table.insert(conns, bAdded)
+				table.insert(conns, bRemoved)
+				pcall(updatePlayerOverlay, targetPlayer)
+			end
+		end)
 	end
 	refreshAllOverlays = function()
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
@@ -9059,7 +9201,7 @@ task.spawn(function()
 					end
 				end
 			end
-			task.wait(0)
+			task.wait(0.3)
 		end
 	end)
 	task.spawn(function()
