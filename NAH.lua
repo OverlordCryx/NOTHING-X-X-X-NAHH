@@ -4824,19 +4824,38 @@ end
 initInvisibleBorderCleanup()
 local StayToggle = nil
 local DashToggle = nil
+local stayPos = nil
+local stayConn = nil
+local stayGyro = nil
+local isActive = false
+local directions = {
+    Enum.KeyCode.A,
+    Enum.KeyCode.D,
+    Enum.KeyCode.S,
+}
+local DashBlockRunning = false
+local DashThread = nil
+local communicate = nil
+local autoFixCamEnabled = false
+local antiDeathEnabled = false
+local noclipEnabled = false
+local noclipConnection = nil
+local isProcessingAntiDeath = false
+local localAnimConn = nil
+
 task.spawn(function()
-    local stayPos = nil
-    local stayConn = nil
-    local stayGyro = nil
-    local isActive = false
-    local directions = {
+    stayPos = nil
+    stayConn = nil
+    stayGyro = nil
+    isActive = false
+    directions = {
         Enum.KeyCode.A,
         Enum.KeyCode.D,
         Enum.KeyCode.S,
     }
-    local DashBlockRunning = false
-    local DashThread = nil
-    local communicate = nil
+    DashBlockRunning = false
+    DashThread = nil
+    communicate = nil
     local function fixCamera()
         local character = player.Character
         if not character then
@@ -4858,10 +4877,10 @@ task.spawn(function()
             end
         end)
     end
-    local autoFixCamEnabled = false
-    local antiDeathEnabled = false
-    local noclipEnabled = false
-    local noclipConnection = nil
+    autoFixCamEnabled = false
+    antiDeathEnabled = false
+    noclipEnabled = false
+    noclipConnection = nil
     local function toggleNoclip(enabled)
         noclipEnabled = enabled
         if noclipConnection then
@@ -4881,7 +4900,7 @@ task.spawn(function()
             end)
         end
     end
-    local isProcessingAntiDeath = false
+    isProcessingAntiDeath = false
     local function isDeathCounterActive()
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -5066,7 +5085,7 @@ task.spawn(function()
             end
         end)
     end
-    local localAnimConn = nil
+    localAnimConn = nil
     local function setupCharacter(char)
         local comm = char:FindFirstChild("Communicate")
         if comm then
