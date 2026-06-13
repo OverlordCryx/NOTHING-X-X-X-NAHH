@@ -1,7 +1,6 @@
 repeat
     task.wait();
 until game:IsLoaded();
-
 warn("NOTHING _X -X_X-")
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
@@ -525,7 +524,6 @@ function makeHubTog(parent, text, callback, saveKey, default, widthMult)
 			end)
 		end
 	elseif not enabled and callback then
-		-- Also queue callback for false so keybindToggles stay in sync
 		if uiLoaded then
 			task.spawn(callback, false)
 		else
@@ -1484,7 +1482,6 @@ do
 		getTrashState.keybind = savedGetTrashKeybind
 	end
 end
--- Restore keybindToggles from saved data (Auto Load fix)
 do
 	local keybindToggleSaveKeys = {
 		Speed    = "KeybindSpeedEnabled",
@@ -1524,7 +1521,6 @@ end
 function updateKeybindText()
 	local lines = {}
 	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places" }
-	-- Map keybindEntries keys to keybindToggles keys
 	local toggleKeyMap = {
 		TargetPick = "Target",
 		VoidDead = "Void",
@@ -1539,7 +1535,6 @@ function updateKeybindText()
 		if hideNamesEnabled then
 			name = ""
 		end
-		-- In "hide" mode: show name and keybind but hide the state text
 		if toggleState == "hide" or entry.hideState == true then
 			if name ~= "" and keybind ~= "" then
 				lines[#lines + 1] = string.format("%s (%s)", name, keybind)
@@ -1550,7 +1545,6 @@ function updateKeybindText()
 			end
 			return
 		end
-		-- In "block" mode: show name, keybind, and state text
 		local stateText = tostring(entry.stateText or ((entry.enabled == true) and "ON" or "OFF"))
 		if name ~= "" and keybind ~= "" then
 			lines[#lines + 1] = string.format("%s (%s) (%s)", name, keybind, stateText)
@@ -1563,13 +1557,9 @@ function updateKeybindText()
 	for _, key in ipairs(orderedKeys) do
 		local toggleKey = toggleKeyMap[key] or key
 		local toggleState = keybindToggles[toggleKey]
-		-- Under the new rules:
-		-- "off" state (default) -> shown in the keybind frame (with state text, i.e., "block" style).
-		-- "hide" or "block" -> hidden from the keybind frame.
 		if toggleState == "off" or toggleState == nil then
 			appendEntry(keybindEntries[key], "block")
 		elseif key == "Custom" then
-			-- Custom entries are always shown if they exist
 			appendEntry(keybindEntries[key], "block")
 		end
 	end
@@ -2308,22 +2298,16 @@ local function restorePosition(savedCFrame)
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if hrp and savedCFrame then
 		hrp.Anchored = false
-		
-		-- Step 1: Teleport to 0, -6666, 0
 		hrp.CFrame = CFrame.new(0, -6666, 0)
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 		task.wait()
-		
-		-- Step 2: Teleport to saved X/Z, Y -6666
 		if hrp.Parent then
 			hrp.CFrame = CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z)
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.AssemblyAngularVelocity = Vector3.zero
 			task.wait()
 		end
-		
-		-- Step 3: Teleport to saved X/Y/Z
 		if hrp.Parent then
 			hrp.CFrame = savedCFrame
 			hrp.AssemblyLinearVelocity = Vector3.zero
@@ -2471,7 +2455,6 @@ local function toggleSpeed(nextState)
 end
 local function toggleAFK(enabled)
 	afkEnabled = enabled
-	-- Disconnect old connections
 	if afkConnection then
 		afkConnection:Disconnect()
 		afkConnection = nil
@@ -2481,7 +2464,6 @@ local function toggleAFK(enabled)
 		afkCharAddedConnection = nil
 	end
 	if afkEnabled then
-		-- Save current position instantly
 		local character = player.Character
 		local hrp = character and character:FindFirstChild("HumanoidRootPart")
 		if hrp then
@@ -2491,36 +2473,30 @@ local function toggleAFK(enabled)
 			afkSavedCFrame = nil
 			afkCharacter = nil
 		end
-		-- Turn off conflicting features
 		disableConflictingFeatures()
-		-- Teleport instantly to same X/Z, Y -6666
 		if hrp then
 			hrp.Anchored = false
 			hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.AssemblyAngularVelocity = Vector3.zero
 		end
-		-- Heartbeat loop: keep player looping under map every frame
 		local loopIndex = 1
 		local loopPositions = {
 			Vector3.new(0, -6666, 0),
 			Vector3.new(10000, -6666, 0),
 			Vector3.new(0, -6666, 10000)
 		}
-		local isFirstTp = false -- already teleported initially above
+		local isFirstTp = false 
 		afkConnection = RunService.Heartbeat:Connect(function()
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if not root then return end
-			-- If character changed, update tracking
 			if char ~= afkCharacter then
 				afkCharacter = char
 			end
-			-- Save position if we don't have one yet (new character)
 			if not afkSavedCFrame then
 				afkSavedCFrame = root.CFrame
 			end
-			-- Force unanchor and teleport
 			root.Anchored = false
 			if isFirstTp then
 				isFirstTp = false
@@ -2536,7 +2512,6 @@ local function toggleAFK(enabled)
 			root.AssemblyLinearVelocity = Vector3.zero
 			root.AssemblyAngularVelocity = Vector3.zero
 		end)
-		-- Handle respawn: save no position, just keep teleporting
 		afkCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
 			afkSavedCFrame = nil
 			afkCharacter = newChar
@@ -2552,7 +2527,6 @@ local function toggleAFK(enabled)
 			end)
 		end)
 	else
-		-- Toggle OFF: restore saved position
 		if afkSavedCFrame then
 			task.spawn(restorePosition, afkSavedCFrame)
 		end
@@ -2561,12 +2535,10 @@ local function toggleAFK(enabled)
 	end
 	return afkEnabled and "ON" or "OFF"
 end
--- Safe Zone HP variables
 local safeZoneHPConnection = nil
 local safeZoneHPCharAddedConnection = nil
 local function toggleSafeZoneHP(enabled)
 	safeZoneHPEnabled = enabled
-	-- Disconnect old connections
 	if safeZoneHPConnection then
 		safeZoneHPConnection:Disconnect()
 		safeZoneHPConnection = nil
@@ -2575,7 +2547,6 @@ local function toggleSafeZoneHP(enabled)
 		safeZoneHPCharAddedConnection:Disconnect()
 		safeZoneHPCharAddedConnection = nil
 	end
-	-- If turning off while in safe zone, restore position
 	if not enabled and safeZoneHPInSafeZone then
 		if safeZoneHPSavedCFrame then
 			task.spawn(restorePosition, safeZoneHPSavedCFrame)
@@ -2588,11 +2559,14 @@ local function toggleSafeZoneHP(enabled)
 		local loopIndex = 1
 		local loopPositions = {
 			Vector3.new(0, -6666, 0),
-			Vector3.new(10000, -6666, 0),
-			Vector3.new(0, -6666, 10000)
+			Vector3.new(100000, -6666, 0),
+			Vector3.new(0, -6666, 100000),
+			Vector3.new(100000, -6666, 100000),
+			Vector3.new(-100000, -6666, 0),
+			Vector3.new(0, -6666, -100000),
+			Vector3.new(-100000, -6666, -100000)
 		}
 		local isFirstTp = false
-		-- Heartbeat loop: check HP every frame
 		safeZoneHPConnection = RunService.Heartbeat:Connect(function()
 			if not safeZoneHPEnabled or afkEnabled then return end
 			local character = player.Character
@@ -2602,7 +2576,6 @@ local function toggleSafeZoneHP(enabled)
 			local hp = humanoid.Health
 			local maxHp = humanoid.MaxHealth
 			if hp <= 0 then
-				-- Player died while in safe zone, reset state
 				if safeZoneHPInSafeZone then
 					safeZoneHPInSafeZone = false
 					safeZoneHPCharacter = nil
@@ -2610,7 +2583,6 @@ local function toggleSafeZoneHP(enabled)
 				end
 				return
 			end
-			-- If character changed while in safe zone, reset
 			if safeZoneHPInSafeZone and safeZoneHPCharacter and character ~= safeZoneHPCharacter then
 				safeZoneHPInSafeZone = false
 				safeZoneHPCharacter = nil
@@ -2618,9 +2590,7 @@ local function toggleSafeZoneHP(enabled)
 				return
 			end
 			if safeZoneHPInSafeZone then
-				-- Currently in safe zone, check if HP >= 40 to exit
 				if hp >= 40 then
-					-- Restore saved position
 					if safeZoneHPSavedCFrame then
 						task.spawn(restorePosition, safeZoneHPSavedCFrame)
 					end
@@ -2628,7 +2598,6 @@ local function toggleSafeZoneHP(enabled)
 					safeZoneHPCharacter = nil
 					safeZoneHPSavedCFrame = nil
 				else
-					-- Stay in safe zone: keep teleporting every frame
 					hrp.Anchored = false
 					if isFirstTp then
 						isFirstTp = false
@@ -2645,25 +2614,20 @@ local function toggleSafeZoneHP(enabled)
 					hrp.AssemblyAngularVelocity = Vector3.zero
 				end
 			else
-				-- Not in safe zone, check if HP <= 30 to enter
 				if hp <= 30 then
-					-- Turn off conflicting features
 					disableConflictingFeatures()
-					-- Save current position
 					safeZoneHPSavedCFrame = hrp.CFrame
 					safeZoneHPCharacter = character
 					safeZoneHPInSafeZone = true
-					-- Teleport instantly to same X/Z, Y -6666
 					hrp.Anchored = false
 					hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
 					hrp.AssemblyLinearVelocity = Vector3.zero
 					hrp.AssemblyAngularVelocity = Vector3.zero
-					isFirstTp = false -- already did first teleport here
+					isFirstTp = false 
 					loopIndex = 1
 				end
 			end
 		end)
-		-- Handle respawn: reset safe zone HP state cleanly
 		safeZoneHPCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
 			characterSpawnTime = os.clock()
 			safeZoneHPInSafeZone = false
@@ -2673,7 +2637,6 @@ local function toggleSafeZoneHP(enabled)
 	end
 	return safeZoneHPEnabled and "ON" or "OFF"
 end
--- Auto-enable from saved settings on load
 do
 	local savedAFK = controlSaveData.AFKEnabled
 	local savedHP = controlSaveData.HPSafeZoneEnabled
@@ -8390,7 +8353,6 @@ do
 	local row4 = makeRow(150)
 	makeHubTogKB(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", "off", 1/2)
 	makeHubTogKB(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", "off", 1/2)
-	-- Sync keybind display with restored toggle states (fixes auto-load hide/off/block)
 	task.defer(updateKeybindText)
 end
 task.spawn(function()
@@ -8780,7 +8742,6 @@ task.spawn(function()
 		espOverlayState[targetPlayer] = state
 	end
 	local playerOverlayConnections = {}
-
 	local function disconnectOverlayConnections(targetPlayer)
 		local conns = playerOverlayConnections[targetPlayer]
 		if conns then
@@ -8792,7 +8753,6 @@ task.spawn(function()
 			playerOverlayConnections[targetPlayer] = nil
 		end
 	end
-
 	local function cleanupPlayerOverlay(targetPlayer)
 		disconnectOverlayConnections(targetPlayer)
 		local state = espOverlayState[targetPlayer]
@@ -8811,18 +8771,13 @@ task.spawn(function()
 		end
 		espOverlayState[targetPlayer] = nil
 	end
-
 	local function setupPlayerOverlay(targetPlayer)
 		disconnectOverlayConnections(targetPlayer)
 		if targetPlayer == player then return end
-
 		local conns = {}
 		playerOverlayConnections[targetPlayer] = conns
-
 		local function onCharAdded(char)
 			pcall(updatePlayerOverlay, targetPlayer)
-
-			-- Wait for humanoid and listen to changes
 			task.spawn(function()
 				local humanoid = char:WaitForChild("Humanoid", 10)
 				if humanoid and playerOverlayConnections[targetPlayer] == conns and char.Parent then
@@ -8837,16 +8792,12 @@ task.spawn(function()
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
-
-			-- Attribute changes on Character
 			local attrConn = char.AttributeChanged:Connect(function(attr)
 				if attr == "Character" or attr == "Ulted" or attr == "Ultimate" or attr == "CurrentStreak" or attr == "NX_SeriousModeState" then
 					pcall(updatePlayerOverlay, targetPlayer)
 				end
 			end)
 			table.insert(conns, attrConn)
-
-			-- Check for humanoid recreation/child addition
 			local childConn = char.ChildAdded:Connect(function(child)
 				if child:IsA("Humanoid") then
 					local hpConn = child:GetPropertyChangedSignal("Health"):Connect(function()
@@ -8861,25 +8812,19 @@ task.spawn(function()
 				end
 			end)
 			table.insert(conns, childConn)
-
 			pcall(updatePlayerOverlay, targetPlayer)
 		end
-
 		if targetPlayer.Character then
 			task.spawn(onCharAdded, targetPlayer.Character)
 		end
-
 		local charAddedConn = targetPlayer.CharacterAdded:Connect(function(char)
 			task.spawn(onCharAdded, char)
 		end)
 		table.insert(conns, charAddedConn)
-
 		local charRemovingConn = targetPlayer.CharacterRemoving:Connect(function()
 			cleanupPlayerOverlay(targetPlayer)
 		end)
 		table.insert(conns, charRemovingConn)
-
-		-- Attribute changes on Player object
 		local playerAttrConn = targetPlayer.AttributeChanged:Connect(function(attr)
 			if attr == "Ultimate" or attr == "Ulted" then
 				pcall(updatePlayerOverlay, targetPlayer)
@@ -8887,8 +8832,6 @@ task.spawn(function()
 		end)
 		table.insert(conns, playerAttrConn)
 	end
-
-	-- Expose refresh function to other scopes
 	refreshAllOverlays = function()
 		for _, targetPlayer in ipairs(Players:GetPlayers()) do
 			if targetPlayer ~= player then
@@ -8896,17 +8839,11 @@ task.spawn(function()
 			end
 		end
 	end
-
-	-- Initialize overlays for existing players
 	for _, targetPlayer in ipairs(Players:GetPlayers()) do
 		setupPlayerOverlay(targetPlayer)
 	end
-
-	-- Listen for new and departing players
 	local playerAddedOverlayConn = Players.PlayerAdded:Connect(setupPlayerOverlay)
 	local playerRemovingOverlayConn = Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
-
-	-- Slow backup loop to handle Roblox character quirks and highlight desyncs
 	task.spawn(function()
 		while screenGui.Parent do
 			local overlayEnabled = espOverlayConfig.showHp
@@ -8925,8 +8862,6 @@ task.spawn(function()
 			task.wait(0)
 		end
 	end)
-
-	-- Cleanup when UI is destroyed
 	task.spawn(function()
 		while screenGui.Parent do
 			task.wait(1.5)
