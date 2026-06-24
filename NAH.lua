@@ -983,13 +983,16 @@ task.spawn(function()
 	local success, pages = pcall(function()
 		return Players:GetFriendsAsync(player.UserId)
 	end)
-	if success and pages then
+	if success and pages and pages ~= Players and pcall(function() return pages.GetCurrentPage end) then
 		while true do
-			local items = pages:GetCurrentPage()
+			local successItems, items = pcall(function() return pages:GetCurrentPage() end)
+			if not successItems or not items then break end
 			for _, item in ipairs(items) do
 				friendsList[item.Id] = true
 			end
-			if pages.IsFinished then
+			local isFinished = false
+			pcall(function() isFinished = pages.IsFinished end)
+			if isFinished then
 				break
 			end
 			local advanceSuccess = pcall(function()
@@ -7744,6 +7747,7 @@ syncSetBackKeybindDisplay()
 syncGetTrashKeybindDisplay()
 updateTargetDisplay()
 bindLocalCharacter(char)
+task.wait(0.02)
 Slider({
 	nameSilder = "Speed",
 	nameshow = "",
@@ -7755,6 +7759,7 @@ Slider({
 		Speed = value
 	end,
 })
+task.wait(0.02)
 Slider({
 	nameSilder = "Fly",
 	nameshow = "",
@@ -7766,6 +7771,7 @@ Slider({
 		flySpeed = value
 	end,
 })
+task.wait(0.02)
 modelDropdownControl = Dropdown({
 	namedropdown = "Players",
 	saveKey = "",
@@ -7777,6 +7783,7 @@ modelDropdownControl = Dropdown({
 		applyModelDropdownSelection(value)
 	end,
 })
+task.wait(0.02)
 blPlayersDropdownControl = Dropdown({
 	namedropdown = "BL Players",
 	saveKey = "",
@@ -7909,6 +7916,7 @@ blPlayersDropdownControl = Dropdown({
 		end
 	end,
 })
+task.wait(0.02)
 do
 	local offlineInputHolder = makeControlFrame(78)
 	offlineInputHolder.Parent = uiX
@@ -8067,6 +8075,7 @@ do
 		if enterPressed then doAddOffline() end
 	end)
 end
+task.wait(0.02)
 targetActionControls = _G["3tog_on_one_one_button"]({
 	title = "Function",
 	name1 = "View",
@@ -8123,6 +8132,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
 		teleportToSelectedTarget("Front")
 	end,
 })
+task.wait(0.02)
 Dropdown({
 	namedropdown = "Direction",
 	saveKey = "WalkFlingDirection",
@@ -8133,6 +8143,7 @@ Dropdown({
 		parseWalkFlingDirectionSelection(value)
 	end,
 })
+task.wait(0.02)
 _G["2textbox_on_one_frame"]({
 	title = "Powers",
 	name1 = "Power Walkfling",
@@ -8148,6 +8159,7 @@ _G["2textbox_on_one_frame"]({
 		flingPower = value
 	end,
 })
+task.wait(0.02)
 Slider({
 	nameSilder = "Aura Range",
 	nameshow = "",
@@ -8159,6 +8171,7 @@ Slider({
 		auraRange = value
 	end,
 })
+task.wait(0.02)
 flingModeControls = _G["4tog_on_one_frame"]({
 	title = "Flings System",
 	name1 = "Normal Walkfling",
@@ -8184,6 +8197,7 @@ flingModeControls = _G["4tog_on_one_frame"]({
 		setFlingAllEnabled(enabled)
 	end,
 })
+task.wait(0.02)
 if game.GameId == 3808081382 then
 	placesDropdown = Dropdown({
 		namedropdown = "Places",
@@ -8197,9 +8211,11 @@ if game.GameId == 3808081382 then
 		end,
 	})
 	placesDropdown.Frame.LayoutOrder = 999998
+	task.wait(0.02)
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
+task.wait(0.02)
 local customOffsetFrame = makeControlFrame(75)
 customOffsetFrame.Visible = false
 local function getTPModeItems()
@@ -8433,6 +8449,7 @@ do
 end
 customOffsetFrame.Parent = uiX
 updateCustomUI()
+task.wait(0.02)
 do
 	local charSaveKey = "SelectedCharacter"
 	local characterList = { "Bald", "Hunter", "Monster", "Cyborg", "Ninja", "Batter", "Blade", "Esper", "Purple", "Tech", "Zombie", "KJ", "Sorcerer" }
@@ -8565,6 +8582,7 @@ do
 		charCallbackReady = true
 	end)
 end
+task.wait(0.02)
 do
 	local keybindHub = makeControlFrame(200)
 	keybindHub.Name = "KeybindSystemHub"
@@ -8615,6 +8633,7 @@ do
 	makeHubTogKB(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", "off", 1/2)
 	task.defer(updateKeybindText)
 end
+task.wait(0.02)
 task.spawn(function()
 	if game.GameId ~= 3808081382 then
 		return
