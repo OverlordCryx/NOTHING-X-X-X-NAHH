@@ -43,22 +43,14 @@ function showExistingGuiInfo(gui, title, text, duration)
 	infoTitle.Text = tostring(title or "")
 	infoText.Text = tostring(text or "")
 	infoContainer.Visible = true
-	TweenService:Create(infoContainer, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		BackgroundTransparency = 0.2,
-	}):Play()
+	infoContainer.BackgroundTransparency = 0.2
 	if infoStroke then
-		TweenService:Create(infoStroke, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 0.1,
-		}):Play()
+		infoStroke.Transparency = 0.1
 	end
-	TweenService:Create(infoTitle, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TextTransparency = 0,
-		TextStrokeTransparency = 1,
-	}):Play()
-	TweenService:Create(infoText, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TextTransparency = 0,
-		TextStrokeTransparency = 1,
-	}):Play()
+	infoTitle.TextTransparency = 0
+	infoTitle.TextStrokeTransparency = 1
+	infoText.TextTransparency = 0
+	infoText.TextStrokeTransparency = 1
 	task.delay(tonumber(duration) or 3, function()
 		if currentToken ~= (gui:GetAttribute("InfoToken") or 0) then
 			return
@@ -66,32 +58,15 @@ function showExistingGuiInfo(gui, title, text, duration)
 		if not infoContainer.Parent then
 			return
 		end
-		local fadeTweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		TweenService:Create(infoContainer, fadeTweenInfo, {
-			BackgroundTransparency = 1,
-		}):Play()
+		infoContainer.BackgroundTransparency = 1
 		if infoStroke then
-			TweenService:Create(infoStroke, fadeTweenInfo, {
-				Transparency = 1,
-			}):Play()
+			infoStroke.Transparency = 1
 		end
-		TweenService:Create(infoTitle, fadeTweenInfo, {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		}):Play()
-		local fadeText = TweenService:Create(infoText, fadeTweenInfo, {
-			TextTransparency = 1,
-			TextStrokeTransparency = 1,
-		})
-		fadeText:Play()
-		fadeText.Completed:Connect(function()
-			if currentToken ~= (gui:GetAttribute("InfoToken") or 0) then
-				return
-			end
-			if infoContainer.Parent then
-				infoContainer.Visible = false
-			end
-		end)
+		infoTitle.TextTransparency = 1
+		infoTitle.TextStrokeTransparency = 1
+		infoText.TextTransparency = 1
+		infoText.TextStrokeTransparency = 1
+		infoContainer.Visible = false
 	end)
 	return true
 end
@@ -4187,20 +4162,11 @@ local function setSettingsVisible(visible)
 	if visible then
 		local animVal = settingsWindow:FindFirstChild("WindowAnimScale")
 		if animVal then
-			animVal.Value = 0.95
-			TweenService:Create(animVal, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-				Value = 1.0,
-			}):Play()
+			animVal.Value = 1.0
 		end
-		TweenService:Create(settingsWindow, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 0.18,
-		}):Play()
-		TweenService:Create(settingsStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 0.05,
-		}):Play()
-		TweenService:Create(windowOutlineStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 0.05,
-		}):Play()
+		settingsWindow.BackgroundTransparency = 0.18
+		if settingsStroke then settingsStroke.Transparency = 0.05 end
+		if windowOutlineStroke then windowOutlineStroke.Transparency = 0.05 end
 	else
 		settingsWindow.BackgroundTransparency = 1
 		if settingsStroke then settingsStroke.Transparency = 1 end
@@ -7996,15 +7962,13 @@ do
 	statusLabel.TextSize = 12
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Center
 	statusLabel.Parent = offlineInputHolder
-	local TweenService = game:GetService("TweenService")
-	local fadeInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	local function showStatus(text, duration)
 		statusLabel.Text = text
-		TweenService:Create(statusLabel, fadeInfo, { TextTransparency = 0 }):Play()
+		statusLabel.TextTransparency = 0
 		if duration then
 			task.delay(duration, function()
 				if statusLabel.Text == text then
-					TweenService:Create(statusLabel, fadeInfo, { TextTransparency = 1 }):Play()
+					statusLabel.TextTransparency = 1
 				end
 			end)
 		end
@@ -8472,6 +8436,7 @@ updateCustomUI()
 do
 	local charSaveKey = "SelectedCharacter"
 	local characterList = { "Bald", "Hunter", "Monster", "Cyborg", "Ninja", "Batter", "Blade", "Esper", "Purple", "Tech", "Zombie", "KJ", "Sorcerer" }
+	-- Always read from actual character attribute, never from save
 	local function getCharacterFromAttr()
 		local char = player.Character
 		if char then
@@ -8480,18 +8445,19 @@ do
 				return tostring(attr)
 			end
 		end
-		local saved = getSavedControlValue(charSaveKey)
-		if saved and saved ~= "" then return saved end
 		return characterList[1]
 	end
 	local charCallbackReady = false
 	local characterDropdown
+	-- _pendingValue: while non-nil, syncCharDropdown will NOT override the dropdown
+	-- (keeps showing the chosen value during active retry)
+	local charPendingValue = nil
+	local charPendingToken = 0
 	characterDropdown = Dropdown({
 		namedropdown = "Character",
 		inside = characterList,
 		multi = false,
 		deffultin = getCharacterFromAttr(),
-		saveKey = charSaveKey,
 		fun = function(value)
 			if not charCallbackReady then return end
 			if not value or value == "" then return end
@@ -8501,7 +8467,61 @@ do
 			task.spawn(function()
 				local retryToken = (characterDropdown and characterDropdown._retryToken or 0) + 1
 				if characterDropdown then characterDropdown._retryToken = retryToken end
+				-- Block syncCharDropdown from overriding while we're trying
+				charPendingValue = value
+				charPendingToken = retryToken
+				-- Remember what character we had BEFORE trying to change
+				local previousChar = (function()
+					local c = player.Character
+					local a = c and c:GetAttribute("Character")
+					return (a and tostring(a) ~= "") and tostring(a) or nil
+				end)()
+				local attempts = 0
+				local maxAttempts = 11
 				while true do
+					if characterDropdown and characterDropdown._retryToken ~= retryToken then
+						charPendingValue = nil
+						break
+					end
+					-- Check if we already have the desired character
+					local c = player.Character
+					local attr = c and c:GetAttribute("Character")
+					if attr and tostring(attr) == value then
+						-- Success: clear pending and sync dropdown
+						charPendingValue = nil
+						if characterDropdown then
+							characterDropdown.SetValue(tostring(attr), true)
+						end
+						break
+					end
+					attempts = attempts + 1
+					if attempts > maxAttempts then
+						-- Failed after 11 attempts: clear pending, revert to actual character
+						charPendingValue = nil
+						local actualChar = (function()
+							local c2 = player.Character
+							local a2 = c2 and c2:GetAttribute("Character")
+							return (a2 and tostring(a2) ~= "") and tostring(a2) or previousChar
+						end)()
+						if actualChar and characterDropdown then
+							characterDropdown.SetValue(actualChar, true)
+						end
+						-- Keep watching: continuously sync dropdown to whatever character we actually have
+						while true do
+							if characterDropdown and characterDropdown._retryToken ~= retryToken then break end
+							task.wait(0.5)
+							local c2 = player.Character
+							local a2 = c2 and c2:GetAttribute("Character")
+							if a2 and tostring(a2) ~= "" then
+								local current = tostring(a2)
+								if characterDropdown then
+									characterDropdown.SetValue(current, true)
+								end
+								if current == value then break end
+							end
+						end
+						break
+					end
 					pcall(function()
 						local communicate = player.Character and player.Character:WaitForChild("Communicate", 3)
 						if communicate then
@@ -8509,10 +8529,6 @@ do
 						end
 					end)
 					task.wait(0.88)
-					if characterDropdown and characterDropdown._retryToken ~= retryToken then break end
-					local char = player.Character
-					local attr = char and char:GetAttribute("Character")
-					if attr and tostring(attr) == value then break end
 				end
 			end)
 		end,
@@ -8520,18 +8536,30 @@ do
 	characterDropdown.Frame.LayoutOrder = 999999
 	local function syncCharDropdown()
 		if not characterDropdown then return end
+		-- Don't override while user's chosen change is still being attempted
+		if charPendingValue ~= nil then return end
 		local char = player.Character
 		if not char then return end
 		local attr = char:GetAttribute("Character")
 		if attr and tostring(attr) ~= "" then
-			characterDropdown.SetValue(tostring(attr), true) 
-			setSavedControlValue(charSaveKey, tostring(attr))
+			characterDropdown.SetValue(tostring(attr), true)
 		end
 	end
-	player.CharacterAdded:Connect(function(_newChar)
+	-- Watch character attribute for live sync
+	local function watchCharacterAttrs(char)
+		if not char then return end
+		char:GetAttributeChangedSignal("Character"):Connect(function()
+			pcall(syncCharDropdown)
+		end)
+	end
+	player.CharacterAdded:Connect(function(newChar)
 		task.wait(1.5)
 		pcall(syncCharDropdown)
+		watchCharacterAttrs(newChar)
 	end)
+	if player.Character then
+		watchCharacterAttrs(player.Character)
+	end
 	task.defer(function()
 		pcall(syncCharDropdown)
 		charCallbackReady = true
@@ -9256,6 +9284,33 @@ task.spawn(function()
 		updateDropdownsEvent()
 	end
 end)
+local targetDragPosition = nil
+local dragConnection = nil
+local function startDragLoop()
+	if dragConnection then return end
+	dragConnection = RunService.RenderStepped:Connect(function(dt)
+		if not settingsWindow or not targetDragPosition then
+			if dragConnection then
+				dragConnection:Disconnect()
+				dragConnection = nil
+			end
+			return
+		end
+		local currentPos = settingsWindow.Position
+		local dist = (currentPos.X.Offset - targetDragPosition.X.Offset)^2 + (currentPos.Y.Offset - targetDragPosition.Y.Offset)^2
+		if dist < 0.1 and not draggingWindow then
+			settingsWindow.Position = targetDragPosition
+			targetDragPosition = nil
+			if dragConnection then
+				dragConnection:Disconnect()
+				dragConnection = nil
+			end
+		else
+			local alpha = math.clamp(dt * 20, 0, 1)
+			settingsWindow.Position = currentPos:Lerp(targetDragPosition, alpha)
+		end
+	end)
+end
 headerDragArea.InputBegan:Connect(function(input)
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 		return
@@ -9293,10 +9348,11 @@ UserInputService.InputChanged:Connect(function(input)
 			dragStartPosition.X.Scale, clampedUX,
 			dragStartPosition.Y.Scale, clampedUY
 		)
-		settingsWindow.Position = UDim2.new(
+		targetDragPosition = UDim2.new(
 			dragStartPosition.X.Scale, clampedUX * scale,
 			dragStartPosition.Y.Scale, clampedUY * scale
 		)
+		startDragLoop()
 	end
 end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
