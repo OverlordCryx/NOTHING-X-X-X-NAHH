@@ -1835,26 +1835,55 @@ local function toggleDVoidDead(state)
 end
 local antiFlingEnabled = false
 local antiFlingConnection = nil
+local antiFlingDescConn = {}
 local function toggleAntiFling(enabled)
 	antiFlingEnabled = enabled
 	if antiFlingConnection then
 		antiFlingConnection:Disconnect()
 		antiFlingConnection = nil
 	end
+	for _, c in ipairs(antiFlingDescConn) do pcall(function() c:Disconnect() end) end
+	antiFlingDescConn = {}
 	if antiFlingEnabled then
-		antiFlingConnection = game:GetService("RunService").Stepped:Connect(function()
+		local function disableCollision(part)
+			if part:IsA("BasePart") and part.CanCollide then
+				part.CanCollide = false
+			end
+		end
+		local function hookCharacter(char)
+			if not char then return end
+			for _, part in ipairs(char:GetDescendants()) do disableCollision(part) end
+			local c = char.DescendantAdded:Connect(function(part)
+				task.defer(function() if antiFlingEnabled then disableCollision(part) end end)
+			end)
+			antiFlingDescConn[#antiFlingDescConn + 1] = c
+		end
+		for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+			if p ~= player then
+				hookCharacter(p.Character)
+				local ca = p.CharacterAdded:Connect(function(char)
+					task.defer(function() if antiFlingEnabled then hookCharacter(char) end end)
+				end)
+				antiFlingDescConn[#antiFlingDescConn + 1] = ca
+			end
+		end
+		local pa = game:GetService("Players").PlayerAdded:Connect(function(p)
+			if p == player then return end
+			hookCharacter(p.Character)
+			local ca = p.CharacterAdded:Connect(function(char)
+				task.defer(function() if antiFlingEnabled then hookCharacter(char) end end)
+			end)
+			antiFlingDescConn[#antiFlingDescConn + 1] = ca
+		end)
+		antiFlingDescConn[#antiFlingDescConn + 1] = pa
+		local lastSweep = 0
+		antiFlingConnection = game:GetService("RunService").Heartbeat:Connect(function()
+			local now = os.clock()
+			if now - lastSweep < 0.2 then return end
+			lastSweep = now
 			for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
 				if p ~= player and p.Character then
 					for _, part in ipairs(p.Character:GetDescendants()) do
-						if part:IsA("BasePart") and part.CanCollide then
-							part.CanCollide = false
-						end
-					end
-				end
-			end
-			for _, model in ipairs(getSelectableTargetModels()) do
-				if model ~= player.Character then
-					for _, part in ipairs(model:GetDescendants()) do
 						if part:IsA("BasePart") and part.CanCollide then
 							part.CanCollide = false
 						end
@@ -2429,7 +2458,7 @@ local function toggleSpeed(nextState)
 		speedLoopRunning = true
 		task.spawn(function()
 			while active do
-				task.wait()
+				nextFrame()
 				updateMovement()
 			end
 			speedLoopRunning = false
@@ -2472,7 +2501,11 @@ local function toggleAFK(enabled)
 			Vector3.new(0, -6666, 10000)
 		}
 		local isFirstTp = false 
+		local afkLastRun = 0
 		afkConnection = RunService.Heartbeat:Connect(function()
+			local now = os.clock()
+			if now - afkLastRun < 0.05 then return end
+			afkLastRun = now
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if not root then return end
@@ -2753,7 +2786,7 @@ end
 local function startGetTrashHoldLoop(runToken)
 	task.spawn(function()
 		while getTrashState.running and getTrashState.token == runToken do
-			task.wait()
+			task.wait(0.05)
 			local currentCharacter = player.Character
 			local rootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 			if rootPart and rootPart.Parent and getTrashState.holdCFrame then
@@ -4463,6 +4496,7 @@ end
 local CharacterCleanupEnabled = false
 local ModConnections = {}
 local hooksRegistered = false
+local lastLocalActionTime = 0
 local function toggleCharacterCleanupRuntime(state)
 	CharacterCleanupEnabled = state == true
 	if CharacterCleanupEnabled then
@@ -4472,19 +4506,31 @@ local function toggleCharacterCleanupRuntime(state)
 			repeat
 				CharacterCleanupEnabled = true
 				pcall(function()
+					local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+					local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+					if isSelfFlinging or isDashingOrSkill then
+						return
+					end
 					local char = lp.Character
 					if char then
+						local foundMover = false
 						for _, v in ipairs(char:GetDescendants()) do
 							if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
 								or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
+								or v:IsA("BodyPosition") or v:IsA("BodyGyro")
+								or v:IsA("VectorForce") or v:IsA("AlignPosition")
+								or v:IsA("AlignOrientation")
 							then
+								foundMover = true
 								pcall(function() v:Destroy() end)
 							end
 						end
-						local hrp = char:FindFirstChild("HumanoidRootPart")
-						if hrp then
-							hrp.AssemblyLinearVelocity  = Vector3.zero
-							hrp.AssemblyAngularVelocity = Vector3.zero
+						if foundMover then
+							local hrp = char:FindFirstChild("HumanoidRootPart")
+							if hrp then
+								hrp.AssemblyLinearVelocity  = Vector3.zero
+								hrp.AssemblyAngularVelocity = Vector3.zero
+							end
 						end
 					end
 				end)
@@ -4494,6 +4540,30 @@ local function toggleCharacterCleanupRuntime(state)
 	end
 	if state == true and not hooksRegistered then
 		hooksRegistered = true
+		pcall(function()
+			local actionKeys = {
+				[Enum.KeyCode.Q] = true,
+				[Enum.KeyCode.E] = true,
+				[Enum.KeyCode.R] = true,
+				[Enum.KeyCode.F] = true,
+				[Enum.KeyCode.G] = true,
+				[Enum.KeyCode.Z] = true,
+				[Enum.KeyCode.X] = true,
+				[Enum.KeyCode.C] = true,
+				[Enum.KeyCode.V] = true,
+				[Enum.KeyCode.One] = true,
+				[Enum.KeyCode.Two] = true,
+				[Enum.KeyCode.Three] = true,
+				[Enum.KeyCode.Four] = true,
+				[Enum.KeyCode.Five] = true,
+			}
+			UserInputService.InputBegan:Connect(function(input, processed)
+				if processed then return end
+				if actionKeys[input.KeyCode] or input.UserInputType == Enum.UserInputType.MouseButton1 then
+					lastLocalActionTime = os.clock()
+				end
+			end)
+		end)
 		task.spawn(function()
 			pcall(function()
 				local STUN_EFFECTS = {
@@ -4715,7 +4785,23 @@ local function toggleCharacterCleanupRuntime(state)
 	local function SetupCharacterCleanup(Char)
 		if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
 		local function handleObj(v)
-			if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity") then
+			local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+			local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+			if isSelfFlinging or isDashingOrSkill then
+				return
+			end
+			if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity") 
+				or v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("VectorForce") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+				
+				local hrp = Char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					pcall(function()
+						hrp.AssemblyLinearVelocity = Vector3.zero
+						hrp.AssemblyAngularVelocity = Vector3.zero
+					end)
+				end
+				pcall(function() v:Destroy() end)
+				
 				local Communicate = Char:FindFirstChild("Communicate") or Char:WaitForChild("Communicate", 2)
 				if Communicate then
 					pcall(function()
@@ -4740,7 +4826,7 @@ local function toggleCharacterCleanupRuntime(state)
 	ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
 	task.spawn(function()
 		while CharacterCleanupEnabled do
-			task.wait()
+			task.wait(0.1)
 			local char = speaker.Character
 			if char then
 				usunPusteAccessory(char)
@@ -4753,7 +4839,7 @@ local function toggleCharacterCleanupRuntime(state)
 		while CharacterCleanupEnabled do 
 			local args = { { Goal = "delete bv", BV = Instance.new("BodyVelocity", nil) } }
 			pcall(function() speaker.Character:WaitForChild("Communicate"):FireServer(unpack(args)) end)
-			task.wait()
+			task.wait(0.1)
 		end
 	end)
 end
@@ -4850,18 +4936,45 @@ task.spawn(function()
     antiDeathEnabled = false
     noclipEnabled = false
     noclipConnection = nil
+    local noclipExtraConns = {}
     local function toggleNoclip(enabled)
         noclipEnabled = enabled
         if noclipConnection then
             noclipConnection:Disconnect()
             noclipConnection = nil
         end
+        for _, c in ipairs(noclipExtraConns) do pcall(function() c:Disconnect() end) end
+        noclipExtraConns = {}
         if enabled then
-            noclipConnection = game:GetService("RunService").Stepped:Connect(function()
-                local char = game:GetService("Players").LocalPlayer.Character
-                if char then
-                    for _, part in ipairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") then
+            local function disablePart(part)
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
+            end
+            local charDescConn = nil
+            local function hookChar(char)
+                if charDescConn then pcall(function() charDescConn:Disconnect() end) end
+                if not char then return end
+                for _, part in ipairs(char:GetDescendants()) do disablePart(part) end
+                charDescConn = char.DescendantAdded:Connect(function(part)
+                    task.defer(function() if noclipEnabled then disablePart(part) end end)
+                end)
+                noclipExtraConns[#noclipExtraConns + 1] = charDescConn
+            end
+            hookChar(game:GetService("Players").LocalPlayer.Character)
+            local caConn = game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(newChar)
+                task.defer(function() if noclipEnabled then hookChar(newChar) end end)
+            end)
+            noclipExtraConns[#noclipExtraConns + 1] = caConn
+            local lastSweep = 0
+            noclipConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                local now = os.clock()
+                if now - lastSweep < 0.15 then return end
+                lastSweep = now
+                local c = game:GetService("Players").LocalPlayer.Character
+                if c then
+                    for _, part in ipairs(c:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
                             part.CanCollide = false
                         end
                     end
@@ -4905,7 +5018,7 @@ task.spawn(function()
             hrp.AssemblyAngularVelocity = Vector3.zero
         end)
         repeat
-            task.wait()
+            task.wait(0.05)
         until (tick() - startTime) > 2.8 or not isDeathCounterActive()
         if connection then connection:Disconnect() end
         if hrp and hrp.Parent then
@@ -4923,7 +5036,7 @@ task.spawn(function()
     end
     task.spawn(function()
         while true do
-            task.wait()
+            task.wait(0.1)
             if not antiDeathEnabled or isProcessingAntiDeath then continue end
             if isDeathCounterActive() then
                 bypassDeathCounter()
@@ -5428,7 +5541,11 @@ task.spawn(function()
             flingState.runnerActive = false
         end)
     end
+    local flingFlagLastCheck = 0
     RunService.Heartbeat:Connect(function()
+        local now = os.clock()
+        if now - flingFlagLastCheck < 0.1 then return end
+        flingFlagLastCheck = now
         if flingEnabled then
             if not flingState.runnerActive then
                 startFlingRuntime()
@@ -5558,7 +5675,6 @@ do
 	if LocalPlayer.Character then
 		setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
 	end
-	RunService.Stepped:Connect(updateMonitoring)
 	RunService.Heartbeat:Connect(updateMonitoring)
 end
 function Keybind_add(text)
@@ -8639,7 +8755,7 @@ task.spawn(function()
 		return
 	end
 	while not introFinished and screenGui.Parent do
-		task.wait()
+		task.wait(0.05)
 	end
 	if not screenGui.Parent then
 		return
@@ -10084,7 +10200,7 @@ end)
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
 task.spawn(function()
 	while true do
-		task.wait(0.01)
+		task.wait(0.1)
 		for _,v in ipairs(HiddenObjects) do
 			pcall(function()
 				if v.Visible then
