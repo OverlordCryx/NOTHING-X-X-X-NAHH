@@ -4506,7 +4506,7 @@ local function toggleCharacterCleanupRuntime(state)
 			repeat
 				CharacterCleanupEnabled = true
 				pcall(function()
-					local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+					local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
 					local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
 					if isSelfFlinging or isDashingOrSkill then
 						return
@@ -4534,7 +4534,7 @@ local function toggleCharacterCleanupRuntime(state)
 						end
 					end
 				end)
-				task.wait(10) 
+				task.wait(0.1) 
 			until not CharacterCleanupEnabled
 		end)
 	end
@@ -4785,7 +4785,7 @@ local function toggleCharacterCleanupRuntime(state)
 	local function SetupCharacterCleanup(Char)
 		if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
 		local function handleObj(v)
-			local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+			local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
 			local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
 			if isSelfFlinging or isDashingOrSkill then
 				return
