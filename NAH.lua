@@ -4566,12 +4566,32 @@ local function runCleanupTick(char)
 				foundMover = true
 				pcall(function() v:Destroy() end)
 			end
+			if v:IsA("WeldConstraint") or v:IsA("Weld") then
+				local p0 = v:IsA("WeldConstraint") and v.Part0 or v.Part0
+				local p1 = v:IsA("WeldConstraint") and v.Part1 or v.Part1
+				local extP0 = p0 and not p0:IsDescendantOf(char)
+				local extP1 = p1 and not p1:IsDescendantOf(char)
+				if extP0 or extP1 then
+					pcall(function() v:Destroy() end)
+				end
+			end
 		end
 		if foundMover then
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then
 				hrp.AssemblyLinearVelocity  = Vector3.zero
 				hrp.AssemblyAngularVelocity = Vector3.zero
+			end
+		end
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+		if animator then
+			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+				if track.Name == "grab" or track.Name == "Grab"
+					or track.Name:lower():find("grab") or track.Name:lower():find("caught")
+					or track.Name:lower():find("held") or track.Name:lower():find("carry") then
+					pcall(function() track:Stop(0) end)
+				end
 			end
 		end
 	end
@@ -4910,6 +4930,16 @@ local function toggleCharacterCleanupRuntime(state)
 						pcall(function()
 							Communicate:FireServer({ Goal = "delete bv", BV = v })
 						end)
+					end
+				end
+				-- Anti-grab: destroy grab welds connecting our char to external objects
+				if v:IsA("WeldConstraint") or v:IsA("Weld") then
+					local p0 = v.Part0
+					local p1 = v.Part1
+					local extP0 = p0 and not p0:IsDescendantOf(Char)
+					local extP1 = p1 and not p1:IsDescendantOf(Char)
+					if extP0 or extP1 then
+						pcall(function() v:Destroy() end)
 					end
 				end
 			end
