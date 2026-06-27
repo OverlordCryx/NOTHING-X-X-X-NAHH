@@ -555,8 +555,8 @@ function makeHubTogKB(parent, text, callback, saveKey, default, widthMult)
 			btn.TextColor3 = Color3.fromRGB(0, 0, 0)
 			btn.Text = text .. " (H)"
 		elseif state == "block" then
-			btn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-			btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			btn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+			btn.TextColor3 = Color3.fromRGB(0, 0, 0)
 			btn.Text = text .. " (B)"
 		else
 			btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -1166,8 +1166,17 @@ for i = 1, 25 do
 end
 local function getCustomDisplayName(i)
 	local key = "Custom " .. tostring(i)
-	local off = customOffsets[key] or { x = 0, y = 0, z = 0 }
-	return string.format("Custom %s (%s,%s,%s)", tostring(i), tostring(off.z), tostring(off.y), tostring(off.x))
+	local off = customOffsets[key] or { x = 0, y = 0, z = 0, flat = false, useRotation = false, rx = 0, ry = 0, rz = 0 }
+	local name = string.format("Custom %s (%s,%s,%s)", tostring(i), tostring(off.z), tostring(off.y), tostring(off.x))
+	if off.flat == "flat90" then
+		name = name .. " (F90)"
+	elseif off.flat then
+		name = name .. " (F)"
+	end
+	if off.useRotation then
+		name = name .. string.format(" (%s,%s,%s)", tostring(off.rz or 0), tostring(off.ry or 0), tostring(off.rx or 0))
+	end
+	return name
 end
 local worldUpVector = Vector3.new(0, 1, 0)
 local function getMountainViewCF(index)
@@ -1297,6 +1306,7 @@ local safeZonePositions = {
 }
 autoTpEnabled = false
 trashBlockEnabled = false
+movementFlatState = false
 flingEnabled = false
 walkFlingEnabled = false
 auraFlingEnabled = false
@@ -1433,6 +1443,9 @@ end
 if type(controlSaveData.BLClickTrash) == "boolean" then
 	trashBlockEnabled = controlSaveData.BLClickTrash
 end
+if controlSaveData.MovementFlatState ~= nil then
+	movementFlatState = controlSaveData.MovementFlatState
+end
 if controlSaveData.SelectedPlace then
 	selectedPlace = controlSaveData.SelectedPlace
 end
@@ -1452,6 +1465,15 @@ if type(controlSaveData.CustomOffsets) == "table" then
 			customOffsets[cleanKey].x = tonumber(v.x) or 0
 			customOffsets[cleanKey].y = tonumber(v.y) or 0
 			customOffsets[cleanKey].z = tonumber(v.z) or 0
+			if v.flat == "flat90" then
+				customOffsets[cleanKey].flat = "flat90"
+			else
+				customOffsets[cleanKey].flat = (v.flat == true)
+			end
+			customOffsets[cleanKey].useRotation = (v.useRotation == true)
+			customOffsets[cleanKey].rx = tonumber(v.rx) or 0
+			customOffsets[cleanKey].ry = tonumber(v.ry) or 0
+			customOffsets[cleanKey].rz = tonumber(v.rz) or 0
 		end
 	end
 end
@@ -3994,13 +4016,41 @@ local function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, verticalOffset + 0.1, 0), predictedTargetPosition, worldUpVector)
 	elseif string.find(tostring(mode), "Custom") then
 		local cleanMode = tostring(mode):match("Custom %d+")
-		local offsets = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
+		local offsets = customOffsets[cleanMode] or { x = 0, y = 0, z = 0, flat = false, useRotation = false, rx = 0, ry = 0, rz = 0 }
 		local offsetVec = Vector3.new(offsets.x, offsets.y, offsets.z)
 		if offsetVec.Magnitude < 0.1 then
 			offsetVec = Vector3.new(0, 0.1, 0)
 		end
 		local rotatedOffset = targetRoot.CFrame:VectorToWorldSpace(offsetVec)
-		finalCFrame = CFrame.lookAt(predictedTargetPosition + rotatedOffset + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+		local targetPos = predictedTargetPosition + rotatedOffset + Vector3.new(0, verticalOffset, 0)
+		if offsets.useRotation then
+			local rx = math.rad(offsets.rx or 0)
+			local ry = math.rad(offsets.ry or 0)
+			local rz = math.rad(offsets.rz or 0)
+			finalCFrame = CFrame.new(targetPos) * CFrame.fromEulerAnglesXYZ(rx, ry, rz)
+		else
+			local lookAtCF = CFrame.lookAt(targetPos, predictedTargetPosition, worldUpVector)
+			if offsets.flat == "flat90" then
+				local lookVector = lookAtCF.LookVector
+				local flatLookVector = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+				if flatLookVector.Magnitude > 0 then
+					local flatCF = CFrame.lookAt(targetPos, targetPos + flatLookVector, worldUpVector)
+					finalCFrame = flatCF * CFrame.Angles(math.rad(90), 0, 0)
+				else
+					finalCFrame = lookAtCF * CFrame.Angles(math.rad(90), 0, 0)
+				end
+			elseif offsets.flat then
+				local lookVector = lookAtCF.LookVector
+				local flatLookVector = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+				if flatLookVector.Magnitude > 0 then
+					finalCFrame = CFrame.lookAt(targetPos, targetPos + flatLookVector, worldUpVector)
+				else
+					finalCFrame = lookAtCF
+				end
+			else
+				finalCFrame = lookAtCF
+			end
+		end
 	end
 	if not finalCFrame then
 		finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, 6.8, 0), predictedTargetPosition, worldUpVector)
@@ -4494,9 +4544,68 @@ function toggleSeriousModeTracker(state)
 	syncSeriousModeTracker()
 end
 local CharacterCleanupEnabled = false
+local antiZeroEnabled = false
 local ModConnections = {}
 local hooksRegistered = false
 local lastLocalActionTime = 0
+local characterMotor6Ds = {}
+local function runCleanupTick(char)
+	local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
+	local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+	if isSelfFlinging or isDashingOrSkill then return end
+	if not char then return end
+	if antiZeroEnabled then
+		local foundMover = false
+		for _, v in ipairs(char:GetDescendants()) do
+			if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
+				or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
+				or v:IsA("BodyPosition") or v:IsA("BodyGyro")
+				or v:IsA("VectorForce") or v:IsA("AlignPosition")
+				or v:IsA("AlignOrientation")
+			then
+				foundMover = true
+				pcall(function() v:Destroy() end)
+			end
+		end
+		if foundMover then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				hrp.AssemblyLinearVelocity  = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+			end
+		end
+	end
+	if CharacterCleanupEnabled then
+		for _, v in ipairs(char:GetDescendants()) do
+			if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
+				pcall(function() v:Destroy() end)
+			end
+		end
+		local human = char:FindFirstChildOfClass("Humanoid")
+		if human then
+			if human.PlatformStand then human.PlatformStand = false end
+			if human.Sit then human.Sit = false end
+		end
+		for i = 1, #characterMotor6Ds do
+			local m = characterMotor6Ds[i]
+			if m and m.Parent and not m.Enabled then
+				pcall(function() m.Enabled = true end)
+			end
+		end
+	end
+end
+local function toggleAntiZero(state)
+	antiZeroEnabled = state == true
+	if antiZeroEnabled then
+		task.spawn(function()
+			local lp = game:GetService("Players").LocalPlayer
+			while antiZeroEnabled do
+				pcall(function() runCleanupTick(lp.Character) end)
+				RunService.Heartbeat:Wait()
+			end
+		end)
+	end
+end
 local function toggleCharacterCleanupRuntime(state)
 	CharacterCleanupEnabled = state == true
 	if CharacterCleanupEnabled then
@@ -4513,49 +4622,19 @@ local function toggleCharacterCleanupRuntime(state)
 					end
 					local char = lp.Character
 					if char then
-						local foundMover = false
-						for _, v in ipairs(char:GetDescendants()) do
-							if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
-								or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
-								or v:IsA("BodyPosition") or v:IsA("BodyGyro")
-								or v:IsA("VectorForce") or v:IsA("AlignPosition")
-								or v:IsA("AlignOrientation")
-							then
-								foundMover = true
-								pcall(function() v:Destroy() end)
-							end
-						end
-						if foundMover then
-							local hrp = char:FindFirstChild("HumanoidRootPart")
-							if hrp then
-								hrp.AssemblyLinearVelocity  = Vector3.zero
-								hrp.AssemblyAngularVelocity = Vector3.zero
-							end
-						end
+						runCleanupTick(char)
 					end
 				end)
 				task.wait(0.1) 
 			until not CharacterCleanupEnabled
 		end)
 	end
+	if state == false then antiZeroEnabled = false end
 	if state == true and not hooksRegistered then
 		hooksRegistered = true
 		pcall(function()
 			local actionKeys = {
 				[Enum.KeyCode.Q] = true,
-				[Enum.KeyCode.E] = true,
-				[Enum.KeyCode.R] = true,
-				[Enum.KeyCode.F] = true,
-				[Enum.KeyCode.G] = true,
-				[Enum.KeyCode.Z] = true,
-				[Enum.KeyCode.X] = true,
-				[Enum.KeyCode.C] = true,
-				[Enum.KeyCode.V] = true,
-				[Enum.KeyCode.One] = true,
-				[Enum.KeyCode.Two] = true,
-				[Enum.KeyCode.Three] = true,
-				[Enum.KeyCode.Four] = true,
-				[Enum.KeyCode.Five] = true,
 			}
 			UserInputService.InputBegan:Connect(function(input, processed)
 				if processed then return end
@@ -4784,29 +4863,54 @@ local function toggleCharacterCleanupRuntime(state)
 	end
 	local function SetupCharacterCleanup(Char)
 		if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
+		characterMotor6Ds = {}
+		for _, v in ipairs(Char:GetDescendants()) do
+			if v:IsA("Motor6D") then
+				table.insert(characterMotor6Ds, v)
+			end
+		end
 		local function handleObj(v)
 			local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
 			local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
 			if isSelfFlinging or isDashingOrSkill then
 				return
 			end
-			if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity") 
-				or v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("VectorForce") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
-				
-				local hrp = Char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					pcall(function()
-						hrp.AssemblyLinearVelocity = Vector3.zero
-						hrp.AssemblyAngularVelocity = Vector3.zero
-					end)
+			if v:IsA("Motor6D") then
+				table.insert(characterMotor6Ds, v)
+			end
+			if CharacterCleanupEnabled then
+				if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
+					pcall(function() v:Destroy() end)
+					local human = Char:FindFirstChildOfClass("Humanoid")
+					if human then
+						human.PlatformStand = false
+						human.Sit = false
+					end
+					for i = 1, #characterMotor6Ds do
+						local m = characterMotor6Ds[i]
+						if m and m.Parent then m.Enabled = true end
+					end
 				end
-				pcall(function() v:Destroy() end)
-				
-				local Communicate = Char:FindFirstChild("Communicate") or Char:WaitForChild("Communicate", 2)
-				if Communicate then
-					pcall(function()
-						Communicate:FireServer({ Goal = "delete bv", BV = v })
-					end)
+			end
+			if antiZeroEnabled then
+				if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity") 
+					or v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("VectorForce") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+					
+					local hrp = Char:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						pcall(function()
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.AssemblyAngularVelocity = Vector3.zero
+						end)
+					end
+					pcall(function() v:Destroy() end)
+					
+					local Communicate = Char:FindFirstChild("Communicate") or Char:WaitForChild("Communicate", 2)
+					if Communicate then
+						pcall(function()
+							Communicate:FireServer({ Goal = "delete bv", BV = v })
+						end)
+					end
 				end
 			end
 		end
@@ -5071,25 +5175,59 @@ task.spawn(function()
             player:GetAttributeChangedSignal("Kills"):Connect(runAutoFixCamCheck)
         end
     end)
-    local function layCharacter()
-        local character = player.Character
-        if not character then
-            return
+    local flatLayConn = nil
+    local flatOriginalC0 = nil
+    local flatOriginalC1 = nil
+    local flatCapturedChar = nil
+    local function getRootJoint(char)
+        if not char then return nil end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local rj = hrp:FindFirstChild("RootJoint") or hrp:FindFirstChild("Root Joint")
+            if rj then return rj end
         end
-        local humanoid = character:FindFirstChildWhichIsA("Humanoid")
-        if not humanoid then
-            return
+        local lower = char:FindFirstChild("LowerTorso")
+        if lower then
+            local rj = lower:FindFirstChild("RootJoint") or lower:FindFirstChild("Root Joint")
+            if rj then return rj end
         end
-        humanoid.Sit = true
-        task.wait(0.1)
-        local root = character:FindFirstChild("HumanoidRootPart")
-        if root then
-            root.CFrame = root.CFrame * CFrame.Angles(math.pi * 0.5, 0, 0)
-        end
-        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-            track:Stop()
+        return nil
+    end
+    local function updateFlatLayState()
+        if flatLayConn then flatLayConn:Disconnect(); flatLayConn = nil end
+        if movementFlatState then
+            flatLayConn = RunService.Heartbeat:Connect(function()
+                local char = player.Character
+                if not char then return end
+                local rj = getRootJoint(char)
+                if rj then
+                    if flatCapturedChar ~= char or not flatOriginalC0 then
+                        flatOriginalC0 = rj.C0
+                        flatOriginalC1 = rj.C1
+                        flatCapturedChar = char
+                    end
+                    rj.C0 = CFrame.new(0, -2.15, 0) * flatOriginalC0 * CFrame.Angles(-math.pi * 0.5, 0, 0)
+                end
+            end)
+        else
+            local char = player.Character
+            local rj = getRootJoint(char)
+            if rj and flatOriginalC0 and (flatCapturedChar == char or rj.Parent.Parent == char or rj.Parent == char) then
+                rj.C0 = flatOriginalC0
+                if flatOriginalC1 then
+                    rj.C1 = flatOriginalC1
+                end
+            end
+            flatOriginalC0 = nil
+            flatOriginalC1 = nil
+            flatCapturedChar = nil
         end
     end
+    -- Trigger initial state on run
+    task.spawn(function()
+        task.wait(1)
+        updateFlatLayState()
+    end)
     local function cleanupStay()
         if stayConn then
             stayConn:Disconnect()
@@ -5255,7 +5393,43 @@ task.spawn(function()
         DashToggle = makeHubTog(row1, "Dash Block", setDashBlockRuntime, "DashBlockEnabled", false, 1/4)
     end
     makeHubBtn(row1, "Fix Cam", fixCamera, isTSB and 1/4 or 1/3)
-    makeHubBtn(row1, "Lay", layCharacter, isTSB and 1/4 or 1/3)
+    local flatBtn = Instance.new("TextButton")
+    flatBtn.BorderSizePixel = 0
+    flatBtn.Size = UDim2.new(isTSB and 1/4 or 1/3, 0, 1, 0)
+    local flatCorner = Instance.new("UICorner")
+    flatCorner.CornerRadius = UDim.new(0, 6)
+    flatCorner.Parent = flatBtn
+    flatBtn.AutoButtonColor = true
+    flatBtn.Font = Enum.Font.GothamBold
+    flatBtn.TextSize = 13
+    flatBtn.Parent = row1
+
+    local flatColors = {
+        [true]  = Color3.fromRGB(255, 255, 255),
+        [false] = Color3.fromRGB(0, 0, 0),
+    }
+    local flatTextColors = {
+        [true]  = Color3.fromRGB(0, 0, 0),
+        [false] = Color3.fromRGB(255, 255, 255),
+    }
+
+    local function applyMovementFlatState(val)
+        movementFlatState = val == true
+        controlSaveData.MovementFlatState = movementFlatState
+        saveSliderSaveData()
+
+        flatBtn.Text = "Flat"
+        flatBtn.BackgroundColor3 = flatColors[movementFlatState]
+        flatBtn.TextColor3 = flatTextColors[movementFlatState]
+
+        updateFlatLayState()
+    end
+
+    flatBtn.MouseButton1Click:Connect(function()
+        applyMovementFlatState(not movementFlatState)
+    end)
+
+    applyMovementFlatState(movementFlatState)
     if isTSB then
         local row2 = makeRow(60)
         makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
@@ -5277,13 +5451,21 @@ task.spawn(function()
         local row5 = makeRow(150)
         makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/3)
         makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
+        makeHubTog(row5, "Zero", function(v)
+            toggleAntiZero(v)
+            if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end
+        end, "AntiZeroEnabled", false, 1/3)
     else
         local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row3 = makeRow(90)
-        makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/2)
+        makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
+        makeHubTog(row3, "Zero", function(v)
+            toggleAntiZero(v)
+            if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end
+        end, "AntiZeroEnabled", false, 1/3)
     end
     local espHub = makeControlFrame(isTSB and 154 or 94)
     espHub.Parent = uiX
@@ -5573,109 +5755,113 @@ do
 	local MAX_SAFE_POSITIONS = 10
 	local displacedClient = nil
 	local originalParent = nil
-	local function forceClientDisplace(char, pos, isExtremeFling)
-		if pos.Y <= CLIENT_MOVE_Y or isExtremeFling then
-			local charHandler = char:FindFirstChild("CharacterHandler")
-			local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
-			if clientModule then
-				if not displacedClient then
-					originalParent = clientModule.Parent
-					displacedClient = clientModule
-				end
-				pcall(function()
-					for _ = 1, 5 do
-						clientModule.Parent = StarterPack
+	-- IIFE: gives forceClientDisplace/updateMonitoring/setupHrpListeners
+	-- their own fresh 200-register frame; outer vars become upvalues
+	;(function()
+		local function forceClientDisplace(char, pos, isExtremeFling)
+			if pos.Y <= CLIENT_MOVE_Y or isExtremeFling then
+				local charHandler = char:FindFirstChild("CharacterHandler")
+				local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
+				if clientModule then
+					if not displacedClient then
+						originalParent = clientModule.Parent
+						displacedClient = clientModule
 					end
-				end)
-			end
-		end
-	end
-	local function updateMonitoring()
-		local char = LocalPlayer.Character
-		if not char then
-			displacedClient = nil
-			originalParent = nil
-			return
-		end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		local pos = hrp.Position
-		local humanoid = char:FindFirstChildOfClass("Humanoid")
-		local alive = humanoid and humanoid.Health > 0
-		if alive and humanoid.FloorMaterial ~= Enum.Material.Air and pos.Y > CLIENT_MOVE_Y then
-			local lastSafe = safePositions[1]
-			if not lastSafe or (lastSafe.Position - pos).Magnitude > 5 then
-				table.insert(safePositions, 1, hrp.CFrame)
-				if #safePositions > MAX_SAFE_POSITIONS then
-					table.remove(safePositions, #safePositions)
-				end
-			end
-		end
-		local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
-		local vel = hrp.AssemblyLinearVelocity
-		local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
-		local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
-		local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
-		local isExtremeFling = isNanPos or isNanVel or isHugeVel
-		local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
-		local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
-		if ((isFar and not _G.SafeTeleportLock and not (attackTpEnabled and attackTpHolding)) or isVoid or isNanVel or isHugeVel) and alive then
-			for i = 1, #safePositions do
-				local targetCF = safePositions[i]
-				if targetCF then
 					pcall(function()
 						for _ = 1, 5 do
-							hrp.AssemblyLinearVelocity = Vector3.zero
-							hrp.AssemblyAngularVelocity = Vector3.zero
-							hrp.CFrame = targetCF
+							clientModule.Parent = StarterPack
 						end
 					end)
-					break
 				end
 			end
 		end
-		forceClientDisplace(char, pos, isExtremeFling)
-		if not isExtremeFling and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
-			pcall(function()
-				if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
-					displacedClient.Parent = originalParent
-				end
-			end)
-			displacedClient = nil
-			originalParent = nil
-		end
-		if not alive and displacedClient then
-			pcall(function()
-				if displacedClient.Parent == StarterPack then
-					displacedClient:Destroy()
-				end
-			end)
-			displacedClient = nil
-			originalParent = nil
-		end
-	end
-	local function setupHrpListeners(hrp, char)
-		if not hrp then return end
-		local function fastCheck()
+		local function updateMonitoring()
+			local char = LocalPlayer.Character
+			if not char then
+				displacedClient = nil
+				originalParent = nil
+				return
+			end
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
 			local pos = hrp.Position
+			local humanoid = char:FindFirstChildOfClass("Humanoid")
+			local alive = humanoid and humanoid.Health > 0
+			if alive and humanoid.FloorMaterial ~= Enum.Material.Air and pos.Y > CLIENT_MOVE_Y then
+				local lastSafe = safePositions[1]
+				if not lastSafe or (lastSafe.Position - pos).Magnitude > 5 then
+					table.insert(safePositions, 1, hrp.CFrame)
+					if #safePositions > MAX_SAFE_POSITIONS then
+						table.remove(safePositions, #safePositions)
+					end
+				end
+			end
 			local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
 			local vel = hrp.AssemblyLinearVelocity
 			local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
 			local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
 			local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
-			forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
+			local isExtremeFling = isNanPos or isNanVel or isHugeVel
+			local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
+			local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
+			if ((isFar and not _G.SafeTeleportLock and not (attackTpEnabled and attackTpHolding)) or isVoid or isNanVel or isHugeVel) and alive then
+				for i = 1, #safePositions do
+					local targetCF = safePositions[i]
+					if targetCF then
+						pcall(function()
+							for _ = 1, 5 do
+								hrp.AssemblyLinearVelocity = Vector3.zero
+								hrp.AssemblyAngularVelocity = Vector3.zero
+								hrp.CFrame = targetCF
+							end
+						end)
+						break
+					end
+				end
+			end
+			forceClientDisplace(char, pos, isExtremeFling)
+			if not isExtremeFling and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
+				pcall(function()
+					if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
+						displacedClient.Parent = originalParent
+					end
+				end)
+				displacedClient = nil
+				originalParent = nil
+			end
+			if not alive and displacedClient then
+				pcall(function()
+					if displacedClient.Parent == StarterPack then
+						displacedClient:Destroy()
+					end
+				end)
+				displacedClient = nil
+				originalParent = nil
+			end
 		end
-		hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
-		hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
-	end
-	LocalPlayer.CharacterAdded:Connect(function(char)
-		local hrp = char:WaitForChild("HumanoidRootPart", 5)
-		setupHrpListeners(hrp, char)
-	end)
-	if LocalPlayer.Character then
-		setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
-	end
-	RunService.Heartbeat:Connect(updateMonitoring)
+		local function setupHrpListeners(hrp, char)
+			if not hrp then return end
+			local function fastCheck()
+				local pos = hrp.Position
+				local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
+				local vel = hrp.AssemblyLinearVelocity
+				local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
+				local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+				local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
+				forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
+			end
+			hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
+			hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
+		end
+		LocalPlayer.CharacterAdded:Connect(function(char)
+			local hrp = char:WaitForChild("HumanoidRootPart", 5)
+			setupHrpListeners(hrp, char)
+		end)
+		if LocalPlayer.Character then
+			setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
+		end
+		RunService.Heartbeat:Connect(updateMonitoring)
+	end)()
 end
 function Keybind_add(text)
 	if text == nil then
@@ -8332,8 +8518,9 @@ end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
 task.wait(0.02)
-local customOffsetFrame = makeControlFrame(75)
+local customOffsetFrame = makeControlFrame(215)
 customOffsetFrame.Visible = false
+local CustomUI = {}
 local function getTPModeItems()
 	local items = { "Above", "Under", "Behind", "Middle", "Aggressive" }
 	for i = 1, 25 do
@@ -8467,6 +8654,21 @@ do
 	end
 	local behindCustomInput = createBehindCustomInput("Distance")
 	behindCustomFrame.LayoutOrder = 1002
+	local function makeCustomRow(yPos, height)
+		local row = Instance.new("Frame")
+		row.BackgroundTransparency = 1
+		row.BorderSizePixel = 0
+		row.Position = UDim2.new(0, 5, 0, yPos)
+		row.Size = UDim2.new(1, -10, 0, height or 26)
+		row.Parent = customOffsetFrame
+		local layout = Instance.new("UIListLayout")
+		layout.FillDirection = Enum.FillDirection.Horizontal
+		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		layout.VerticalAlignment = Enum.VerticalAlignment.Center
+		layout.Padding = UDim.new(0, 4)
+		layout.Parent = row
+		return row
+	end
 	function updateCustomUI()
 		local currentMode = tostring(attackTpMode)
 		local isAutoCustom = (currentMode == "Auto Custom")
@@ -8477,10 +8679,19 @@ do
 		behindCustomFrame.Visible = isBehindCustom
 		if isCustom then
 			local cleanMode = tostring(attackTpMode):match("Custom %d+")
-			local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0 }
-			zInput.Text = tostring(off.z)
-			yInput.Text = tostring(off.y)
-			xInput.Text = tostring(off.x)
+			local off = customOffsets[cleanMode] or { x = 0, y = 0, z = 0, flat = false, useRotation = false, rx = 0, ry = 0, rz = 0 }
+			CustomUI.zInput.Text = tostring(off.z or 0)
+			CustomUI.yInput.Text = tostring(off.y or 0)
+			CustomUI.xInput.Text = tostring(off.x or 0)
+			if CustomUI.applyFlatState then
+				CustomUI.applyFlatState(off.flat, true)
+			end
+			if CustomUI.rotTog and CustomUI.rotTog.SetValue then
+				CustomUI.rotTog.SetValue(off.useRotation == true, true)
+			end
+			if CustomUI.rotZInput then CustomUI.rotZInput.Text = tostring(off.rz or 0) end
+			if CustomUI.rotYInput then CustomUI.rotYInput.Text = tostring(off.ry or 0) end
+			if CustomUI.rotXInput then CustomUI.rotXInput.Text = tostring(off.rx or 0) end
 		end
 		if isAutoCustom then
 			autoCustomInput.Text = tostring(autoCustomDistance)
@@ -8492,8 +8703,8 @@ do
 	function createOffsetInput(label, axis, position)
 		local labelObj = Instance.new("TextLabel")
 		labelObj.BackgroundTransparency = 1
-		labelObj.Position = UDim2.fromScale(position, 0.2)
-		labelObj.Size = UDim2.fromScale(0.1, 0.3)
+		labelObj.Position = UDim2.new(position, 0, 0, 25)
+		labelObj.Size = UDim2.new(0.1, 0, 0, 15)
 		labelObj.Font = Enum.Font.GothamBold
 		labelObj.Text = label
 		labelObj.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -8505,8 +8716,8 @@ do
 		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		box.BackgroundTransparency = 0.5
 		box.BorderSizePixel = 0
-		box.Position = UDim2.fromScale(position, 0.5)
-		box.Size = UDim2.fromScale(0.25, 0.4)
+		box.Position = UDim2.new(position, 0, 0, 42)
+		box.Size = UDim2.new(0.25, 0, 0, 22)
 		box.Font = Enum.Font.GothamMedium
 		box.TextColor3 = Color3.fromRGB(255, 255, 255)
 		box.TextSize = 13
@@ -8529,7 +8740,7 @@ do
 			local cleanMode = tostring(attackTpMode):match("Custom %d+")
 			if not cleanMode then return end
 			if val == nil then
-				box.Text = tostring(customOffsets[cleanMode][axis])
+				box.Text = tostring(customOffsets[cleanMode][axis] or 0)
 			else
 				box.Text = tostring(val)
 				customOffsets[cleanMode][axis] = val
@@ -8542,9 +8753,164 @@ do
 		end)
 		return box
 	end
-	zInput = createOffsetInput("Z", "z", 0.05)
-	yInput = createOffsetInput("Y", "y", 0.375)
-	xInput = createOffsetInput("X", "x", 0.7)
+	function createRotationInput(label, axis, position)
+		local labelObj = Instance.new("TextLabel")
+		labelObj.BackgroundTransparency = 1
+		labelObj.Position = UDim2.new(position, 0, 0, 158)
+		labelObj.Size = UDim2.new(0.1, 0, 0, 15)
+		labelObj.Font = Enum.Font.GothamBold
+		labelObj.Text = label
+		labelObj.TextColor3 = Color3.fromRGB(255, 255, 255)
+		labelObj.TextSize = 13
+		labelObj.TextScaled = false
+		labelObj.TextWrapped = true
+		labelObj.Parent = customOffsetFrame
+		local box = Instance.new("TextBox")
+		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		box.BackgroundTransparency = 0.5
+		box.BorderSizePixel = 0
+		box.Position = UDim2.new(position, 0, 0, 175)
+		box.Size = UDim2.new(0.25, 0, 0, 22)
+		box.Font = Enum.Font.GothamMedium
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
+		box.TextSize = 13
+		box.TextScaled = false
+		box.ClearTextOnFocus = false
+		box.Text = "0"
+		box.Parent = customOffsetFrame
+		box.Focused:Connect(function()
+			box.Text = ""
+		end)
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local text = box.Text
+			local filtered = text:gsub("[^-0-9%.]", "")
+			if filtered ~= text then
+				box.Text = filtered
+			end
+		end)
+		box.FocusLost:Connect(function()
+			local val = tonumber(box.Text)
+			local cleanMode = tostring(attackTpMode):match("Custom %d+")
+			if not cleanMode then return end
+			if val == nil then
+				box.Text = tostring(customOffsets[cleanMode][axis] or 0)
+			else
+				box.Text = tostring(val)
+				customOffsets[cleanMode][axis] = val
+				controlSaveData.CustomOffsets = customOffsets
+				saveSliderSaveData()
+				if tpModesDropdown then
+					tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+				end
+			end
+		end)
+		return box
+	end
+	-- Position title
+	local posTitleLbl = Instance.new("TextLabel")
+	posTitleLbl.BackgroundTransparency = 1
+	posTitleLbl.Position = UDim2.new(0, 0, 0, 7)
+	posTitleLbl.Size = UDim2.new(1, 0, 0, 15)
+	posTitleLbl.Font = Enum.Font.GothamBold
+	posTitleLbl.Text = "Position"
+	posTitleLbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+	posTitleLbl.TextSize = 12
+	posTitleLbl.TextXAlignment = Enum.TextXAlignment.Center
+	posTitleLbl.Parent = customOffsetFrame
+	CustomUI.zInput = createOffsetInput("Z", "z", 0.05)
+	CustomUI.yInput = createOffsetInput("Y", "y", 0.375)
+	CustomUI.xInput = createOffsetInput("X", "x", 0.7)
+	-- Flat 3-state cycle button (ON -> ON (90) -> OFF)
+	CustomUI.flatStates = { true, "flat90", false }
+	CustomUI.flatLabels = { "Flat: ON", "Flat: 90", "Flat: OFF" }
+	CustomUI.flatColors = {
+		[true]     = Color3.fromRGB(255, 255, 255),
+		["flat90"] = Color3.fromRGB(80, 80, 80),
+		[false]    = Color3.fromRGB(0, 0, 0),
+	}
+	CustomUI.flatTextColors = {
+		[true]     = Color3.fromRGB(0, 0, 0),
+		["flat90"] = Color3.fromRGB(0, 0, 0),
+		[false]    = Color3.fromRGB(255, 255, 255),
+	}
+	CustomUI.flatBtn = Instance.new("TextButton")
+	CustomUI.flatBtn.BackgroundColor3 = CustomUI.flatColors[false]
+	CustomUI.flatBtn.TextColor3 = CustomUI.flatTextColors[false]
+	CustomUI.flatBtn.BorderSizePixel = 0
+	CustomUI.flatBtn.Size = UDim2.new(0.9, 0, 0, 22)
+	CustomUI.flatBtn.Position = UDim2.new(0.05, 0, 0, 70)
+	CustomUI.flatBtn.Font = Enum.Font.GothamBold
+	CustomUI.flatBtn.Text = "Flat"
+	CustomUI.flatBtn.TextSize = 12
+	CustomUI.flatCorner = Instance.new("UICorner")
+	CustomUI.flatCorner.CornerRadius = UDim.new(0, 6)
+	CustomUI.flatCorner.Parent = CustomUI.flatBtn
+	CustomUI.flatBtn.Parent = customOffsetFrame
+	function CustomUI.getFlatStateIndex(val)
+		if val == true then return 1
+		elseif val == "flat90" then return 2
+		else return 3 end
+	end
+	function CustomUI.applyFlatState(val, silent)
+		CustomUI.flatBtn.Text = "Flat"
+		CustomUI.flatBtn.BackgroundColor3 = CustomUI.flatColors[val]
+		CustomUI.flatBtn.TextColor3 = CustomUI.flatTextColors[val]
+		if silent then return end
+		local cleanMode = tostring(attackTpMode):match("Custom %d+")
+		if not cleanMode then return end
+		customOffsets[cleanMode].flat = val
+		if val then
+			customOffsets[cleanMode].useRotation = false
+			if CustomUI.rotTog and CustomUI.rotTog.SetValue then
+				CustomUI.rotTog.SetValue(false, true)
+			end
+		end
+		controlSaveData.CustomOffsets = customOffsets
+		saveSliderSaveData()
+		if tpModesDropdown then
+			tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+		end
+	end
+	CustomUI.flatBtn.MouseButton1Click:Connect(function()
+		local cleanMode = tostring(attackTpMode):match("Custom %d+")
+		if not cleanMode then return end
+		local cur = customOffsets[cleanMode].flat
+		local idx = CustomUI.getFlatStateIndex(cur)
+		local next = CustomUI.flatStates[(idx % #CustomUI.flatStates) + 1]
+		CustomUI.applyFlatState(next)
+	end)
+	-- Rotation section
+	CustomUI.rotTitleRow = makeCustomRow(100, 15)
+	CustomUI.rotTitle = Instance.new("TextLabel")
+	CustomUI.rotTitle.BackgroundTransparency = 1
+	CustomUI.rotTitle.Size = UDim2.new(1, 0, 1, 0)
+	CustomUI.rotTitle.Font = Enum.Font.GothamBold
+	CustomUI.rotTitle.Text = "Rotation"
+	CustomUI.rotTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	CustomUI.rotTitle.TextSize = 13
+	CustomUI.rotTitle.TextXAlignment = Enum.TextXAlignment.Center
+	CustomUI.rotTitle.Parent = CustomUI.rotTitleRow
+	CustomUI.rotTogRow = makeCustomRow(120, 26)
+	CustomUI.rotTog = makeHubTog(CustomUI.rotTogRow, "Use Custom Rotation", function(enabled)
+		local cleanMode = tostring(attackTpMode):match("Custom %d+")
+		if cleanMode then
+			customOffsets[cleanMode].useRotation = enabled
+			if enabled then
+				customOffsets[cleanMode].flat = false
+				if CustomUI.applyFlatState then
+					CustomUI.applyFlatState(false, true)
+				end
+			end
+			controlSaveData.CustomOffsets = customOffsets
+			saveSliderSaveData()
+			if tpModesDropdown then
+				tpModesDropdown.SetItemDisplayNames(getTPModeDisplayNames())
+			end
+		end
+	end, nil, false, 0.9)
+	CustomUI.rotZInput = createRotationInput("Z", "rz", 0.05)
+	CustomUI.rotYInput = createRotationInput("Y", "ry", 0.375)
+	CustomUI.rotXInput = createRotationInput("X", "rx", 0.7)
 	autoCustomFrame.Parent = uiX
 	behindCustomFrame.Parent = uiX
 	tpModesDropdown = Dropdown({
