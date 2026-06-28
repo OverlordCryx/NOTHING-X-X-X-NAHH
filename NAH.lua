@@ -1317,6 +1317,15 @@ walkFlingKeybind = Enum.KeyCode.X
 walkFlingPower = 20000
 flingPower = 20000
 auraRange = 20
+-- Orbit variables
+orbitEnabled = false
+orbitSpeedH = 1.0
+orbitSpeedV = 1.0
+orbitDistance = 5.0
+orbitAngleH = 0
+orbitAngleV = 0
+orbitMode = "Horizontal"
+orbitConnection = nil
 walkFlingUseNormal = false
 walkFlingDirections = {
 	Forward = true,
@@ -8529,6 +8538,269 @@ flingModeControls = _G["4tog_on_one_frame"]({
 		setFlingAllEnabled(enabled)
 	end,
 })
+task.wait(0.02)
+-- ================================================
+-- ORBIT SYSTEM
+-- ================================================
+task.spawn(function()
+	-- Load saved values
+	local savedOD = getSavedControlValue("OrbitDistance")
+	if savedOD ~= nil then orbitDistance = savedOD end
+	local savedSH = getSavedControlValue("OrbitSpeedH")
+	if savedSH ~= nil then orbitSpeedH = savedSH end
+	local savedSV = getSavedControlValue("OrbitSpeedV")
+	if savedSV ~= nil then orbitSpeedV = savedSV end
+	local savedOM = getSavedControlValue("OrbitMode")
+	if savedOM ~= nil then orbitMode = savedOM end
+
+	local function stopOrbit()
+		orbitEnabled = false
+		if orbitConnection then
+			orbitConnection:Disconnect()
+			orbitConnection = nil
+		end
+	end
+
+	local function startOrbit()
+		stopOrbit()
+		orbitEnabled = true
+		orbitAngleH = 0
+		orbitAngleV = 0
+		orbitConnection = RunService.Heartbeat:Connect(function(dt)
+			if not orbitEnabled then
+				if orbitConnection then orbitConnection:Disconnect(); orbitConnection = nil end
+				return
+			end
+			local character = player.Character
+			local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+			if not myRoot then return end
+			local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
+			if not targetModel then return end
+			local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
+			if not targetRoot then return end
+
+			local targetPos = targetRoot.Position
+			local dist = math.max(0.5, orbitDistance)
+			local ox, oy, oz
+
+			if orbitMode == "Horizontal" then
+				-- XZ plane orbit — spins around target at same body height
+				orbitAngleH = orbitAngleH + orbitSpeedH * dt
+				ox = math.cos(orbitAngleH) * dist
+				oy = 0
+				oz = math.sin(orbitAngleH) * dist
+
+			elseif orbitMode == "Vertical" then
+				-- Vertical circle: V speed spins up/down, H speed rotates the plane horizontally
+				orbitAngleH = orbitAngleH + orbitSpeedH * dt  -- rotates which direction the circle faces
+				orbitAngleV = orbitAngleV + orbitSpeedV * dt  -- spins within the vertical circle
+				local cosH = math.cos(orbitAngleH)
+				local sinH = math.sin(orbitAngleH)
+				local cosV = math.cos(orbitAngleV)
+				local sinV = math.sin(orbitAngleV)
+				ox = cosH * cosV * dist
+				oy = sinV * dist
+				oz = sinH * cosV * dist
+
+			elseif orbitMode == "Both" then
+				-- Spherical orbit: H and V spin simultaneously, fully independent
+				orbitAngleH = orbitAngleH + orbitSpeedH * dt
+				orbitAngleV = orbitAngleV + orbitSpeedV * dt
+				local cosV = math.cos(orbitAngleV)
+				local sinV = math.sin(orbitAngleV)
+				local cosH = math.cos(orbitAngleH)
+				local sinH = math.sin(orbitAngleH)
+				ox = cosH * cosV * dist
+				oy = sinV * dist
+				oz = sinH * cosV * dist
+			else
+				orbitAngleH = orbitAngleH + orbitSpeedH * dt
+				ox = math.cos(orbitAngleH) * dist
+				oy = 0
+				oz = math.sin(orbitAngleH) * dist
+			end
+
+			local newPos = targetPos + Vector3.new(ox, oy, oz)
+			-- Face the target, use world up unless we're going straight up/down
+			local lookDir = (targetPos - newPos)
+			if lookDir.Magnitude < 0.01 then return end
+			local newCF = CFrame.lookAt(newPos, targetPos, Vector3.new(0, 1, 0))
+			-- Zero velocity so body doesn't drift or bounce
+			applyTeleportRootState(myRoot, newCF, Vector3.zero, Vector3.zero)
+		end)
+	end
+
+	-- === Build Orbit UI frame ===
+	local orbitHub = makeControlFrame(200)
+	orbitHub.Parent = uiX
+	orbitHub.ClipsDescendants = true
+	orbitHub.LayoutOrder = 999997  -- just above Places (999998)
+
+	local orbitTitle = Instance.new("TextLabel")
+	orbitTitle.BackgroundTransparency = 1
+	orbitTitle.Position = UDim2.new(0, 16, 0, 8)
+	orbitTitle.Size = UDim2.new(1, -32, 0, 18)
+	orbitTitle.Font = Enum.Font.GothamBold
+	orbitTitle.Text = "Orbit"
+	orbitTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	orbitTitle.TextStrokeTransparency = 1
+	orbitTitle.TextSize = 14
+	orbitTitle.TextXAlignment = Enum.TextXAlignment.Left
+	orbitTitle.Parent = orbitHub
+
+	-- Label + TextBox helper
+	local function makeOrbitInput(yPos, labelText, defVal, saveKey, onChanged)
+		local lbl = Instance.new("TextLabel")
+		lbl.BackgroundTransparency = 1
+		lbl.Position = UDim2.new(0, 10, 0, yPos)
+		lbl.Size = UDim2.new(0.54, -12, 0, 22)
+		lbl.Font = Enum.Font.GothamBold
+		lbl.Text = labelText
+		lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+		lbl.TextSize = 12
+		lbl.TextScaled = false
+		lbl.TextWrapped = true
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.Parent = orbitHub
+		local box = Instance.new("TextBox")
+		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		box.BackgroundTransparency = 0.5
+		box.BorderSizePixel = 0
+		box.Position = UDim2.new(0.56, 0, 0, yPos)
+		box.Size = UDim2.new(0.4, -4, 0, 22)
+		box.ClearTextOnFocus = false
+		box.Font = Enum.Font.GothamBold
+		box.Text = tostring(defVal)
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
+		box.TextSize = 12
+		box.TextScaled = false
+		box.Parent = orbitHub
+		local bc = Instance.new("UICorner")
+		bc.CornerRadius = UDim.new(0, 4)
+		bc.Parent = box
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local t = box.Text
+			local f = t:gsub("[^0-9%-%.eE]", "")
+			if f ~= t then box.Text = f end
+		end)
+		box.Focused:Connect(function() box.Text = "" end)
+		box.FocusLost:Connect(function()
+			local v = tonumber(box.Text)
+			if v then
+				box.Text = tostring(v)
+				if saveKey then setSavedControlValue(saveKey, v) end
+				if onChanged then onChanged(v) end
+			else
+				box.Text = tostring(defVal)
+			end
+		end)
+		return box
+	end
+
+	makeOrbitInput(34,  "Horizontal (speed)", orbitSpeedH, "OrbitSpeedH",   function(v) orbitSpeedH = v end)
+	makeOrbitInput(62,  "Vertical (speed)",   orbitSpeedV, "OrbitSpeedV",   function(v) orbitSpeedV = v end)
+	makeOrbitInput(90,  "Distance",           orbitDistance,"OrbitDistance",function(v) orbitDistance = v end)
+
+	-- Direction label
+	local dirLabel = Instance.new("TextLabel")
+	dirLabel.BackgroundTransparency = 1
+	dirLabel.Position = UDim2.new(0, 10, 0, 118)
+	dirLabel.Size = UDim2.new(1, -20, 0, 14)
+	dirLabel.Font = Enum.Font.GothamBold
+	dirLabel.Text = "Direction"
+	dirLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+	dirLabel.TextSize = 11
+	dirLabel.TextXAlignment = Enum.TextXAlignment.Left
+	dirLabel.Parent = orbitHub
+
+	-- Direction buttons row
+	local dirRow = Instance.new("Frame")
+	dirRow.BackgroundTransparency = 1
+	dirRow.Position = UDim2.new(0, 6, 0, 134)
+	dirRow.Size = UDim2.new(1, -12, 0, 28)
+	dirRow.Parent = orbitHub
+	local dirLayout = Instance.new("UIListLayout")
+	dirLayout.FillDirection = Enum.FillDirection.Horizontal
+	dirLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	dirLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	dirLayout.Padding = UDim.new(0, 4)
+	dirLayout.Parent = dirRow
+
+	local dirBtns = {}
+	local modeList   = {"Horizontal", "Vertical", "Both"}
+	local modeLabels = {"Horizontal",  "Vertical",  "V+H"}
+
+	local function applyDirMode(mode)
+		orbitMode = mode
+		setSavedControlValue("OrbitMode", mode)
+		for _, e in ipairs(dirBtns) do
+			local on = e.mode == mode
+			e.btn.BackgroundColor3 = on and Color3.fromRGB(255,255,255) or Color3.fromRGB(0,0,0)
+			e.btn.TextColor3       = on and Color3.fromRGB(0,0,0)       or Color3.fromRGB(255,255,255)
+		end
+	end
+
+	for idx = 1, 3 do
+		local m = modeList[idx]
+		local btn = Instance.new("TextButton")
+		btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		btn.BackgroundTransparency = 0
+		btn.BorderSizePixel = 0
+		btn.Size = UDim2.new(1/3, -4, 1, 0)
+		btn.Font = Enum.Font.GothamBold
+		btn.Text = modeLabels[idx]
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.TextStrokeTransparency = 1
+		btn.TextSize = 11
+		btn.TextScaled = false
+		btn.TextWrapped = true
+		btn.AutoButtonColor = false
+		btn.Parent = dirRow
+		local bc2 = Instance.new("UICorner")
+		bc2.CornerRadius = UDim.new(0, 6)
+		bc2.Parent = btn
+		dirBtns[idx] = {btn = btn, mode = m}
+		btn.MouseButton1Click:Connect(function() applyDirMode(m) end)
+	end
+	applyDirMode(orbitMode)
+
+	-- ON/OFF toggle
+	local orbitTogBtn = Instance.new("TextButton")
+	orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	orbitTogBtn.BackgroundTransparency = 0
+	orbitTogBtn.BorderSizePixel = 0
+	orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 168)
+	orbitTogBtn.Size = UDim2.new(0.9, 0, 0, 24)
+	orbitTogBtn.Font = Enum.Font.GothamBold
+	orbitTogBtn.Text = "Orbit"
+	orbitTogBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	orbitTogBtn.TextStrokeTransparency = 1
+	orbitTogBtn.TextSize = 13
+	orbitTogBtn.AutoButtonColor = false
+	orbitTogBtn.Parent = orbitHub
+	local bc3 = Instance.new("UICorner")
+	bc3.CornerRadius = UDim.new(0, 6)
+	bc3.Parent = orbitTogBtn
+
+	orbitTogBtn.MouseButton1Click:Connect(function()
+		if orbitEnabled then
+			stopOrbit()
+			orbitTogBtn.Text = "Orbit"
+			orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			orbitTogBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
+			if not targetModel then
+				return
+			end
+			startOrbit()
+			orbitTogBtn.Text = "Orbit"
+			orbitTogBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			orbitTogBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+		end
+	end)
+end)
+-- ================================================
 task.wait(0.02)
 if game.GameId == 3808081382 then
 	placesDropdown = Dropdown({
