@@ -3,7 +3,6 @@
 repeat
     task.wait();
 until game:IsLoaded();
-warn("NOTHING _X -X_X-")
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
@@ -1312,6 +1311,7 @@ walkFlingEnabled = false
 auraFlingEnabled = false
 clickFlingEnabled = false
 flingAllEnabled = false
+antiFlingEnabled = false
 local FLING_INF_POWER = 1e12
 walkFlingKeybind = Enum.KeyCode.X
 walkFlingPower = 20000
@@ -8617,6 +8617,16 @@ task.spawn(function()
 	if savedSV ~= nil then orbitSpeedV = savedSV end
 	local savedOM = getSavedControlValue("OrbitMode")
 	if savedOM ~= nil then orbitMode = savedOM end
+	for i = 1, 3 do
+		local prefix = "OrbitC" .. i
+		local function ls(key, default)
+			local v = getSavedControlValue(prefix .. key)
+			return v ~= nil and v or default
+		end
+		_G["__orbitPresetLoad" .. i] = { Left=ls("Left",0), Right=ls("Right",0), Up=ls("Up",0), Down=ls("Down",0), Front=ls("Front",0), Back=ls("Back",0), Speed=ls("Speed",1) }
+	end
+	local savedACP = getSavedControlValue("OrbitActiveCustomPreset")
+	local savedACPNum = tonumber(savedACP) or 0
 	local function stopOrbit()
 		orbitEnabled = false
 		if orbitConnection then
@@ -8624,6 +8634,17 @@ task.spawn(function()
 			orbitConnection = nil
 		end
 	end
+	orbitCustomEnabled = false
+	orbitCustomLeft  = 0
+	orbitCustomRight = 0
+	orbitCustomUp    = 0
+	orbitCustomDown  = 0
+	orbitCustomFront = 0
+	orbitCustomBack  = 0
+	orbitCustomSpeed = 1
+	orbitAdaptBody = false
+	orbitAdaptPosition = false
+	orbitAdaptRotation = false
 	local function startOrbit()
 		stopOrbit()
 		orbitEnabled = true
@@ -8642,23 +8663,45 @@ task.spawn(function()
 			local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
 			if not targetRoot then return end
 			local targetPos = targetRoot.Position
+			local targetCF  = targetRoot.CFrame
+			if orbitAdaptBody then
+				targetPos = targetCF.Position
+			end
+			if orbitAdaptPosition then
+				targetPos = targetRoot.Position
+			end
 			local dist = math.max(0.5, orbitDistance)
 			local ox, oy, oz
-			if orbitMode == "Horizontal" then
+			if orbitCustomEnabled then
+				orbitAngleV = orbitAngleV + orbitCustomSpeed * dt
+				local s = math.sin(orbitAngleV)
+				local c = math.cos(orbitAngleV)
+				local centreUD = (orbitCustomUp    - orbitCustomDown)  * 0.5
+				local radiusUD = (orbitCustomUp    + orbitCustomDown)  * 0.5
+				local centreLR = (orbitCustomRight - orbitCustomLeft)  * 0.5
+				local radiusLR = (orbitCustomRight + orbitCustomLeft)  * 0.5
+				local centreFB = (orbitCustomFront - orbitCustomBack)  * 0.5
+				local radiusFB = (orbitCustomFront + orbitCustomBack)  * 0.5
+				local ampUp    = centreUD + radiusUD * s
+				local ampRight = centreLR + radiusLR * c
+				local ampFront = centreFB + radiusFB * s
+				local tRight = targetCF.RightVector
+				local tUp    = targetCF.UpVector
+				local tFront = targetCF.LookVector
+				local worldOff = tRight * ampRight + tUp * ampUp + tFront * ampFront
+				ox = worldOff.X; oy = worldOff.Y; oz = worldOff.Z
+			elseif orbitMode == "Horizontal" then
 				orbitAngleH = orbitAngleH + orbitSpeedH * dt
 				ox = math.cos(orbitAngleH) * dist
 				oy = 0
 				oz = math.sin(orbitAngleH) * dist
 			elseif orbitMode == "Vertical" then
-				orbitAngleH = orbitAngleH + orbitSpeedH * dt
 				orbitAngleV = orbitAngleV + orbitSpeedV * dt
-				local cosH = math.cos(orbitAngleH)
-				local sinH = math.sin(orbitAngleH)
 				local cosV = math.cos(orbitAngleV)
 				local sinV = math.sin(orbitAngleV)
-				ox = cosH * cosV * dist
-				oy = sinV * dist
-				oz = sinH * cosV * dist
+				local localFront = Vector3.new(0, sinV, cosV) * dist
+				local worldOff = targetCF:VectorToWorldSpace(localFront)
+				ox = worldOff.X; oy = worldOff.Y; oz = worldOff.Z
 			elseif orbitMode == "Both" then
 				orbitAngleH = orbitAngleH + orbitSpeedH * dt
 				orbitAngleV = orbitAngleV + orbitSpeedV * dt
@@ -8666,9 +8709,9 @@ task.spawn(function()
 				local sinV = math.sin(orbitAngleV)
 				local cosH = math.cos(orbitAngleH)
 				local sinH = math.sin(orbitAngleH)
-				ox = cosH * cosV * dist
-				oy = sinV * dist
-				oz = sinH * cosV * dist
+				local localOff = Vector3.new(sinH * cosV, sinV, cosH * cosV) * dist
+				local worldOff = targetCF:VectorToWorldSpace(localOff)
+				ox = worldOff.X; oy = worldOff.Y; oz = worldOff.Z
 			else
 				orbitAngleH = orbitAngleH + orbitSpeedH * dt
 				ox = math.cos(orbitAngleH) * dist
@@ -8678,11 +8721,15 @@ task.spawn(function()
 			local newPos = targetPos + Vector3.new(ox, oy, oz)
 			local lookDir = (targetPos - newPos)
 			if lookDir.Magnitude < 0.01 then return end
-			local newCF = CFrame.lookAt(newPos, targetPos, Vector3.new(0, 1, 0))
+			local upVec = Vector3.new(0, 1, 0)
+			if orbitAdaptRotation then
+				upVec = targetCF.UpVector
+			end
+			local newCF = CFrame.lookAt(newPos, targetPos, upVec)
 			applyTeleportRootState(myRoot, newCF, Vector3.zero, Vector3.zero)
 		end)
 	end
-	local orbitHub = makeControlFrame(200)
+	local orbitHub = makeControlFrame(460)
 	orbitHub.Parent = uiX
 	orbitHub.ClipsDescendants = true
 	orbitHub.LayoutOrder = 999997
@@ -8770,14 +8817,78 @@ task.spawn(function()
 	dirLayout.Parent = dirRow
 	local dirBtns = {}
 	local modeList   = {"Horizontal", "Vertical", "Both"}
-	local modeLabels = {"Horizontal",  "Vertical",  "V+H"}
-	local function applyDirMode(mode)
-		orbitMode = mode
-		setSavedControlValue("OrbitMode", mode)
+	local modeLabels = {"H",          "V",        "V+H"}
+	local customPresets = {
+		{ Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
+		{ Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
+		{ Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
+	}
+	for i = 1, 3 do
+		local ld = _G["__orbitPresetLoad" .. i]
+		if ld then customPresets[i] = ld; _G["__orbitPresetLoad" .. i] = nil end
+	end
+	local activeCustomPreset = 0
+	local customBoxRefs = {}
+	local function loadPresetToBoxes(idx)
+		local p = customPresets[idx]
+		if not p then return end
+		orbitCustomLeft  = p.Left
+		orbitCustomRight = p.Right
+		orbitCustomUp    = p.Up
+		orbitCustomDown  = p.Down
+		orbitCustomFront = p.Front
+		orbitCustomBack  = p.Back
+		orbitCustomSpeed = p.Speed
+		if customBoxRefs.Left   then customBoxRefs.Left.Text   = tostring(p.Left)   end
+		if customBoxRefs.Right  then customBoxRefs.Right.Text  = tostring(p.Right)  end
+		if customBoxRefs.Up     then customBoxRefs.Up.Text     = tostring(p.Up)     end
+		if customBoxRefs.Down   then customBoxRefs.Down.Text   = tostring(p.Down)   end
+		if customBoxRefs.Front  then customBoxRefs.Front.Text  = tostring(p.Front)  end
+		if customBoxRefs.Back   then customBoxRefs.Back.Text   = tostring(p.Back)   end
+		if customBoxRefs.Speed  then customBoxRefs.Speed.Text  = tostring(p.Speed)  end
+	end
+	local function saveBoxesToPreset(idx)
+		local p = customPresets[idx]
+		if not p then return end
+		p.Left  = orbitCustomLeft
+		p.Right = orbitCustomRight
+		p.Up    = orbitCustomUp
+		p.Down  = orbitCustomDown
+		p.Front = orbitCustomFront
+		p.Back  = orbitCustomBack
+		p.Speed = orbitCustomSpeed
+		local prefix = "OrbitC" .. idx
+		setSavedControlValue(prefix .. "Left",  p.Left)
+		setSavedControlValue(prefix .. "Right", p.Right)
+		setSavedControlValue(prefix .. "Up",    p.Up)
+		setSavedControlValue(prefix .. "Down",  p.Down)
+		setSavedControlValue(prefix .. "Front", p.Front)
+		setSavedControlValue(prefix .. "Back",  p.Back)
+		setSavedControlValue(prefix .. "Speed", p.Speed)
+	end
+	local presetBtns = {}
+	local function renderAllModeBtns()
+		local isCustomActive = (activeCustomPreset ~= 0)
 		for _, e in ipairs(dirBtns) do
-			local on = e.mode == mode
+			local on = (not isCustomActive) and (e.mode == orbitMode)
 			e.btn.BackgroundColor3 = on and Color3.fromRGB(255,255,255) or Color3.fromRGB(0,0,0)
 			e.btn.TextColor3       = on and Color3.fromRGB(0,0,0)       or Color3.fromRGB(255,255,255)
+		end
+		for i, btn in ipairs(presetBtns) do
+			local on = (activeCustomPreset == i)
+			btn.BackgroundColor3 = on and Color3.fromRGB(255,255,255) or Color3.fromRGB(0,0,0)
+			btn.TextColor3       = on and Color3.fromRGB(0,0,0)       or Color3.fromRGB(255,255,255)
+		end
+		for _, box in pairs(customBoxRefs) do
+			if isCustomActive then
+				box.TextEditable = true
+				box.BackgroundTransparency = 0.5
+				box.TextColor3 = Color3.fromRGB(255, 255, 255)
+			else
+				box.TextEditable = false
+				box.BackgroundTransparency = 0.75
+				box.TextColor3 = Color3.fromRGB(100, 100, 100)
+			end
 		end
 	end
 	for idx = 1, 3 do
@@ -8800,14 +8911,82 @@ task.spawn(function()
 		bc2.CornerRadius = UDim.new(0, 6)
 		bc2.Parent = btn
 		dirBtns[idx] = {btn = btn, mode = m}
-		btn.MouseButton1Click:Connect(function() applyDirMode(m) end)
+		btn.MouseButton1Click:Connect(function()
+			if activeCustomPreset ~= 0 then
+				saveBoxesToPreset(activeCustomPreset)
+			end
+			activeCustomPreset = 0
+			orbitCustomEnabled = false
+			orbitMode = m
+			setSavedControlValue("OrbitMode", m)
+			setSavedControlValue("OrbitActiveCustomPreset", 0)
+			renderAllModeBtns()
+		end)
 	end
-	applyDirMode(orbitMode)
+	local customPresetLabel = Instance.new("TextLabel")
+	customPresetLabel.BackgroundTransparency = 1
+	customPresetLabel.Position = UDim2.new(0, 10, 0, 168)
+	customPresetLabel.Size = UDim2.new(1, -20, 0, 14)
+	customPresetLabel.Font = Enum.Font.GothamBold
+	customPresetLabel.Text = "Custom"
+	customPresetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+	customPresetLabel.TextSize = 11
+	customPresetLabel.TextXAlignment = Enum.TextXAlignment.Left
+	customPresetLabel.Parent = orbitHub
+	local customPresetRow = Instance.new("Frame")
+	customPresetRow.BackgroundTransparency = 1
+	customPresetRow.Position = UDim2.new(0, 6, 0, 184)
+	customPresetRow.Size = UDim2.new(1, -12, 0, 28)
+	customPresetRow.Parent = orbitHub
+	local cpLayout = Instance.new("UIListLayout")
+	cpLayout.FillDirection = Enum.FillDirection.Horizontal
+	cpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	cpLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	cpLayout.Padding = UDim.new(0, 4)
+	cpLayout.Parent = customPresetRow
+	for i = 1, 3 do
+		local pbtn = Instance.new("TextButton")
+		pbtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		pbtn.BackgroundTransparency = 0
+		pbtn.BorderSizePixel = 0
+		pbtn.Size = UDim2.new(1/3, -4, 1, 0)
+		pbtn.Font = Enum.Font.GothamBold
+		pbtn.Text = "C" .. i
+		pbtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		pbtn.TextStrokeTransparency = 1
+		pbtn.TextSize = 11
+		pbtn.TextScaled = false
+		pbtn.TextWrapped = true
+		pbtn.AutoButtonColor = false
+		pbtn.Parent = customPresetRow
+		local pbc = Instance.new("UICorner")
+		pbc.CornerRadius = UDim.new(0, 6)
+		pbc.Parent = pbtn
+		presetBtns[i] = pbtn
+		local idx = i
+		pbtn.MouseButton1Click:Connect(function()
+			if activeCustomPreset ~= 0 then
+				saveBoxesToPreset(activeCustomPreset)
+			end
+			activeCustomPreset = idx
+			orbitCustomEnabled = true
+			loadPresetToBoxes(idx)
+			setSavedControlValue("OrbitActiveCustomPreset", idx)
+			renderAllModeBtns()
+		end)
+	end
+	renderAllModeBtns()
+	if savedACPNum >= 1 and savedACPNum <= 3 then
+		activeCustomPreset = savedACPNum
+		orbitCustomEnabled = true
+		loadPresetToBoxes(savedACPNum)
+		renderAllModeBtns()
+	end
 	local orbitTogBtn = Instance.new("TextButton")
 	orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	orbitTogBtn.BackgroundTransparency = 0
 	orbitTogBtn.BorderSizePixel = 0
-	orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 168)
+	orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 218)
 	orbitTogBtn.Size = UDim2.new(0.9, 0, 0, 24)
 	orbitTogBtn.Font = Enum.Font.GothamBold
 	orbitTogBtn.Text = "Orbit"
@@ -8827,15 +9006,93 @@ task.spawn(function()
 			orbitTogBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		else
 			local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
-			if not targetModel then
-				return
-			end
+			if not targetModel then return end
 			startOrbit()
 			orbitTogBtn.Text = "Orbit"
 			orbitTogBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 			orbitTogBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
 		end
 	end)
+	local customLabel = Instance.new("TextLabel")
+	customLabel.BackgroundTransparency = 1
+	customLabel.Position = UDim2.new(0, 10, 0, 248)
+	customLabel.Size = UDim2.new(1, -20, 0, 14)
+	customLabel.Font = Enum.Font.GothamBold
+	customLabel.Text = "Custom Offset"
+	customLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+	customLabel.TextSize = 13
+	customLabel.TextXAlignment = Enum.TextXAlignment.Left
+	customLabel.Parent = orbitHub
+	local function makeCustomSingleBox(yPos, labelText, refKey, getter, setter)
+		local lbl = Instance.new("TextLabel")
+		lbl.BackgroundTransparency = 1
+		lbl.Position = UDim2.new(0, 10, 0, yPos)
+		lbl.Size = UDim2.new(0.48, -12, 0, 22)
+		lbl.Font = Enum.Font.GothamBold
+		lbl.Text = labelText
+		lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+		lbl.TextSize = 12
+		lbl.TextScaled = false
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.Parent = orbitHub
+		local box = Instance.new("TextBox")
+		box.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		box.BackgroundTransparency = 0.5
+		box.BorderSizePixel = 0
+		box.Position = UDim2.new(0.52, 2, 0, yPos)
+		box.Size = UDim2.new(0.44, -6, 0, 22)
+		box.ClearTextOnFocus = false
+		box.Font = Enum.Font.GothamBold
+		box.Text = tostring(getter())
+		box.TextColor3 = Color3.fromRGB(255, 255, 255)
+		box.TextSize = 12
+		box.TextScaled = false
+		box.Parent = orbitHub
+		local bc = Instance.new("UICorner")
+		bc.CornerRadius = UDim.new(0, 4)
+		bc.Parent = box
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local t = box.Text
+			local f = t:gsub("[^0-9%-%.]", "")
+			if f ~= t then box.Text = f end
+		end)
+		box.Focused:Connect(function()
+			if not box.TextEditable then
+				box:ReleaseFocus()
+				return
+			end
+			box.Text = ""
+		end)
+		box.FocusLost:Connect(function()
+			local v = tonumber(box.Text)
+			if v then
+				setter(v)
+				box.Text = tostring(v)
+				if activeCustomPreset ~= 0 then
+					saveBoxesToPreset(activeCustomPreset)
+				end
+			else
+				box.Text = tostring(getter())
+			end
+		end)
+		if refKey then customBoxRefs[refKey] = box end
+		return box
+	end
+	makeCustomSingleBox(270, "Left",  "Left",
+		function() return orbitCustomLeft  end, function(v) orbitCustomLeft  = v end)
+	makeCustomSingleBox(296, "Right", "Right",
+		function() return orbitCustomRight end, function(v) orbitCustomRight = v end)
+	makeCustomSingleBox(322, "Up",    "Up",
+		function() return orbitCustomUp    end, function(v) orbitCustomUp    = v end)
+	makeCustomSingleBox(348, "Down",  "Down",
+		function() return orbitCustomDown  end, function(v) orbitCustomDown  = v end)
+	makeCustomSingleBox(374, "Front", "Front",
+		function() return orbitCustomFront end, function(v) orbitCustomFront = v end)
+	makeCustomSingleBox(400, "Back",  "Back",
+		function() return orbitCustomBack  end, function(v) orbitCustomBack  = v end)
+	makeCustomSingleBox(426, "Speed", "Speed",
+		function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end)
+	renderAllModeBtns()
 end)
 task.wait(0.02)
 if game.GameId == 3808081382 then
