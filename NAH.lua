@@ -1,5 +1,36 @@
 --!nocheck
 --!nolint
+task.spawn(function()
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
+local player = Players.LocalPlayer
+local placeId = game.PlaceId
+local targetServerId = game.JobId
+local rejoining = false
+local function rejoin()
+    if rejoining then return end
+    rejoining = true
+    if targetServerId then
+        player:Kick("| NOTHING X    |ANTI KICK|     Rejoin Server |")
+        player:Kick("| NOTHING X    |ANTI KICK|     Rejoin Server |")
+        player:Kick("| NOTHING X    |ANTI KICK|     Rejoin Server |")
+        player:Kick("| NOTHING X    |ANTI KICK|     Rejoin Server |")
+        TeleportService:TeleportToPlaceInstance(placeId, targetServerId, player)
+    end
+end
+warn("> Server ID:", targetServerId)
+warn("> NOTHING X")
+GuiService.ErrorMessageChanged:Connect(function()
+    rejoin()
+end)
+player.OnTeleport:Connect(function(state)
+    if state == Enum.TeleportState.Failed then
+	task.wait(5)
+        rejoin()
+    end
+end)
+end)
 repeat
     task.wait();
 until game:IsLoaded();
@@ -2124,7 +2155,7 @@ function setWalkFlingEnabled(enabled)
 			local moveOffset = 0.1
 			while walkFlingEnabled and walkFlingTaskToken == currentToken do
 				RunService.Heartbeat:Wait()
-				if isSafeZoneActive() then continue end
+				if isSafeZoneActive() or orbitEnabled then continue end
 				local currentCharacter = player.Character
 				local rootPart = getRootUniversal(currentCharacter)
 				if currentCharacter and rootPart then
@@ -8749,7 +8780,16 @@ task.spawn(function()
 				upVec = targetCF.UpVector
 			end
 			local newCF = CFrame.lookAt(newPos, targetPos, upVec)
-			applyTeleportRootState(myRoot, newCF, Vector3.zero, Vector3.zero)
+			if walkFlingEnabled then
+				local power = walkFlingPower or 20000
+				local effectivePower = math.max(power, 1e16)
+				local direction = getWalkFlingDirectionVector(myRoot) or myRoot.CFrame.LookVector
+				local resolvedLinear = direction * effectivePower
+				local resolvedAngular = Vector3.new(effectivePower, effectivePower, effectivePower)
+				applyTeleportRootState(myRoot, newCF, resolvedLinear, resolvedAngular)
+			else
+				applyTeleportRootState(myRoot, newCF, Vector3.zero, Vector3.zero)
+			end
 		end)
 	end
 	toggleOrbit = function(state)
