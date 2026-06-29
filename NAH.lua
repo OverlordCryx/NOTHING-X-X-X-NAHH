@@ -129,6 +129,7 @@ local keybindToggles = {
 	Places = "off",
 	View = "block",
 	Orbit = "block",
+	AutoTPKey = "block",
 }
 local hideNamesEnabled = false
 local scaleRegistry = {}
@@ -1201,6 +1202,7 @@ for i = 1, 25 do
 end
 local viewKeybind = Enum.KeyCode.Five
 local orbitKeybind = Enum.KeyCode.Six
+local autoTpKeybind = Enum.KeyCode.Y
 local function getCustomDisplayName(i)
 	local key = "Custom " .. tostring(i)
 	local off = customOffsets[key] or { x = 0, y = 0, z = 0, flat = false, useRotation = false, rx = 0, ry = 0, rz = 0 }
@@ -1557,6 +1559,7 @@ do
 		Places   = "KeybindPlacesEnabled",
 		View     = "KeybindViewEnabled",
 		Orbit    = "KeybindOrbitEnabled",
+		AutoTPKey = "KeybindAutoTPKeyEnabled",
 	}
 	for toggleKey, saveKey in pairs(keybindToggleSaveKeys) do
 		local saved = controlSaveData[saveKey]
@@ -1567,7 +1570,7 @@ do
 		elseif saved == false then
 			keybindToggles[toggleKey] = "off"
 		else
-			if toggleKey == "View" or toggleKey == "Orbit" then
+			if toggleKey == "View" or toggleKey == "Orbit" or toggleKey == "AutoTPKey" then
 				keybindToggles[toggleKey] = "block"
 			else
 				keybindToggles[toggleKey] = "off"
@@ -9781,7 +9784,7 @@ do
 		viewKbBtn.BackgroundTransparency = 0
 		viewKbBtn.BorderSizePixel = 0
 		viewKbBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
-		viewKbBtn.Size = UDim2.new(0.5, -2, 1, 0)
+		viewKbBtn.Size = UDim2.new(1/3, -3, 1, 0)
 		local viewKbCorner = Instance.new("UICorner")
 		viewKbCorner.CornerRadius = UDim.new(0, 6)
 		viewKbCorner.Parent = viewKbBtn
@@ -9789,7 +9792,7 @@ do
 		viewKbBtn.Font = Enum.Font.GothamBold
 		viewKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		viewKbBtn.TextStrokeTransparency = 1
-		viewKbBtn.TextSize = 13
+		viewKbBtn.TextSize = 12
 		viewKbBtn.TextScaled = false
 		viewKbBtn.Parent = row5
 		local viewKbState = keybindToggles.View
@@ -9833,7 +9836,7 @@ do
 		orbitKbBtn.BackgroundTransparency = 0
 		orbitKbBtn.BorderSizePixel = 0
 		orbitKbBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
-		orbitKbBtn.Size = UDim2.new(0.5, -2, 1, 0)
+		orbitKbBtn.Size = UDim2.new(1/3, -3, 1, 0)
 		local orbitKbCorner = Instance.new("UICorner")
 		orbitKbCorner.CornerRadius = UDim.new(0, 6)
 		orbitKbCorner.Parent = orbitKbBtn
@@ -9841,7 +9844,7 @@ do
 		orbitKbBtn.Font = Enum.Font.GothamBold
 		orbitKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		orbitKbBtn.TextStrokeTransparency = 1
-		orbitKbBtn.TextSize = 13
+		orbitKbBtn.TextSize = 12
 		orbitKbBtn.TextScaled = false
 		orbitKbBtn.Parent = row5
 		local orbitKbState = keybindToggles.Orbit
@@ -9876,6 +9879,58 @@ do
 			controlSaveData["KeybindOrbitEnabled"] = orbitKbState
 			saveSliderSaveData()
 			renderOrbitKb()
+			updateKeybindText()
+		end)
+	end
+	do
+		local autotpKbBtn = Instance.new("TextButton")
+		autotpKbBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		autotpKbBtn.BackgroundTransparency = 0
+		autotpKbBtn.BorderSizePixel = 0
+		autotpKbBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+		autotpKbBtn.Size = UDim2.new(1/3, -3, 1, 0)
+		local autotpKbCorner = Instance.new("UICorner")
+		autotpKbCorner.CornerRadius = UDim.new(0, 6)
+		autotpKbCorner.Parent = autotpKbBtn
+		autotpKbBtn.AutoButtonColor = false
+		autotpKbBtn.Font = Enum.Font.GothamBold
+		autotpKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		autotpKbBtn.TextStrokeTransparency = 1
+		autotpKbBtn.TextSize = 12
+		autotpKbBtn.TextScaled = false
+		autotpKbBtn.Parent = row5
+		local autotpKbState = keybindToggles.AutoTPKey
+		local function renderAutotpKb()
+			if autotpKbState == "block" then
+				autotpKbBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+				autotpKbBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+				autotpKbBtn.Text = "Auto TP KB (B)"
+			else
+				autotpKbBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				autotpKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				autotpKbBtn.Text = "Auto TP KB"
+			end
+		end
+		local savedAutotpKb = controlSaveData["KeybindAutoTPKeyEnabled"]
+		if savedAutotpKb == "block" or savedAutotpKb == true then
+			autotpKbState = "block"
+		elseif savedAutotpKb == "off" or savedAutotpKb == false then
+			autotpKbState = "off"
+		else
+			autotpKbState = "block"
+		end
+		keybindToggles.AutoTPKey = autotpKbState
+		renderAutotpKb()
+		autotpKbBtn.MouseButton1Click:Connect(function()
+			if autotpKbState == "off" then
+				autotpKbState = "block"
+			else
+				autotpKbState = "off"
+			end
+			keybindToggles.AutoTPKey = autotpKbState
+			controlSaveData["KeybindAutoTPKeyEnabled"] = autotpKbState
+			saveSliderSaveData()
+			renderAutotpKb()
 			updateKeybindText()
 		end)
 	end
@@ -10765,6 +10820,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if key == orbitKeybind and keybindToggles.Orbit ~= "block" then
 		if toggleOrbit then
 			toggleOrbit()
+		end
+		return
+	end
+	if key == autoTpKeybind and keybindToggles.AutoTPKey ~= "block" then
+		if targetActionControls and targetActionControls.Second then
+			local nextState = not autoTpEnabled
+			if nextState and not (manualAttackTpPlayer or manualAttackTpTarget) then
+				return
+			end
+			targetActionControls.Second.SetValue(nextState)
 		end
 		return
 	end
