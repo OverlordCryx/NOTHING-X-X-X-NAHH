@@ -95,7 +95,9 @@ local keybindToggles = {
 	SetBack = "off",
 	Trash = "off",
 	Void = "off",
-	Places = "off"
+	Places = "off",
+	View = "block",
+	Orbit = "block",
 }
 local hideNamesEnabled = false
 local scaleRegistry = {}
@@ -187,11 +189,13 @@ function applyScaleToObject(guiObject)
 			origSize.X.Scale, origSize.X.Offset * scaleFactor,
 			origSize.Y.Scale, origSize.Y.Offset * scaleFactor
 		)
-		local origPos = original.Position
-		guiObject.Position = UDim2.new(
-			origPos.X.Scale, origPos.X.Offset * scaleFactor,
-			origPos.Y.Scale, origPos.Y.Offset * scaleFactor
-		)
+		if guiObject ~= keybindFrame and guiObject ~= targetFrame then
+			local origPos = original.Position
+			guiObject.Position = UDim2.new(
+				origPos.X.Scale, origPos.X.Offset * scaleFactor,
+				origPos.Y.Scale, origPos.Y.Offset * scaleFactor
+			)
+		end
 	end
 	if guiObject:IsA("TextLabel") or guiObject:IsA("TextButton") or guiObject:IsA("TextBox") then
 		guiObject.TextSize = math.max(1, math.floor(original.TextSize * scaleFactor + 0.5))
@@ -1150,6 +1154,7 @@ local syncModelDropdownSelectionToManualTarget
 local stopView
 local startView
 local toggleView
+local toggleOrbit
 attackTpBehindDistance = 2.0
 attackTpAirBehindDistance = 0.85
 attackTpLeadTime = 0.012
@@ -1163,6 +1168,8 @@ local customOffsets = {}
 for i = 1, 25 do
 	customOffsets["Custom " .. tostring(i)] = { x = 0, y = 0, z = 0 }
 end
+local viewKeybind = Enum.KeyCode.Five
+local orbitKeybind = Enum.KeyCode.Six
 local function getCustomDisplayName(i)
 	local key = "Custom " .. tostring(i)
 	local off = customOffsets[key] or { x = 0, y = 0, z = 0, flat = false, useRotation = false, rx = 0, ry = 0, rz = 0 }
@@ -1312,7 +1319,7 @@ auraFlingEnabled = false
 clickFlingEnabled = false
 flingAllEnabled = false
 antiFlingEnabled = false
-local FLING_INF_POWER = 1e12
+local FLING_INF_POWER = 1e16
 walkFlingKeybind = Enum.KeyCode.X
 walkFlingPower = 20000
 flingPower = 20000
@@ -1517,6 +1524,8 @@ do
 		Trash    = "KeybindTrashEnabled",
 		Void     = "KeybindVoidEnabled",
 		Places   = "KeybindPlacesEnabled",
+		View     = "KeybindViewEnabled",
+		Orbit    = "KeybindOrbitEnabled",
 	}
 	for toggleKey, saveKey in pairs(keybindToggleSaveKeys) do
 		local saved = controlSaveData[saveKey]
@@ -1527,7 +1536,11 @@ do
 		elseif saved == false then
 			keybindToggles[toggleKey] = "off"
 		else
-			keybindToggles[toggleKey] = "off"
+			if toggleKey == "View" or toggleKey == "Orbit" then
+				keybindToggles[toggleKey] = "block"
+			else
+				keybindToggles[toggleKey] = "off"
+			end
 		end
 	end
 end
@@ -1541,6 +1554,14 @@ function parseEnabledValue(value)
 	end
 	return nil
 end
+function syncViewKeybindDisplay()
+	keybindEntries.ViewKey = {
+		name = "View",
+		keybind = encodeKeybindValue(viewKeybind),
+		enabled = viewing,
+	}
+	updateKeybindText()
+end
 function updateKeybindText()
 	local lines = {}
 	local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places" }
@@ -1548,6 +1569,7 @@ function updateKeybindText()
 		TargetPick = "Target",
 		VoidDead = "Void",
 		GetTrash = "Trash",
+		ViewKey = "View",
 	}
 	local function appendEntry(entry, toggleState)
 		if not entry then
@@ -8609,6 +8631,7 @@ flingModeControls = _G["4tog_on_one_frame"]({
 })
 task.wait(0.02)
 task.spawn(function()
+	local orbitTogBtn = nil
 	local savedOD = getSavedControlValue("OrbitDistance")
 	if savedOD ~= nil then orbitDistance = savedOD end
 	local savedSH = getSavedControlValue("OrbitSpeedH")
@@ -8617,7 +8640,7 @@ task.spawn(function()
 	if savedSV ~= nil then orbitSpeedV = savedSV end
 	local savedOM = getSavedControlValue("OrbitMode")
 	if savedOM ~= nil then orbitMode = savedOM end
-	for i = 1, 3 do
+	for i = 1, 16 do
 		local prefix = "OrbitC" .. i
 		local function ls(key, default)
 			local v = getSavedControlValue(prefix .. key)
@@ -8729,7 +8752,30 @@ task.spawn(function()
 			applyTeleportRootState(myRoot, newCF, Vector3.zero, Vector3.zero)
 		end)
 	end
-	local orbitHub = makeControlFrame(460)
+	toggleOrbit = function(state)
+		local nextState = state
+		if nextState == nil then
+			nextState = not orbitEnabled
+		end
+		if nextState then
+			local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
+			if not targetModel then return end
+			startOrbit()
+			if orbitTogBtn then
+				orbitTogBtn.Text = "Orbit"
+				orbitTogBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				orbitTogBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+			end
+		else
+			stopOrbit()
+			if orbitTogBtn then
+				orbitTogBtn.Text = "Orbit"
+				orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				orbitTogBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			end
+		end
+	end
+	local orbitHub = makeControlFrame(486)
 	orbitHub.Parent = uiX
 	orbitHub.ClipsDescendants = true
 	orbitHub.LayoutOrder = 999997
@@ -8818,12 +8864,11 @@ task.spawn(function()
 	local dirBtns = {}
 	local modeList   = {"Horizontal", "Vertical", "Both"}
 	local modeLabels = {"H",          "V",        "V+H"}
-	local customPresets = {
-		{ Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
-		{ Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
-		{ Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
-	}
-	for i = 1, 3 do
+	local customPresets = {}
+	for i = 1, 16 do
+		customPresets[i] = { Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 }
+	end
+	for i = 1, 16 do
 		local ld = _G["__orbitPresetLoad" .. i]
 		if ld then customPresets[i] = ld; _G["__orbitPresetLoad" .. i] = nil end
 	end
@@ -8928,65 +8973,70 @@ task.spawn(function()
 	customPresetLabel.Position = UDim2.new(0, 10, 0, 168)
 	customPresetLabel.Size = UDim2.new(1, -20, 0, 14)
 	customPresetLabel.Font = Enum.Font.GothamBold
-	customPresetLabel.Text = "Custom"
+	customPresetLabel.Text = "Custom (16 presets)"
 	customPresetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 	customPresetLabel.TextSize = 11
 	customPresetLabel.TextXAlignment = Enum.TextXAlignment.Left
 	customPresetLabel.Parent = orbitHub
-	local customPresetRow = Instance.new("Frame")
-	customPresetRow.BackgroundTransparency = 1
-	customPresetRow.Position = UDim2.new(0, 6, 0, 184)
-	customPresetRow.Size = UDim2.new(1, -12, 0, 28)
-	customPresetRow.Parent = orbitHub
-	local cpLayout = Instance.new("UIListLayout")
-	cpLayout.FillDirection = Enum.FillDirection.Horizontal
-	cpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	cpLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	cpLayout.Padding = UDim.new(0, 4)
-	cpLayout.Parent = customPresetRow
-	for i = 1, 3 do
-		local pbtn = Instance.new("TextButton")
-		pbtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-		pbtn.BackgroundTransparency = 0
-		pbtn.BorderSizePixel = 0
-		pbtn.Size = UDim2.new(1/3, -4, 1, 0)
-		pbtn.Font = Enum.Font.GothamBold
-		pbtn.Text = "C" .. i
-		pbtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		pbtn.TextStrokeTransparency = 1
-		pbtn.TextSize = 11
-		pbtn.TextScaled = false
-		pbtn.TextWrapped = true
-		pbtn.AutoButtonColor = false
-		pbtn.Parent = customPresetRow
-		local pbc = Instance.new("UICorner")
-		pbc.CornerRadius = UDim.new(0, 6)
-		pbc.Parent = pbtn
-		presetBtns[i] = pbtn
-		local idx = i
-		pbtn.MouseButton1Click:Connect(function()
-			if activeCustomPreset ~= 0 then
-				saveBoxesToPreset(activeCustomPreset)
-			end
-			activeCustomPreset = idx
-			orbitCustomEnabled = true
-			loadPresetToBoxes(idx)
-			setSavedControlValue("OrbitActiveCustomPreset", idx)
-			renderAllModeBtns()
-		end)
+	local function makePresetRow(yOff, startIdx, endIdx)
+		local pRow = Instance.new("Frame")
+		pRow.BackgroundTransparency = 1
+		pRow.Position = UDim2.new(0, 6, 0, yOff)
+		pRow.Size = UDim2.new(1, -12, 0, 24)
+		pRow.Parent = orbitHub
+		local pLayout = Instance.new("UIListLayout")
+		pLayout.FillDirection = Enum.FillDirection.Horizontal
+		pLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		pLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		pLayout.Padding = UDim.new(0, 3)
+		pLayout.Parent = pRow
+		local count = endIdx - startIdx + 1
+		for i = startIdx, endIdx do
+			local pbtn = Instance.new("TextButton")
+			pbtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			pbtn.BackgroundTransparency = 0
+			pbtn.BorderSizePixel = 0
+			pbtn.Size = UDim2.new(1/count, -3, 1, 0)
+			pbtn.Font = Enum.Font.GothamBold
+			pbtn.Text = "C" .. i
+			pbtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			pbtn.TextStrokeTransparency = 1
+			pbtn.TextSize = 10
+			pbtn.TextScaled = false
+			pbtn.TextWrapped = true
+			pbtn.AutoButtonColor = false
+			pbtn.Parent = pRow
+			local pbc = Instance.new("UICorner")
+			pbc.CornerRadius = UDim.new(0, 6)
+			pbc.Parent = pbtn
+			presetBtns[i] = pbtn
+			local idx = i
+			pbtn.MouseButton1Click:Connect(function()
+				if activeCustomPreset ~= 0 then
+					saveBoxesToPreset(activeCustomPreset)
+				end
+				activeCustomPreset = idx
+				orbitCustomEnabled = true
+				loadPresetToBoxes(idx)
+				setSavedControlValue("OrbitActiveCustomPreset", idx)
+				renderAllModeBtns()
+			end)
+		end
 	end
+	makePresetRow(184, 1, 8)
+	makePresetRow(211, 9, 16)
 	renderAllModeBtns()
-	if savedACPNum >= 1 and savedACPNum <= 3 then
+	if savedACPNum >= 1 and savedACPNum <= 16 then
 		activeCustomPreset = savedACPNum
 		orbitCustomEnabled = true
 		loadPresetToBoxes(savedACPNum)
 		renderAllModeBtns()
 	end
-	local orbitTogBtn = Instance.new("TextButton")
+	orbitTogBtn = Instance.new("TextButton")
 	orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	orbitTogBtn.BackgroundTransparency = 0
 	orbitTogBtn.BorderSizePixel = 0
-	orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 218)
+	orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 244)
 	orbitTogBtn.Size = UDim2.new(0.9, 0, 0, 24)
 	orbitTogBtn.Font = Enum.Font.GothamBold
 	orbitTogBtn.Text = "Orbit"
@@ -8999,23 +9049,13 @@ task.spawn(function()
 	bc3.CornerRadius = UDim.new(0, 6)
 	bc3.Parent = orbitTogBtn
 	orbitTogBtn.MouseButton1Click:Connect(function()
-		if orbitEnabled then
-			stopOrbit()
-			orbitTogBtn.Text = "Orbit"
-			orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-			orbitTogBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		else
-			local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
-			if not targetModel then return end
-			startOrbit()
-			orbitTogBtn.Text = "Orbit"
-			orbitTogBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			orbitTogBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+		if toggleOrbit then
+			toggleOrbit()
 		end
 	end)
 	local customLabel = Instance.new("TextLabel")
 	customLabel.BackgroundTransparency = 1
-	customLabel.Position = UDim2.new(0, 10, 0, 248)
+	customLabel.Position = UDim2.new(0, 10, 0, 274)
 	customLabel.Size = UDim2.new(1, -20, 0, 14)
 	customLabel.Font = Enum.Font.GothamBold
 	customLabel.Text = "Custom Offset"
@@ -9078,19 +9118,19 @@ task.spawn(function()
 		if refKey then customBoxRefs[refKey] = box end
 		return box
 	end
-	makeCustomSingleBox(270, "Left",  "Left",
+	makeCustomSingleBox(296, "Left",  "Left",
 		function() return orbitCustomLeft  end, function(v) orbitCustomLeft  = v end)
-	makeCustomSingleBox(296, "Right", "Right",
+	makeCustomSingleBox(322, "Right", "Right",
 		function() return orbitCustomRight end, function(v) orbitCustomRight = v end)
-	makeCustomSingleBox(322, "Up",    "Up",
+	makeCustomSingleBox(348, "Up",    "Up",
 		function() return orbitCustomUp    end, function(v) orbitCustomUp    = v end)
-	makeCustomSingleBox(348, "Down",  "Down",
+	makeCustomSingleBox(374, "Down",  "Down",
 		function() return orbitCustomDown  end, function(v) orbitCustomDown  = v end)
-	makeCustomSingleBox(374, "Front", "Front",
+	makeCustomSingleBox(400, "Front", "Front",
 		function() return orbitCustomFront end, function(v) orbitCustomFront = v end)
-	makeCustomSingleBox(400, "Back",  "Back",
+	makeCustomSingleBox(426, "Back",  "Back",
 		function() return orbitCustomBack  end, function(v) orbitCustomBack  = v end)
-	makeCustomSingleBox(426, "Speed", "Speed",
+	makeCustomSingleBox(452, "Speed", "Speed",
 		function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end)
 	renderAllModeBtns()
 end)
@@ -9647,7 +9687,7 @@ do
 end
 task.wait(0.02)
 do
-	local keybindHub = makeControlFrame(200)
+	local keybindHub = makeControlFrame(230)
 	keybindHub.Name = "KeybindSystemHub"
 	keybindHub.Parent = uiX
 	keybindHub.LayoutOrder = 1000000
@@ -9694,6 +9734,111 @@ do
 	local row4 = makeRow(150)
 	makeHubTogKB(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", "off", 1/2)
 	makeHubTogKB(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", "off", 1/2)
+	local row5 = makeRow(180)
+	do
+		local viewKbBtn = Instance.new("TextButton")
+		viewKbBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		viewKbBtn.BackgroundTransparency = 0
+		viewKbBtn.BorderSizePixel = 0
+		viewKbBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+		viewKbBtn.Size = UDim2.new(0.5, -2, 1, 0)
+		local viewKbCorner = Instance.new("UICorner")
+		viewKbCorner.CornerRadius = UDim.new(0, 6)
+		viewKbCorner.Parent = viewKbBtn
+		viewKbBtn.AutoButtonColor = false
+		viewKbBtn.Font = Enum.Font.GothamBold
+		viewKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		viewKbBtn.TextStrokeTransparency = 1
+		viewKbBtn.TextSize = 13
+		viewKbBtn.TextScaled = false
+		viewKbBtn.Parent = row5
+		local viewKbState = keybindToggles.View
+		local function renderViewKb()
+			if viewKbState == "block" then
+				viewKbBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+				viewKbBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+				viewKbBtn.Text = "View KB (B)"
+			else
+				viewKbBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				viewKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				viewKbBtn.Text = "View KB"
+			end
+		end
+		local savedViewKb = controlSaveData["KeybindViewEnabled"]
+		if savedViewKb == "block" or savedViewKb == true then
+			viewKbState = "block"
+		elseif savedViewKb == "off" or savedViewKb == false then
+			viewKbState = "off"
+		else
+			viewKbState = "block"
+		end
+		keybindToggles.View = viewKbState
+		renderViewKb()
+		viewKbBtn.MouseButton1Click:Connect(function()
+			if viewKbState == "off" then
+				viewKbState = "block"
+			else
+				viewKbState = "off"
+			end
+			keybindToggles.View = viewKbState
+			controlSaveData["KeybindViewEnabled"] = viewKbState
+			saveSliderSaveData()
+			renderViewKb()
+			updateKeybindText()
+		end)
+	end
+	do
+		local orbitKbBtn = Instance.new("TextButton")
+		orbitKbBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		orbitKbBtn.BackgroundTransparency = 0
+		orbitKbBtn.BorderSizePixel = 0
+		orbitKbBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+		orbitKbBtn.Size = UDim2.new(0.5, -2, 1, 0)
+		local orbitKbCorner = Instance.new("UICorner")
+		orbitKbCorner.CornerRadius = UDim.new(0, 6)
+		orbitKbCorner.Parent = orbitKbBtn
+		orbitKbBtn.AutoButtonColor = false
+		orbitKbBtn.Font = Enum.Font.GothamBold
+		orbitKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		orbitKbBtn.TextStrokeTransparency = 1
+		orbitKbBtn.TextSize = 13
+		orbitKbBtn.TextScaled = false
+		orbitKbBtn.Parent = row5
+		local orbitKbState = keybindToggles.Orbit
+		local function renderOrbitKb()
+			if orbitKbState == "block" then
+				orbitKbBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+				orbitKbBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+				orbitKbBtn.Text = "Orbit KB (B)"
+			else
+				orbitKbBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				orbitKbBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				orbitKbBtn.Text = "Orbit KB"
+			end
+		end
+		local savedOrbitKb = controlSaveData["KeybindOrbitEnabled"]
+		if savedOrbitKb == "block" or savedOrbitKb == true then
+			orbitKbState = "block"
+		elseif savedOrbitKb == "off" or savedOrbitKb == false then
+			orbitKbState = "off"
+		else
+			orbitKbState = "block"
+		end
+		keybindToggles.Orbit = orbitKbState
+		renderOrbitKb()
+		orbitKbBtn.MouseButton1Click:Connect(function()
+			if orbitKbState == "off" then
+				orbitKbState = "block"
+			else
+				orbitKbState = "off"
+			end
+			keybindToggles.Orbit = orbitKbState
+			controlSaveData["KeybindOrbitEnabled"] = orbitKbState
+			saveSliderSaveData()
+			renderOrbitKb()
+			updateKeybindText()
+		end)
+	end
 	task.defer(updateKeybindText)
 end
 task.wait(0.02)
@@ -10567,6 +10712,22 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		runGetTrash()
 		return
 	end
+	if key == viewKeybind and keybindToggles.View ~= "block" then
+		if viewing then
+			toggleView(false)
+			syncViewKeybindDisplay()
+		elseif manualAttackTpPlayer or manualAttackTpTarget then
+			toggleView(true)
+			syncViewKeybindDisplay()
+		end
+		return
+	end
+	if key == orbitKeybind and keybindToggles.Orbit ~= "block" then
+		if toggleOrbit then
+			toggleOrbit()
+		end
+		return
+	end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		attackTpHolding = true
 		return
@@ -10888,8 +11049,9 @@ do
 				local resolvedAngular = Vector3.zero
 				if amFlinging then
 					local power = (walkFlingEnabled and walkFlingPower) or (flingEnabled and flingPower) or (clickFlingEnabled and flingPower) or (auraFlingEnabled and flingPower) or 20000
-					resolvedAngular = Vector3.new(power * 2, power * 2, power * 2)
-					resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.5)
+					local effectivePower = math.max(power, 1e16)
+					resolvedAngular = Vector3.new(effectivePower, effectivePower, effectivePower)
+					resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * effectivePower)
 				end
 				applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
 				if flying and bv and bg then
@@ -10947,7 +11109,8 @@ do
 						local resolvedAngular = Vector3.zero
 						if amFlinging then
 							local power = (walkFlingEnabled and walkFlingPower) or (flingEnabled and flingPower) or (clickFlingEnabled and flingPower) or (auraFlingEnabled and flingPower) or 20000
-							resolvedAngular = Vector3.new(power * 2.1, power * 2.1, power * 2.1)
+							local effectivePower = math.max(power, 1e16)
+							resolvedAngular = Vector3.new(effectivePower, effectivePower, effectivePower)
 						end
 						applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
 					end
