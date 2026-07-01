@@ -1270,103 +1270,58 @@ local function getCustomDisplayName(i)
         return name
 end
 local worldUpVector = Vector3.new(0, 1, 0)
-local function getMountainViewCF(index)
-        local map = workspace:FindFirstChild("Map")
-        local summer = map and map:FindFirstChild("Summer")
-        if not summer then return nil end
-        local views = {}
-        for _, obj in ipairs(summer:GetChildren()) do
-                if obj.Name == "ViewingBlock" then
-                        table.insert(views, obj)
-                end
-        end
-        local function getTopGrass(model)
-                local best = nil
-                for _, part in ipairs(model:GetChildren()) do
-                        if part.Name == "Grass" then
-                                if best == nil or part.Position.Y > best.Position.Y then
-                                        best = part
-                                end
-                        end
-                end
-                return best
-        end
-        local grasses = {}
-        for _, model in ipairs(views) do
-                local grass = getTopGrass(model)
-                if grass then
-                        table.insert(grasses, grass)
-                end
-        end
-        table.sort(grasses, function(a, b)
-                return a.Position.Y > b.Position.Y
-        end)
-        local grass = grasses[index]
-        if grass then
-                return CFrame.new(grass.Position + Vector3.new(0, 5, 0))
-        end
-        return nil
-end
 local placesTPs = {
-        ["Middle Of Map"] = CFrame.new(139, 440, 32),
-        ["Montain 1 Left"] = CFrame.new(-351, 619, -81),
-        ["Montain 1 Right"] = CFrame.new(190, 650, -515),
-        ["Montain 2"] = CFrame.new(297, 671, 397),
-        ["Montain 2 Left"] = CFrame.new(201, 684, 439),
-        ["Montain 2 Right"] = CFrame.new(379, 699, 360),
+	["Middle Of Map"] = CFrame.new(139, 440, 32),
+	["Prison"] = CFrame.new(438, 439, -376),
+	["Montain 1"] = CFrame.new(-15, 653, -388),
+	["Montain 2"] = CFrame.new(322, 671, 446),
+	["Montain 2 Left"] = CFrame.new(240, 699, 465),
+	["Montain 2 Right"] = CFrame.new(398, 699, 404),
 }
 local function resolvePlaceCF(name)
-        if not name or name == "" or name == "/\\" then
-                return nil
-        end
-        local cf = placesTPs[name]
-        if cf then
-                return cf
-        end
-        if name:find("^Montain %d View$") then
-                local num = tonumber(name:match("%d+"))
-                if num then
-                        return getMountainViewCF(num)
-                end
-        end
-        local success, result = pcall(function()
-                local cutscenes = workspace:FindFirstChild("Cutscenes")
-                if not cutscenes then return nil end
-                if name == "Counter" then
-                        local model = cutscenes:FindFirstChild("Death Cutscene")
-                        return model and (model:GetPivot() * CFrame.new(0, 0, 0))
-                elseif name == "Counter Up" then
-                        local model = cutscenes:FindFirstChild("Death Cutscene")
-                        return model and (model:GetPivot() * CFrame.new(-20, 55, -33))
-                elseif name == "Atomic Base" then
-                        local model = cutscenes:FindFirstChild("Atoms")
-                        return model and (model:GetPivot() * CFrame.new(0, -187, 0))
-                elseif name == "Atomic Base Up" then
-                        local model = cutscenes:FindFirstChild("Atoms")
-                        return model and (model:GetPivot() * CFrame.new(0, 199, 0))
-                elseif name == "Atomic Slash" then
-                        local atoms = cutscenes:FindFirstChild("Atoms")
-                        local model = atoms and atoms:FindFirstChild("sphere")
-                        return model and (model:GetPivot() * CFrame.new(0, 0, 0))
-                elseif name == "Atomic Slash Up" then
-                        local atoms = cutscenes:FindFirstChild("Atoms")
-                        local model = atoms and atoms:FindFirstChild("sphere")
-                        return model and (model:GetPivot() * CFrame.new(0, 45, 0))
-                end
-                return nil
-        end)
-        if success and result then
-                return result
-        end
-        return nil
+	if not name or name == "" or name == "/\\" then
+		return nil
+	end
+	local cf = placesTPs[name]
+	if cf then
+		return cf
+	end
+	local success, result = pcall(function()
+		local cutscenes = workspace:FindFirstChild("Cutscenes")
+		if not cutscenes then return nil end
+		if name == "Counter" then
+			local model = cutscenes:FindFirstChild("Death Cutscene")
+			return model and (model:GetPivot() * CFrame.new(0, 0, 0))
+		elseif name == "Counter Up" then
+			local model = cutscenes:FindFirstChild("Death Cutscene")
+			return model and (model:GetPivot() * CFrame.new(-20, 55, -33))
+		elseif name == "Atomic Base" then
+			local model = cutscenes:FindFirstChild("Atoms")
+			return model and (model:GetPivot() * CFrame.new(0, -187, 0))
+		elseif name == "Atomic Base Up" then
+			local model = cutscenes:FindFirstChild("Atoms")
+			return model and (model:GetPivot() * CFrame.new(0, 199, 0))
+		elseif name == "Atomic Slash" then
+			local atoms = cutscenes:FindFirstChild("Atoms")
+			local model = atoms and atoms:FindFirstChild("sphere")
+			return model and (model:GetPivot() * CFrame.new(0, 0, 0))
+		elseif name == "Atomic Slash Up" then
+			local atoms = cutscenes:FindFirstChild("Atoms")
+			local model = atoms and atoms:FindFirstChild("sphere")
+			return model and (model:GetPivot() * CFrame.new(0, 45, 0))
+		end
+		return nil
+	end)
+	if success and result then
+		return result
+	end
+	return nil
 end
 local placesOrder = {
-        "/\\", "Middle Of Map",
-        "Montain 1 Left", "Montain 1 Right",
-        "Montain 2", "Montain 2 Left", "Montain 2 Right",
-        "Montain 1 View", "Montain 2 View", "Montain 3 View", "Montain 4 View",
-        "Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
-        "Atomic Slash", "Atomic Slash Up"
+	"/\\", "Middle Of Map", "Prison",
+	"Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right",
+	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
+	"Atomic Slash", "Atomic Slash Up"
 }
 local placesDropdown = nil
 local movementPanel = nil
@@ -4889,7 +4844,7 @@ function toggleCharacterCleanupRuntime(state)
                                 CharacterCleanupEnabled = true
                                 pcall(function()
                                         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
-                                        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+                                        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.0001)
                                         if isSelfFlinging or isDashingOrSkill then
                                                 return
                                         end
@@ -4898,24 +4853,24 @@ function toggleCharacterCleanupRuntime(state)
                                                 runCleanupTick(char)
                                         end
                                 end)
-                                task.wait(0.1)
+                                task.wait()
                         until not CharacterCleanupEnabled
                 end)
         end
         if state == false then antiZeroEnabled = false end
         if state == true and not hooksRegistered then
-                hooksRegistered = true
-                pcall(function()
-                        local actionKeys = {
-                                [Enum.KeyCode.Q] = true,
-                        }
-                        UserInputService.InputBegan:Connect(function(input, processed)
-                                if processed then return end
-                                if actionKeys[input.KeyCode] or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                                        lastLocalActionTime = os.clock()
-                                end
-                        end)
-                end)
+hooksRegistered = true
+pcall(function()
+        local actionKeys = {
+                [Enum.KeyCode.Q] = true,
+        }
+        UserInputService.InputBegan:Connect(function(input, processed)
+                if processed then return end
+                if actionKeys[input.KeyCode] then
+                        lastLocalActionTime = os.clock()
+                end
+        end)
+end)
                 task.spawn(function()
                         pcall(function()
                                 local STUN_EFFECTS = {
@@ -5073,7 +5028,7 @@ function toggleCharacterCleanupRuntime(state)
         end
         local Players = game:GetService("Players")
         local speaker = Players.LocalPlayer
-        local speed = 25.50
+        local speed = 26.60
         local jpower = 50.50
         local function SetupHumanoid(Char, Human)
                 if not Human or not Human.Parent then return end
@@ -9515,13 +9470,32 @@ if game.GameId == 3808081382 then
                 multi = false,
                 deffultin = selectedPlace,
                 fun = function(value)
+                        local isMainMap = not (game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555)
+                        if not isMainMap then
+                                local map = workspace:FindFirstChild("Map")
+                                local hasFloor = map and map:FindFirstChild("Floor/Roads") ~= nil
+                                if not hasFloor then
+                                        if value ~= "/\\" 
+                                           and value ~= "Middle Of Map" 
+                                           and value ~= "Prison" 
+                                           and value ~= "Montain 1" 
+                                           and value ~= "Montain 2" 
+                                           and value ~= "Montain 2 Left" 
+                                           and value ~= "Montain 2 Right" then
+                                            
+                                            placesDropdown.SetValue("/\\", true)
+                                            selectedPlace = "/\\"
+                                            return
+                                        end
+                                end
+                        end
+                        
                         selectedPlace = value
                         setSavedControlValue("SelectedPlace", value)
                         syncPlacesKeybindDisplay()
                 end,
         })
         placesDropdown.Frame.LayoutOrder = 999998
-        task.wait(0.02)
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
