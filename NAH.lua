@@ -1964,6 +1964,7 @@ end
 local antiFlingEnabled = false
 local antiFlingConnection = nil
 local antiFlingDescConn = {}
+local antiFlingPartConns = {}
 local function toggleAntiFling(enabled)
         antiFlingEnabled = enabled
         if antiFlingConnection then
@@ -1972,17 +1973,26 @@ local function toggleAntiFling(enabled)
         end
         for _, c in ipairs(antiFlingDescConn) do pcall(function() c:Disconnect() end) end
         antiFlingDescConn = {}
+        for _, c in ipairs(antiFlingPartConns) do pcall(function() c:Disconnect() end) end
+        antiFlingPartConns = {}
         if antiFlingEnabled then
                 local function disableCollision(part)
-                        if part:IsA("BasePart") and part.CanCollide then
+                        if not part:IsA("BasePart") then return end
+                        if part.CanCollide then
                                 part.CanCollide = false
                         end
+                        local pc = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
+                                if antiFlingEnabled and part.CanCollide then
+                                        part.CanCollide = false
+                                end
+                        end)
+                        antiFlingPartConns[#antiFlingPartConns + 1] = pc
                 end
                 local function hookCharacter(char)
                         if not char then return end
                         for _, part in ipairs(char:GetDescendants()) do disableCollision(part) end
                         local c = char.DescendantAdded:Connect(function(part)
-                                task.defer(function() if antiFlingEnabled then disableCollision(part) end end)
+                                task.defer(function() if antiFlingEnabled and part.Parent then disableCollision(part) end end)
                         end)
                         antiFlingDescConn[#antiFlingDescConn + 1] = c
                 end
@@ -2004,21 +2014,6 @@ local function toggleAntiFling(enabled)
                         antiFlingDescConn[#antiFlingDescConn + 1] = ca
                 end)
                 antiFlingDescConn[#antiFlingDescConn + 1] = pa
-                local lastSweep = 0
-                antiFlingConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                        local now = os.clock()
-                        if now - lastSweep < 0.2 then return end
-                        lastSweep = now
-                        for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-                                if p ~= player and p.Character then
-                                        for _, part in ipairs(p.Character:GetDescendants()) do
-                                                if part:IsA("BasePart") and part.CanCollide then
-                                                        part.CanCollide = false
-                                                end
-                                        end
-                                end
-                        end
-                end)
         end
 end
 function syncFlyKeybindDisplay()
@@ -4757,40 +4752,91 @@ local ModConnections = {}
 local hooksRegistered = false
 local lastLocalActionTime = 0
 local characterMotor6Ds = {}
+local _cleanupDescConn = nil
+local _cleanupHumanoidConns = {}
+local function _isBadMover(v)
+        return v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
+                or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
+                or v:IsA("BodyPosition") or v:IsA("BodyGyro")
+                or v:IsA("VectorForce") or v:IsA("AlignPosition")
+                or v:IsA("AlignOrientation")
+end
+local function _isBadWeld(v, char)
+        if not (v:IsA("WeldConstraint") or v:IsA("Weld")) then return false end
+        local p0, p1 = v.Part0, v.Part1
+        local extP0 = p0 and not p0:IsDescendantOf(char)
+        local extP1 = p1 and not p1:IsDescendantOf(char)
+        return extP0 or extP1
+end
+local function _handleNewDesc(v, char)
+        if not CharacterCleanupEnabled and not antiZeroEnabled then return end
+        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
+        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+        if isSelfFlinging or isDashingOrSkill then return end
+        if antiZeroEnabled then
+                if _isBadMover(v) then
+                        pcall(function() v:Destroy() end)
+                        local hrp = char:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                                hrp.AssemblyLinearVelocity  = Vector3.zero
+                                hrp.AssemblyAngularVelocity = Vector3.zero
+                        end
+                        return
+                end
+                if _isBadWeld(v, char) then
+                        pcall(function() v:Destroy() end)
+                        return
+                end
+        end
+        if CharacterCleanupEnabled then
+                if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
+                        pcall(function() v:Destroy() end)
+                end
+        end
+end
+local function _setupHumanoidEvents(char)
+        for _, c in ipairs(_cleanupHumanoidConns) do pcall(function() c:Disconnect() end) end
+        _cleanupHumanoidConns = {}
+        local human = char:FindFirstChildOfClass("Humanoid")
+        if not human then return end
+        local function fixPlatformStand()
+                if CharacterCleanupEnabled and human and human.Parent then
+                        if human.PlatformStand then human.PlatformStand = false end
+                end
+        end
+        local function fixSit()
+                if CharacterCleanupEnabled and human and human.Parent then
+                        if human.Sit then human.Sit = false end
+                end
+        end
+        table.insert(_cleanupHumanoidConns, human:GetPropertyChangedSignal("PlatformStand"):Connect(fixPlatformStand))
+        table.insert(_cleanupHumanoidConns, human:GetPropertyChangedSignal("Sit"):Connect(fixSit))
+end
+local function _bindCleanupEvents(char)
+        if _cleanupDescConn then pcall(function() _cleanupDescConn:Disconnect() end) end
+        _cleanupDescConn = char.DescendantAdded:Connect(function(v)
+                task.defer(function()
+                        if v and v.Parent then
+                                _handleNewDesc(v, char)
+                        end
+                end)
+        end)
+        for _, v in ipairs(char:GetDescendants()) do
+                _handleNewDesc(v, char)
+        end
+        _setupHumanoidEvents(char)
+        char.ChildAdded:Connect(function(child)
+                if child:IsA("Humanoid") then
+                        _setupHumanoidEvents(char)
+                end
+        end)
+end
 local function runCleanupTick(char)
         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
         local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
         if isSelfFlinging or isDashingOrSkill then return end
         if not char then return end
         if antiZeroEnabled then
-                local foundMover = false
-                for _, v in ipairs(char:GetDescendants()) do
-                        if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
-                                or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
-                                or v:IsA("BodyPosition") or v:IsA("BodyGyro")
-                                or v:IsA("VectorForce") or v:IsA("AlignPosition")
-                                or v:IsA("AlignOrientation")
-                        then
-                                foundMover = true
-                                pcall(function() v:Destroy() end)
-                        end
-                        if v:IsA("WeldConstraint") or v:IsA("Weld") then
-                                local p0 = v:IsA("WeldConstraint") and v.Part0 or v.Part0
-                                local p1 = v:IsA("WeldConstraint") and v.Part1 or v.Part1
-                                local extP0 = p0 and not p0:IsDescendantOf(char)
-                                local extP1 = p1 and not p1:IsDescendantOf(char)
-                                if extP0 or extP1 then
-                                        pcall(function() v:Destroy() end)
-                                end
-                        end
-                end
-                if foundMover then
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                                hrp.AssemblyLinearVelocity  = Vector3.zero
-                                hrp.AssemblyAngularVelocity = Vector3.zero
-                        end
-                end
                 local humanoid = char:FindFirstChildOfClass("Humanoid")
                 local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
                 if animator then
@@ -4804,16 +4850,6 @@ local function runCleanupTick(char)
                 end
         end
         if CharacterCleanupEnabled then
-                for _, v in ipairs(char:GetDescendants()) do
-                        if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
-                                pcall(function() v:Destroy() end)
-                        end
-                end
-                local human = char:FindFirstChildOfClass("Humanoid")
-                if human then
-                        if human.PlatformStand then human.PlatformStand = false end
-                        if human.Sit then human.Sit = false end
-                end
                 for i = 1, #characterMotor6Ds do
                         local m = characterMotor6Ds[i]
                         if m and m.Parent and not m.Enabled then
@@ -4834,12 +4870,123 @@ function toggleAntiZero(state)
                 end)
         end
 end
+local antiGrabEnabled   = false
+local antiGrabZeroEnabled = false
+local _grabAnimConns    = {}
+local _grabCharConn     = nil
+local _grabCharAddedConn = nil
+local function _isGrabAnim(name)
+        local low = name:lower()
+        return low:find("grab") or low:find("caught") or low:find("held")
+                or low:find("carry") or low:find("drag") or low:find("grapple")
+end
+local function _killGrabTrack(track, char)
+        pcall(function() track:Stop(0) end)
+        if antiGrabZeroEnabled and char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                        hrp.AssemblyLinearVelocity  = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                end
+        end
+end
+local function _setupGrabOnChar(char)
+        for _, c in ipairs(_grabAnimConns) do pcall(function() c:Disconnect() end) end
+        _grabAnimConns = {}
+        if _grabCharConn then pcall(function() _grabCharConn:Disconnect() end) end
+        if not char then return end
+        local function watchAnimator(animator)
+                if not animator then return end
+                local conn = animator.AnimationPlayed:Connect(function(track)
+                        if not (antiGrabEnabled or antiGrabZeroEnabled) then return end
+                        if _isGrabAnim(track.Name) then
+                                _killGrabTrack(track, char)
+                        end
+                end)
+                table.insert(_grabAnimConns, conn)
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                        if _isGrabAnim(track.Name) then
+                                _killGrabTrack(track, char)
+                        end
+                end
+        end
+        local function findAndWatchAnimator()
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                        local anim = hum:FindFirstChildOfClass("Animator")
+                        if anim then
+                                watchAnimator(anim)
+                        else
+                                local c = hum.ChildAdded:Connect(function(child)
+                                        if child:IsA("Animator") then
+                                                watchAnimator(child)
+                                        end
+                                end)
+                                table.insert(_grabAnimConns, c)
+                        end
+                end
+        end
+        findAndWatchAnimator()
+        _grabCharConn = char.ChildAdded:Connect(function(child)
+                if child:IsA("Humanoid") then
+                        findAndWatchAnimator()
+                end
+        end)
+end
+function toggleAntiGrab(state)
+        antiGrabEnabled = state == true
+        if antiGrabEnabled then
+                local lp = game:GetService("Players").LocalPlayer
+                if lp.Character then _setupGrabOnChar(lp.Character) end
+                if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end) end
+                _grabCharAddedConn = lp.CharacterAdded:Connect(function(char)
+                        task.wait()
+                        if antiGrabEnabled or antiGrabZeroEnabled then
+                                _setupGrabOnChar(char)
+                        end
+                end)
+        else
+                if not antiGrabZeroEnabled then
+                        for _, c in ipairs(_grabAnimConns) do pcall(function() c:Disconnect() end) end
+                        _grabAnimConns = {}
+                        if _grabCharConn then pcall(function() _grabCharConn:Disconnect() end); _grabCharConn = nil end
+                        if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end); _grabCharAddedConn = nil end
+                end
+        end
+end
+function toggleAntiGrabZero(state)
+        antiGrabZeroEnabled = state == true
+        if antiGrabZeroEnabled then
+                local lp = game:GetService("Players").LocalPlayer
+                if lp.Character then _setupGrabOnChar(lp.Character) end
+                if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end) end
+                _grabCharAddedConn = lp.CharacterAdded:Connect(function(char)
+                        task.wait()
+                        if antiGrabEnabled or antiGrabZeroEnabled then
+                                _setupGrabOnChar(char)
+                        end
+                end)
+        else
+                if not antiGrabEnabled then
+                        for _, c in ipairs(_grabAnimConns) do pcall(function() c:Disconnect() end) end
+                        _grabAnimConns = {}
+                        if _grabCharConn then pcall(function() _grabCharConn:Disconnect() end); _grabCharConn = nil end
+                        if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end); _grabCharAddedConn = nil end
+                end
+        end
+end
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
         if CharacterCleanupEnabled then
                 task.spawn(function()
                         local Players = game:GetService("Players")
                         local lp = Players.LocalPlayer
+                        local function onChar(char)
+                                if not char then return end
+                                _bindCleanupEvents(char)
+                        end
+                        if lp.Character then onChar(lp.Character) end
+                        lp.CharacterAdded:Connect(onChar)
                         repeat
                                 CharacterCleanupEnabled = true
                                 pcall(function()
@@ -5275,6 +5422,7 @@ task.spawn(function()
     noclipEnabled = false
     noclipConnection = nil
     local noclipExtraConns = {}
+    local noclipPartConns = {}
     local function toggleNoclip(enabled)
         noclipEnabled = enabled
         if noclipConnection then
@@ -5283,11 +5431,20 @@ task.spawn(function()
         end
         for _, c in ipairs(noclipExtraConns) do pcall(function() c:Disconnect() end) end
         noclipExtraConns = {}
+        for _, c in ipairs(noclipPartConns) do pcall(function() c:Disconnect() end) end
+        noclipPartConns = {}
         if enabled then
             local function disablePart(part)
-                if part:IsA("BasePart") and part.CanCollide then
+                if not part:IsA("BasePart") then return end
+                if part.CanCollide then
                     part.CanCollide = false
                 end
+                local pc = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
+                    if noclipEnabled and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end)
+                noclipPartConns[#noclipPartConns + 1] = pc
             end
             local charDescConn = nil
             local function hookChar(char)
@@ -5295,29 +5452,17 @@ task.spawn(function()
                 if not char then return end
                 for _, part in ipairs(char:GetDescendants()) do disablePart(part) end
                 charDescConn = char.DescendantAdded:Connect(function(part)
-                    task.defer(function() if noclipEnabled then disablePart(part) end end)
+                    task.defer(function() if noclipEnabled and part.Parent then disablePart(part) end end)
                 end)
                 noclipExtraConns[#noclipExtraConns + 1] = charDescConn
             end
             hookChar(game:GetService("Players").LocalPlayer.Character)
             local caConn = game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(newChar)
+                for _, c in ipairs(noclipPartConns) do pcall(function() c:Disconnect() end) end
+                noclipPartConns = {}
                 task.defer(function() if noclipEnabled then hookChar(newChar) end end)
             end)
             noclipExtraConns[#noclipExtraConns + 1] = caConn
-            local lastSweep = 0
-            noclipConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                local now = os.clock()
-                if now - lastSweep < 0.15 then return end
-                lastSweep = now
-                local c = game:GetService("Players").LocalPlayer.Character
-                if c then
-                    for _, part in ipairs(c:GetDescendants()) do
-                        if part:IsA("BasePart") and part.CanCollide then
-                            part.CanCollide = false
-                        end
-                    end
-                end
-            end)
         end
     end
     isProcessingAntiDeath = false
@@ -5675,12 +5820,15 @@ task.spawn(function()
         makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/2)
         makeHubTog(row4, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
         local row5 = makeRow(150)
-        makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/3)
-        makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
+        makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/4)
+        makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/4)
         makeHubTog(row5, "Zero", function(v)
             toggleAntiZero(v)
             if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end
-        end, "AntiZeroEnabled", false, 1/3)
+        end, "AntiZeroEnabled", false, 1/4)
+        local row6 = makeRow(180)
+        makeHubTog(row6, "Anti Grab", function(v) toggleAntiGrab(v) end, "AntiGrabEnabled", false, 1/2)
+        makeHubTog(row6, "Grab Zero", function(v) toggleAntiGrabZero(v) end, "AntiGrabZeroEnabled", false, 1/2)
     else
         local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
@@ -5692,6 +5840,9 @@ task.spawn(function()
             toggleAntiZero(v)
             if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end
         end, "AntiZeroEnabled", false, 1/3)
+        makeHubTog(row3, "Anti Grab", function(v) toggleAntiGrab(v) end, "AntiGrabEnabled", false, 1/3)
+        local row4b = makeRow(120)
+        makeHubTog(row4b, "Grab Zero", function(v) toggleAntiGrabZero(v) end, "AntiGrabZeroEnabled", false, 1/2)
     end
     local espHub = makeControlFrame(isTSB and 184 or 124)
     espHub.Parent = uiX
@@ -9475,21 +9626,19 @@ if game.GameId == 3808081382 then
                                 local map = workspace:FindFirstChild("Map")
                                 local hasFloor = map and map:FindFirstChild("Floor/Roads") ~= nil
                                 if not hasFloor then
-                                        if value ~= "/\\" 
-                                           and value ~= "Middle Of Map" 
-                                           and value ~= "Prison" 
-                                           and value ~= "Montain 1" 
-                                           and value ~= "Montain 2" 
-                                           and value ~= "Montain 2 Left" 
+                                        if value ~= "/\\"
+                                           and value ~= "Middle Of Map"
+                                           and value ~= "Prison"
+                                           and value ~= "Montain 1"
+                                           and value ~= "Montain 2"
+                                           and value ~= "Montain 2 Left"
                                            and value ~= "Montain 2 Right" then
-                                            
                                             placesDropdown.SetValue("/\\", true)
                                             selectedPlace = "/\\"
                                             return
                                         end
                                 end
                         end
-                        
                         selectedPlace = value
                         setSavedControlValue("SelectedPlace", value)
                         syncPlacesKeybindDisplay()
