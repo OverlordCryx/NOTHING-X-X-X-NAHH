@@ -1,4 +1,3 @@
-warn("//NOTHING_X _BEST")
 repeat
     task.wait();
 until game:IsLoaded();
@@ -1965,7 +1964,6 @@ end
 local antiFlingEnabled = false
 local antiFlingConnection = nil
 local antiFlingDescConn = {}
-local antiFlingPartConns = {}
 local function toggleAntiFling(enabled)
         antiFlingEnabled = enabled
         if antiFlingConnection then
@@ -1974,26 +1972,17 @@ local function toggleAntiFling(enabled)
         end
         for _, c in ipairs(antiFlingDescConn) do pcall(function() c:Disconnect() end) end
         antiFlingDescConn = {}
-        for _, c in ipairs(antiFlingPartConns) do pcall(function() c:Disconnect() end) end
-        antiFlingPartConns = {}
         if antiFlingEnabled then
                 local function disableCollision(part)
-                        if not part:IsA("BasePart") then return end
-                        if part.CanCollide then
+                        if part:IsA("BasePart") and part.CanCollide then
                                 part.CanCollide = false
                         end
-                        local pc = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
-                                if antiFlingEnabled and part.CanCollide then
-                                        part.CanCollide = false
-                                end
-                        end)
-                        antiFlingPartConns[#antiFlingPartConns + 1] = pc
                 end
                 local function hookCharacter(char)
                         if not char then return end
                         for _, part in ipairs(char:GetDescendants()) do disableCollision(part) end
                         local c = char.DescendantAdded:Connect(function(part)
-                                task.defer(function() if antiFlingEnabled and part.Parent then disableCollision(part) end end)
+                                task.defer(function() if antiFlingEnabled then disableCollision(part) end end)
                         end)
                         antiFlingDescConn[#antiFlingDescConn + 1] = c
                 end
@@ -2015,6 +2004,21 @@ local function toggleAntiFling(enabled)
                         antiFlingDescConn[#antiFlingDescConn + 1] = ca
                 end)
                 antiFlingDescConn[#antiFlingDescConn + 1] = pa
+                local lastSweep = 0
+                antiFlingConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                        local now = os.clock()
+                        if now - lastSweep < 0.2 then return end
+                        lastSweep = now
+                        for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+                                if p ~= player and p.Character then
+                                        for _, part in ipairs(p.Character:GetDescendants()) do
+                                                if part:IsA("BasePart") and part.CanCollide then
+                                                        part.CanCollide = false
+                                                end
+                                        end
+                                end
+                        end
+                end)
         end
 end
 function syncFlyKeybindDisplay()
@@ -4753,6 +4757,7 @@ local ModConnections = {}
 local hooksRegistered = false
 local lastLocalActionTime = 0
 local characterMotor6Ds = {}
+-- event-driven desc tracker (unikamy GetDescendants() co frame)
 local _cleanupDescConn = nil
 local _cleanupHumanoidConns = {}
 local function _isBadMover(v)
@@ -4822,10 +4827,12 @@ local function _bindCleanupEvents(char)
                         end
                 end)
         end)
+        -- jednorazowe przejście przez obecne descendants przy bind
         for _, v in ipairs(char:GetDescendants()) do
                 _handleNewDesc(v, char)
         end
         _setupHumanoidEvents(char)
+        -- nasłuchuj na dodanie Humanoid (respawn)
         char.ChildAdded:Connect(function(child)
                 if child:IsA("Humanoid") then
                         _setupHumanoidEvents(char)
@@ -4833,6 +4840,7 @@ local function _bindCleanupEvents(char)
         end)
 end
 local function runCleanupTick(char)
+        -- lekki tick: tylko Motor6D + grab anim (bez GetDescendants)
         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
         local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
         if isSelfFlinging or isDashingOrSkill then return end
@@ -4851,6 +4859,7 @@ local function runCleanupTick(char)
                 end
         end
         if CharacterCleanupEnabled then
+                -- Motor6D: tylko iterate po zapamiętanej liście, bez GetDescendants
                 for i = 1, #characterMotor6Ds do
                         local m = characterMotor6Ds[i]
                         if m and m.Parent and not m.Enabled then
@@ -4871,6 +4880,7 @@ function toggleAntiZero(state)
                 end)
         end
 end
+-- ─── ANTI GRAB ───────────────────────────────────────────────────────────────
 local antiGrabEnabled   = false
 local antiGrabZeroEnabled = false
 local _grabAnimConns    = {}
@@ -4892,12 +4902,14 @@ local function _killGrabTrack(track, char)
         end
 end
 local function _setupGrabOnChar(char)
+        -- rozłącz stare połączenia
         for _, c in ipairs(_grabAnimConns) do pcall(function() c:Disconnect() end) end
         _grabAnimConns = {}
         if _grabCharConn then pcall(function() _grabCharConn:Disconnect() end) end
         if not char then return end
         local function watchAnimator(animator)
                 if not animator then return end
+                -- podepnij na każdy nowy track
                 local conn = animator.AnimationPlayed:Connect(function(track)
                         if not (antiGrabEnabled or antiGrabZeroEnabled) then return end
                         if _isGrabAnim(track.Name) then
@@ -4905,6 +4917,7 @@ local function _setupGrabOnChar(char)
                         end
                 end)
                 table.insert(_grabAnimConns, conn)
+                -- sprawdź już grające tracki
                 for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                         if _isGrabAnim(track.Name) then
                                 _killGrabTrack(track, char)
@@ -4982,6 +4995,7 @@ function toggleCharacterCleanupRuntime(state)
                 task.spawn(function()
                         local Players = game:GetService("Players")
                         local lp = Players.LocalPlayer
+                        -- podepnij eventy na aktualny charakter
                         local function onChar(char)
                                 if not char then return end
                                 _bindCleanupEvents(char)
@@ -5001,7 +5015,7 @@ function toggleCharacterCleanupRuntime(state)
                                                 runCleanupTick(char)
                                         end
                                 end)
-                                task.wait()
+                                task.wait()  -- co 100ms zamiast co frame
                         until not CharacterCleanupEnabled
                 end)
         end
@@ -5423,7 +5437,6 @@ task.spawn(function()
     noclipEnabled = false
     noclipConnection = nil
     local noclipExtraConns = {}
-    local noclipPartConns = {}
     local function toggleNoclip(enabled)
         noclipEnabled = enabled
         if noclipConnection then
@@ -5432,20 +5445,11 @@ task.spawn(function()
         end
         for _, c in ipairs(noclipExtraConns) do pcall(function() c:Disconnect() end) end
         noclipExtraConns = {}
-        for _, c in ipairs(noclipPartConns) do pcall(function() c:Disconnect() end) end
-        noclipPartConns = {}
         if enabled then
             local function disablePart(part)
-                if not part:IsA("BasePart") then return end
-                if part.CanCollide then
+                if part:IsA("BasePart") and part.CanCollide then
                     part.CanCollide = false
                 end
-                local pc = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
-                    if noclipEnabled and part.CanCollide then
-                        part.CanCollide = false
-                    end
-                end)
-                noclipPartConns[#noclipPartConns + 1] = pc
             end
             local charDescConn = nil
             local function hookChar(char)
@@ -5453,17 +5457,29 @@ task.spawn(function()
                 if not char then return end
                 for _, part in ipairs(char:GetDescendants()) do disablePart(part) end
                 charDescConn = char.DescendantAdded:Connect(function(part)
-                    task.defer(function() if noclipEnabled and part.Parent then disablePart(part) end end)
+                    task.defer(function() if noclipEnabled then disablePart(part) end end)
                 end)
                 noclipExtraConns[#noclipExtraConns + 1] = charDescConn
             end
             hookChar(game:GetService("Players").LocalPlayer.Character)
             local caConn = game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(newChar)
-                for _, c in ipairs(noclipPartConns) do pcall(function() c:Disconnect() end) end
-                noclipPartConns = {}
                 task.defer(function() if noclipEnabled then hookChar(newChar) end end)
             end)
             noclipExtraConns[#noclipExtraConns + 1] = caConn
+            local lastSweep = 0
+            noclipConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                local now = os.clock()
+                if now - lastSweep < 0.15 then return end
+                lastSweep = now
+                local c = game:GetService("Players").LocalPlayer.Character
+                if c then
+                    for _, part in ipairs(c:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
         end
     end
     isProcessingAntiDeath = false
@@ -9627,19 +9643,21 @@ if game.GameId == 3808081382 then
                                 local map = workspace:FindFirstChild("Map")
                                 local hasFloor = map and map:FindFirstChild("Floor/Roads") ~= nil
                                 if not hasFloor then
-                                        if value ~= "/\\"
-                                           and value ~= "Middle Of Map"
-                                           and value ~= "Prison"
-                                           and value ~= "Montain 1"
-                                           and value ~= "Montain 2"
-                                           and value ~= "Montain 2 Left"
+                                        if value ~= "/\\" 
+                                           and value ~= "Middle Of Map" 
+                                           and value ~= "Prison" 
+                                           and value ~= "Montain 1" 
+                                           and value ~= "Montain 2" 
+                                           and value ~= "Montain 2 Left" 
                                            and value ~= "Montain 2 Right" then
+                                            
                                             placesDropdown.SetValue("/\\", true)
                                             selectedPlace = "/\\"
                                             return
                                         end
                                 end
                         end
+                        
                         selectedPlace = value
                         setSavedControlValue("SelectedPlace", value)
                         syncPlacesKeybindDisplay()
@@ -11767,4 +11785,3 @@ task.spawn(function()
         end
 end)
 end)
-warn("-NOTHING-")
