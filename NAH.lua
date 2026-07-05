@@ -1417,18 +1417,96 @@ function updateOrbitToggleButton()
         end
 end
 function resolveAttackTpTarget() end
-function zeroLocalPlayerRoot() end
+function zeroLocalPlayerRoot()
+	local character = player.Character
+	if not character then return end
+	-- Zero out every BasePart in the entire local player model
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			pcall(function()
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+			end)
+		end
+	end
+	-- Also zero the root itself (HumanoidRootPart) directly for reliability
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		pcall(function()
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end
+end
 function syncFlingModeControls() end
 function runGetTrash() end
 function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
         if not rootPart then return end
+        -- Mark all TP operations (attack TP, places TP, setback, flings) so no-tp doesn't block
+        rootPart:SetAttribute("IsAttackTP", true)
         if cframe then rootPart.CFrame = cframe end
         if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
         if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
+        -- Reset flag immediately
+        rootPart:SetAttribute("IsAttackTP", false)
+end
+-- Helper for bypassing no-tp (trash/speed/orbit/flings movement)
+function applyCFrameBypassNoTp(rootPart, cframe)
+        if not rootPart then return end
+        rootPart:SetAttribute("IsTrashOperation", true)
+        if cframe then rootPart.CFrame = cframe end
+        rootPart:SetAttribute("IsTrashOperation", false)
 end
 function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
+        -- Use same unified TP system
         applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
 end
+
+-- ============================================================================
+-- UNIFIED TP SYSTEM - All TP types (Auto TP, Places TP, SetBack, Flings)
+-- ============================================================================
+local unifiedTPQueue = {}
+
+function queueUnifiedTP(targetCFrame, targetVelocity, angularVelocity, tpType)
+        if not targetCFrame or not player.Character then return false end
+        table.insert(unifiedTPQueue, {
+                cframe = targetCFrame,
+                linearVel = targetVelocity or Vector3.zero,
+                angularVel = angularVelocity or Vector3.zero,
+                type = tpType or "TP"
+        })
+        return true
+end
+
+function processUnifiedTPQueue()
+        if #unifiedTPQueue == 0 then return end
+        local character = player.Character
+        local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
+        if not characterRoot then return end
+        
+        local tpRequest = table.remove(unifiedTPQueue, 1)
+        if tpRequest and tpRequest.cframe then
+                -- Check if flings are enabled and apply them
+                local amFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled
+                if amFlinging then
+                        local power = (walkFlingEnabled and walkFlingPower) or (flingEnabled and flingPower) or (clickFlingEnabled and flingPower) or (auraFlingEnabled and flingPower) or 20000
+                        tpRequest.angularVel = Vector3.new(power * 2.1, power * 2.1, power * 2.1)
+                end
+                applyTeleportRootState(characterRoot, tpRequest.cframe, tpRequest.linearVel, tpRequest.angularVel)
+        end
+end
+
+function startUnifiedTPProcessor()
+        task.spawn(function()
+                RunService.Heartbeat:Connect(function()
+                        processUnifiedTPQueue()
+                end)
+        end)
+end
+
+-- Start unified TP processor once
+startUnifiedTPProcessor()
+
 function encodeKeybindValue(keyCode)
         if not keyCode then
                 return ""
@@ -2353,9 +2431,9 @@ function clickFlingTargetModel(targetModel)
                 if myRoot and myRoot.Parent then
                         myRoot.AssemblyAngularVelocity = Vector3.zero
                         myRoot.AssemblyLinearVelocity = Vector3.zero
-                        myRoot.CFrame = savedCFrame
+                        applyCFrameBypassNoTp(myRoot, savedCFrame)
                         task.wait(0.1)
-                        myRoot.CFrame = savedCFrame
+                        applyCFrameBypassNoTp(myRoot, savedCFrame)
                 end
                 clickFlingBusy = false
         end)
@@ -2602,7 +2680,7 @@ function updateMovement()
                 moveVector += Vector3.new(Speed, 0, 0)
         end
         if moveVector.Magnitude > 0 then
-                hrp.CFrame = hrp.CFrame * CFrame.new(moveVector)
+                applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(moveVector))
         end
 end
 function toggleSpeed(nextState)
@@ -2952,7 +3030,7 @@ function startGetTrashHoldLoop(runToken)
                         if rootPart and rootPart.Parent and getTrashState.holdCFrame then
                                 rootPart.AssemblyLinearVelocity = Vector3.zero
                                 rootPart.AssemblyAngularVelocity = Vector3.zero
-                                rootPart.CFrame = getTrashState.holdCFrame
+                                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
                         end
                 end
         end)
@@ -3061,7 +3139,7 @@ local function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarge
         local totalDist = (toPos - fromPos).Magnitude
         if totalDist < 0.05 then
                 getTrashState.holdCFrame = getTrashTravelCFrame(toPos, lookTarget or (toPos + rootPart.CFrame.LookVector))
-                rootPart.CFrame = getTrashState.holdCFrame
+                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
                 return true
         end
         local traveled = 0
@@ -3078,7 +3156,7 @@ local function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarge
                 local alpha = traveled / totalDist
                 currentPos = fromPos:Lerp(toPos, alpha)
                 getTrashState.holdCFrame = getTrashTravelCFrame(currentPos, lookTarget or toPos)
-                rootPart.CFrame = getTrashState.holdCFrame
+                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
         end
         return true
 end
@@ -3133,7 +3211,7 @@ function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
                 local alpha = traveled / totalDist
                 local currentPos = p2:Lerp(targetPos, alpha)
                 getTrashState.holdCFrame = startCFrame:Lerp(targetCFrame, alpha)
-                rootPart.CFrame = getTrashState.holdCFrame
+                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
         end
         return true
 end
@@ -3161,7 +3239,7 @@ function liftOutOfTrashRun()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 17, 0)
+        applyCFrameBypassNoTp(rootPart, rootPart.CFrame + Vector3.new(0, 17, 0))
 end
 function teleportBackToSavedTrashPositionInstant()
         local currentCharacter = player.Character
@@ -3171,7 +3249,7 @@ function teleportBackToSavedTrashPositionInstant()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        rootPart.CFrame = getTrashState.savedCFrame
+        applyCFrameBypassNoTp(rootPart, getTrashState.savedCFrame)
 end
 function stopGetTrashImmediate()
         getTrashState.running = false
@@ -3327,7 +3405,7 @@ runGetTrash = function()
                                         getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position + rootPart.CFrame.LookVector)
                                         rootPart.AssemblyLinearVelocity = Vector3.zero
                                         rootPart.AssemblyAngularVelocity = Vector3.zero
-                                        rootPart.CFrame = getTrashState.holdCFrame
+                                        applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
                                         clickTrashcan()
                                         clickAttempts += 1
                                         task.wait(0.2)
@@ -3458,25 +3536,9 @@ function startSetBackTravel()
         end
         stopSetBackTravel()
         local runToken = setBackTravelToken
-        local startCF = rootPart.CFrame
-        local destCF = setBackSavedCFrame
         task.spawn(function()
                 if setBackTravelToken ~= runToken then return end
-                local dist = (destCF.Position - startCF.Position).Magnitude
-                if dist < 250 then
-                        applyTeleportRootState(rootPart, destCF, Vector3.zero, Vector3.zero)
-                else
-                        applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.25), Vector3.zero, Vector3.zero)
-                        task.wait(0.05)
-                        if setBackTravelToken ~= runToken then return end
-                        applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.50), Vector3.zero, Vector3.zero)
-                        task.wait(0.05)
-                        if setBackTravelToken ~= runToken then return end
-                        applyTeleportRootState(rootPart, startCF:Lerp(destCF, 0.75), Vector3.zero, Vector3.zero)
-                        task.wait(0.05)
-                        if setBackTravelToken ~= runToken then return end
-                        applyTeleportRootState(rootPart, destCF, Vector3.zero, Vector3.zero)
-                end
+                applyTeleportRootState(rootPart, setBackSavedCFrame, Vector3.zero, Vector3.zero)
                 local humanoid = character:FindFirstChildOfClass("Humanoid")
                 if humanoid then
                         humanoid.PlatformStand = false
@@ -4119,13 +4181,25 @@ function getRotationOnlyCFrame(sourceCFrame)
         return CFrame.lookAt(Vector3.new(), sourceCFrame.LookVector, sourceCFrame.UpVector)
 end
 zeroLocalPlayerRoot = function()
-        local character = player.Character
-        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-                return
-        end
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
+	local character = player.Character
+	if not character then return end
+	-- Zero velocities on entire local player model (all BaseParts)
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			pcall(function()
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+			end)
+		end
+	end
+	-- Also explicitly zero HumanoidRootPart for reliability
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		pcall(function()
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end
 end
 function getAppliedFlySpeed()
         return flySpeed * flySpeedMultiplier
@@ -4235,15 +4309,27 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
                 local rotatedOffset = targetRoot.CFrame:VectorToWorldSpace(offsetVec)
                 local targetPos = predictedTargetPosition + rotatedOffset + Vector3.new(0, verticalOffset, 0)
                 if offsets.useRotation then
+                        -- Rotation relative to target's facing direction
                         local rx = math.rad(offsets.rx or 0)
                         local ry = math.rad(offsets.ry or 0)
                         local rz = math.rad(offsets.rz or 0)
-                        finalCFrame = CFrame.new(targetPos) * CFrame.fromEulerAnglesXYZ(rx, ry, rz)
+                        -- Base = target's flat horizontal rotation (yaw only, no pitch/roll)
+                        local targetLook = targetRoot.CFrame.LookVector
+                        local flatTargetLook = Vector3.new(targetLook.X, 0, targetLook.Z)
+                        local baseRotCF
+                        if flatTargetLook.Magnitude > 0.01 then
+                                baseRotCF = CFrame.lookAt(targetPos, targetPos + flatTargetLook.Unit, worldUpVector)
+                        else
+                                baseRotCF = CFrame.new(targetPos)
+                        end
+                        finalCFrame = baseRotCF * CFrame.fromEulerAnglesXYZ(rx, ry, rz)
                 else
+                        -- lookAt = face toward target from spawn position
                         local lookAtCF = CFrame.lookAt(targetPos, predictedTargetPosition, worldUpVector)
                         if offsets.flat == "flat90" then
-                                local lookVector = lookAtCF.LookVector
-                                local flatLookVector = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+                                -- flat90: horizontal facing (based on target look), then +90 pitch
+                                local targetLook = targetRoot.CFrame.LookVector
+                                local flatLookVector = Vector3.new(targetLook.X, 0, targetLook.Z).Unit
                                 if flatLookVector.Magnitude > 0 then
                                         local flatCF = CFrame.lookAt(targetPos, targetPos + flatLookVector, worldUpVector)
                                         finalCFrame = flatCF * CFrame.Angles(math.rad(90), 0, 0)
@@ -4251,8 +4337,9 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
                                         finalCFrame = lookAtCF * CFrame.Angles(math.rad(90), 0, 0)
                                 end
                         elseif offsets.flat then
-                                local lookVector = lookAtCF.LookVector
-                                local flatLookVector = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+                                -- flat: horizontal facing based on target look direction
+                                local targetLook = targetRoot.CFrame.LookVector
+                                local flatLookVector = Vector3.new(targetLook.X, 0, targetLook.Z).Unit
                                 if flatLookVector.Magnitude > 0 then
                                         finalCFrame = CFrame.lookAt(targetPos, targetPos + flatLookVector, worldUpVector)
                                 else
@@ -4989,6 +5076,123 @@ function toggleAntiGrabZero(state)
                 end
         end
 end
+-- ─── NO-TP (Anti-Teleport) ───────────────────────────────────────────────────
+local noTpEnabled = false
+local noTpConnections = {}
+local noTpCharAddedConn = nil
+local noTpCharRemovingConn = nil
+
+local function noTpCleanupConnections()
+        for _, conn in ipairs(noTpConnections) do
+                pcall(function() conn:Disconnect() end)
+        end
+        noTpConnections = {}
+end
+
+local function noTpStartForCharacter(character)
+        if not character then return end
+        -- Wait for Humanoid
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then
+                local t = 0
+                repeat
+                        RunService.Heartbeat:Wait()
+                        t += 1
+                        humanoid = character:FindFirstChildOfClass("Humanoid")
+                until humanoid or t > 300 or not noTpEnabled
+        end
+        if not humanoid or not noTpEnabled then return end
+        -- Wait for RootPart
+        local hrp = humanoid.RootPart
+        if not hrp then
+                local t = 0
+                repeat
+                        RunService.Heartbeat:Wait()
+                        t += 1
+                        hrp = humanoid.RootPart
+                until hrp or t > 300 or not noTpEnabled
+        end
+        if not hrp or not noTpEnabled then return end
+
+        local lastCF = hrp.CFrame
+        local blocking = false
+
+        -- Track last known safe CFrame every heartbeat
+        local heartbeatConn = RunService.Heartbeat:Connect(function()
+                if not noTpEnabled then return end
+                if blocking then return end
+                pcall(function()
+                        local h = character:FindFirstChildOfClass("Humanoid")
+                        local r = h and h.RootPart
+                        if r and r.Parent then
+                                lastCF = r.CFrame
+                        end
+                end)
+        end)
+
+        -- Block unauthorized CFrame changes (but allow tp operations)
+        local changedConn = hrp:GetPropertyChangedSignal("CFrame"):Connect(function()
+                if not noTpEnabled then return end
+                -- Don't block if in safe zone (AFK or HP Safe Zone)
+                if isSafeZoneActive() then return end
+                -- Don't block if this is attack tp
+                if hrp:GetAttribute("IsAttackTP") then return end
+                -- Don't block if this is trash/speed/orbit/fling operation
+                if hrp:GetAttribute("IsTrashOperation") then return end
+                blocking = true
+                pcall(function()
+                        hrp.CFrame = lastCF
+                end)
+                RunService.Heartbeat:Wait()
+                blocking = false
+        end)
+
+        -- Disconnect on death (prevent error on respawn)
+        local diedConn
+        diedConn = humanoid.Died:Connect(function()
+                blocking = false
+                lastCF = nil
+                pcall(function() heartbeatConn:Disconnect() end)
+                pcall(function() changedConn:Disconnect() end)
+                pcall(function() diedConn:Disconnect() end)
+        end)
+
+        table.insert(noTpConnections, heartbeatConn)
+        table.insert(noTpConnections, changedConn)
+        table.insert(noTpConnections, diedConn)
+end
+
+function toggleNoTp(state)
+        noTpEnabled = state == true
+        noTpCleanupConnections()
+        if noTpCharAddedConn then
+                pcall(function() noTpCharAddedConn:Disconnect() end)
+                noTpCharAddedConn = nil
+        end
+        if noTpCharRemovingConn then
+                pcall(function() noTpCharRemovingConn:Disconnect() end)
+                noTpCharRemovingConn = nil
+        end
+        if not noTpEnabled then return end
+
+        -- Start for current character
+        if player.Character then
+                task.spawn(noTpStartForCharacter, player.Character)
+        end
+
+        -- Re-bind on every respawn
+        noTpCharAddedConn = player.CharacterAdded:Connect(function(character)
+                if not noTpEnabled then return end
+                task.spawn(noTpStartForCharacter, character)
+        end)
+
+        -- On character removing: clean per-character connections
+        -- (Died already handles that; this is a safety net)
+        noTpCharRemovingConn = player.CharacterRemoving:Connect(function()
+                noTpCleanupConnections()
+        end)
+end
+
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
         if CharacterCleanupEnabled then
@@ -5658,11 +5862,11 @@ task.spawn(function()
                 if root and stayPos then
                     root.AssemblyLinearVelocity = Vector3.zero
                     root.AssemblyAngularVelocity = Vector3.zero
-                    root.CFrame = CFrame.new(stayPos) * CFrame.Angles(
+                    applyCFrameBypassNoTp(root, CFrame.new(stayPos) * CFrame.Angles(
                         0,
                         math.rad(root.Orientation.Y),
                         0
-                    )
+                    ))
                     if stayGyro then
                         stayGyro.CFrame = root.CFrame
                     end
@@ -5839,13 +6043,8 @@ task.spawn(function()
         local row5 = makeRow(150)
         makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/4)
         makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/4)
-        makeHubTog(row5, "Zero", function(v)
-            toggleAntiZero(v)
-            if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end
-        end, "AntiZeroEnabled", false, 1/4)
-        local row6 = makeRow(180)
-        makeHubTog(row6, "Anti Grab", function(v) toggleAntiGrab(v) end, "AntiGrabEnabled", false, 1/2)
-        makeHubTog(row6, "Grab Zero", function(v) toggleAntiGrabZero(v) end, "AntiGrabZeroEnabled", false, 1/2)
+        makeHubTog(row5, "Zero", function(v) toggleAntiZero(v) toggleAntiGrab(v) toggleAntiGrabZero(v) if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end end, "AntiZeroEnabled", false, 1/4)
+        makeHubTog(row5, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/4)
     else
         local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
@@ -5853,13 +6052,9 @@ task.spawn(function()
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row3 = makeRow(90)
         makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
-        makeHubTog(row3, "Zero", function(v)
-            toggleAntiZero(v)
-            if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end
-        end, "AntiZeroEnabled", false, 1/3)
-        makeHubTog(row3, "Anti Grab", function(v) toggleAntiGrab(v) end, "AntiGrabEnabled", false, 1/3)
+        makeHubTog(row3, "Zero", function(v) toggleAntiZero(v) toggleAntiGrab(v) toggleAntiGrabZero(v) if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end end, "AntiZeroEnabled", false, 1/3)
         local row4b = makeRow(120)
-        makeHubTog(row4b, "Grab Zero", function(v) toggleAntiGrabZero(v) end, "AntiGrabZeroEnabled", false, 1/2)
+        makeHubTog(row4b, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/2)
     end
     local espHub = makeControlFrame(isTSB and 184 or 124)
     espHub.Parent = uiX
@@ -6022,10 +6217,10 @@ task.spawn(function()
                     local conn
                     conn = RunService.Heartbeat:Connect(function()
                         if not _G.WallComboEnabled or tick() - startTime >= 0.3 then
-                            if hrp and hrp.Parent then hrp.CFrame = startCFrame end
+                            if hrp and hrp.Parent then applyCFrameBypassNoTp(hrp, startCFrame) end
                             conn:Disconnect()
                         elseif hrp and hrp.Parent then
-                            hrp.CFrame = startCFrame * CFrame.Angles(math.rad(-25), 0, 0)
+                            applyCFrameBypassNoTp(hrp, startCFrame * CFrame.Angles(math.rad(-25), 0, 0))
                         end
                     end)
                 end
@@ -6038,7 +6233,7 @@ task.spawn(function()
                 if _G.WhirlwindEnabled and track.Animation and track.Animation.AnimationId == WhirlwindDunkID then
                     task.wait(1.2)
                     local hrp = combatChar:FindFirstChild("HumanoidRootPart")
-                    if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(0, 100, 0) end
+                    if hrp then applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(0, 100, 0)) end
                 end
                 HandleWallComboTilt(track, combatChar)
             end)
@@ -6086,7 +6281,7 @@ task.spawn(function()
         local myChar = flingState.localPlayer.Character
         local myRoot = getRoot(myChar)
         if myRoot and flingSavedCFrame and myRoot.Parent then
-            myRoot.CFrame = flingSavedCFrame
+            applyCFrameBypassNoTp(myRoot, flingSavedCFrame)
         end
         flingSavedCFrame = nil
         flingTargetTime = 0
@@ -11052,19 +11247,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                         local character = player.Character
                         local characterRoot = character and character:FindFirstChild("HumanoidRootPart")
                         if characterRoot then
-                                local startCF = characterRoot.CFrame
-                                local dist = (cf.Position - startCF.Position).Magnitude
-                                if dist < 250 then
-                                        applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
-                                else
-                                        applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.25), Vector3.zero, Vector3.zero)
-                                        task.wait(0.05)
-                                        applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.50), Vector3.zero, Vector3.zero)
-                                        task.wait(0.05)
-                                        applyTeleportRootState(characterRoot, startCF:Lerp(cf, 0.75), Vector3.zero, Vector3.zero)
-                                        task.wait(0.05)
-                                        applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
-                                end
+                                applyTeleportRootState(characterRoot, cf, Vector3.zero, Vector3.zero)
                         end
                 end
                 return
