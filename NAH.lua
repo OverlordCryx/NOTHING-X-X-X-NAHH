@@ -1929,7 +1929,7 @@ local function toggleVoidDead(state)
                         end
                         return
                 end
-                hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                applyCFrameBypassNoTp(hrp, CFrame.new(hrp.Position.X, -6666, hrp.Position.Z))
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
         end)
@@ -2004,7 +2004,7 @@ local function toggleDVoidDead(state)
                         return
                 end
                 if targetPlayer and targetHumanoid and targetHumanoid.Health > 0 then
-                        hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                        applyCFrameBypassNoTp(hrp, CFrame.new(hrp.Position.X, -6666, hrp.Position.Z))
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 else
@@ -2532,18 +2532,18 @@ function restorePosition(savedCFrame)
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if hrp and savedCFrame then
                 hrp.Anchored = false
-                hrp.CFrame = CFrame.new(0, -6666, 0)
+                applyCFrameBypassNoTp(hrp, CFrame.new(0, -6666, 0))
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
                 task.wait()
                 if hrp.Parent then
-                        hrp.CFrame = CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z)
+                        applyCFrameBypassNoTp(hrp, CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z))
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                         task.wait()
                 end
                 if hrp.Parent then
-                        hrp.CFrame = savedCFrame
+                        applyCFrameBypassNoTp(hrp, savedCFrame)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -2710,7 +2710,7 @@ function toggleAFK(enabled)
                 disableConflictingFeatures()
                 if hrp then
                         hrp.Anchored = false
-                        hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                        applyCFrameBypassNoTp(hrp, CFrame.new(hrp.Position.X, -6666, hrp.Position.Z))
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -2739,12 +2739,12 @@ function toggleAFK(enabled)
                         if isFirstTp then
                                 isFirstTp = false
                                 if afkSavedCFrame then
-                                        root.CFrame = CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z)
+                                        applyCFrameBypassNoTp(root, CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z))
                                 else
-                                        root.CFrame = CFrame.new(root.Position.X, -6666, root.Position.Z)
+                                        applyCFrameBypassNoTp(root, CFrame.new(root.Position.X, -6666, root.Position.Z))
                                 end
                         else
-                                root.CFrame = CFrame.new(loopPositions[loopIndex])
+                                applyCFrameBypassNoTp(root, CFrame.new(loopPositions[loopIndex]))
                                 loopIndex = (loopIndex % #loopPositions) + 1
                         end
                         root.AssemblyLinearVelocity = Vector3.zero
@@ -2757,7 +2757,7 @@ function toggleAFK(enabled)
                                 local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
                                 if newRoot and afkEnabled then
                                         newRoot.Anchored = false
-                                        newRoot.CFrame = CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z)
+                                        applyCFrameBypassNoTp(newRoot, CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z))
                                         newRoot.AssemblyLinearVelocity = Vector3.zero
                                         newRoot.AssemblyAngularVelocity = Vector3.zero
                                         isFirstTp = true
@@ -2840,12 +2840,12 @@ function toggleSafeZoneHP(enabled)
                                         if isFirstTp then
                                                 isFirstTp = false
                                                 if safeZoneHPSavedCFrame then
-                                                        hrp.CFrame = CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z)
+                                                        applyCFrameBypassNoTp(hrp, CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z))
                                                 else
-                                                        hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                                                        applyCFrameBypassNoTp(hrp, CFrame.new(hrp.Position.X, -6666, hrp.Position.Z))
                                                 end
                                         else
-                                                hrp.CFrame = CFrame.new(loopPositions[loopIndex])
+                                                applyCFrameBypassNoTp(hrp, CFrame.new(loopPositions[loopIndex]))
                                                 loopIndex = (loopIndex % #loopPositions) + 1
                                         end
                                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -2858,7 +2858,7 @@ function toggleSafeZoneHP(enabled)
                                         safeZoneHPCharacter = character
                                         safeZoneHPInSafeZone = true
                                         hrp.Anchored = false
-                                        hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                                        applyCFrameBypassNoTp(hrp, CFrame.new(hrp.Position.X, -6666, hrp.Position.Z))
                                         hrp.AssemblyLinearVelocity = Vector3.zero
                                         hrp.AssemblyAngularVelocity = Vector3.zero
                                         isFirstTp = false
