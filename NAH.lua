@@ -236,7 +236,32 @@ function updateAllScales()
         end
         local tOffset = math.clamp((w - 800) / (1900 - 800), 0, 1)
         local tfXOffset = -160 - tOffset * 190
-        local newKFPos = keybindFrame and UDim2.new(0, 10, kfYScale, 0) or nil
+        
+        -- Pozycjonowanie keybindFrame względem chatInputBar
+        local newKFPos = nil
+        if keybindFrame then
+                local chatInputBar = nil
+                pcall(function()
+                        chatInputBar = CoreGui:FindFirstChild("ExperienceChat") and CoreGui.ExperienceChat:FindFirstChild("appLayout") and CoreGui.ExperienceChat.appLayout:FindFirstChild("chatInputBar")
+                end)
+                
+                if chatInputBar then
+                        local chatAbsPos = chatInputBar.AbsolutePosition
+                        local chatAbsSize = chatInputBar.AbsoluteSize
+                        local chatBottomY = chatAbsPos.Y + chatAbsSize.Y + 5
+                        local screenSize = screenGui.AbsoluteSize
+                        
+                        if screenSize.Y > 0 then
+                                local yScale = chatBottomY / screenSize.Y
+                                newKFPos = UDim2.new(0, 10, yScale, 0)
+                        else
+                                newKFPos = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
+                        end
+                else
+                        newKFPos = UDim2.new(0, 10, kfYScale, 0)
+                end
+        end
+        
         local newTFPos = targetFrame and UDim2.new(1, tfXOffset, 0, 10) or nil
         for guiObject, original in pairs(scaleRegistry) do
                 if not guiObject.Parent then
@@ -364,8 +389,8 @@ player.CharacterAdded:Connect(function()
 end)
         keybindFrame = Instance.new("Frame")
         keybindFrame.Name = "KeybindFrame"
-        keybindFrame.AnchorPoint = Vector2.new(0, 1)
-        keybindFrame.Position = UDim2.new(0, 10, 0.9, 0)
+        keybindFrame.AnchorPoint = Vector2.new(0, 0)
+        keybindFrame.Position = UDim2.new(0, 10, 0, 10)
         keybindFrame.Size = UDim2.fromScale(0, 0)
 keybindFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 keybindFrame.BackgroundTransparency = 0.2
@@ -9594,7 +9619,7 @@ if not targetRoot then return end
         customPresetLabel.Position = UDim2.new(0, 10, 0, 168)
         customPresetLabel.Size = UDim2.new(1, -20, 0, 14)
         customPresetLabel.Font = Enum.Font.GothamBold
-        customPresetLabel.Text = "Custom"
+        customPresetLabel.Text = "Custom (16 presets)"
         customPresetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
         customPresetLabel.TextSize = 11
         customPresetLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -11871,6 +11896,32 @@ PlayerGui.ChildAdded:Connect(function(v)
         UpdateBar()
 end)
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
+-- Aktualizuj pozycję keybindFrame względem chatInputBar
+task.spawn(function()
+        while true do
+                task.wait()
+                if keybindFrame and keybindFrame.Parent then
+                        local chatInputBar = nil
+                        pcall(function()
+                                chatInputBar = CoreGui:FindFirstChild("ExperienceChat") and CoreGui.ExperienceChat:FindFirstChild("appLayout") and CoreGui.ExperienceChat.appLayout:FindFirstChild("chatInputBar")
+                        end)
+                        
+                        if chatInputBar then
+                                local chatAbsPos = chatInputBar.AbsolutePosition
+                                local chatAbsSize = chatInputBar.AbsoluteSize
+                                local chatBottomY = chatAbsPos.Y + chatAbsSize.Y + 80
+                                local screenSize = screenGui.AbsoluteSize
+                                
+                                if screenSize.Y > 0 then
+                                        local yScale = chatBottomY / screenSize.Y
+                                        keybindFrame.Position = UDim2.new(0, 10, yScale, 0)
+                                else
+                                        keybindFrame.Position = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
+                                end
+                        end
+                end
+        end
+end)
 task.spawn(function()
         while true do
                 task.wait(0.1)
