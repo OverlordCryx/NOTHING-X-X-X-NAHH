@@ -237,31 +237,6 @@ function updateAllScales()
         local tOffset = math.clamp((w - 800) / (1900 - 800), 0, 1)
         local tfXOffset = -160 - tOffset * 190
         
-        -- Pozycjonowanie keybindFrame względem chatInputBar
-        local newKFPos = nil
-        if keybindFrame then
-                local chatInputBar = nil
-                pcall(function()
-                        chatInputBar = CoreGui:FindFirstChild("ExperienceChat") and CoreGui.ExperienceChat:FindFirstChild("appLayout") and CoreGui.ExperienceChat.appLayout:FindFirstChild("chatInputBar")
-                end)
-                
-                if chatInputBar then
-                        local chatAbsPos = chatInputBar.AbsolutePosition
-                        local chatAbsSize = chatInputBar.AbsoluteSize
-                        local chatBottomY = chatAbsPos.Y + chatAbsSize.Y + 5
-                        local screenSize = screenGui.AbsoluteSize
-                        
-                        if screenSize.Y > 0 then
-                                local yScale = chatBottomY / screenSize.Y
-                                newKFPos = UDim2.new(0, 10, yScale, 0)
-                        else
-                                newKFPos = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
-                        end
-                else
-                        newKFPos = UDim2.new(0, 10, kfYScale, 0)
-                end
-        end
-        
         local newTFPos = targetFrame and UDim2.new(1, tfXOffset, 0, 10) or nil
         for guiObject, original in pairs(scaleRegistry) do
                 if not guiObject.Parent then
@@ -272,9 +247,6 @@ function updateAllScales()
                                 applyScaleToObject(guiObject)
                         end
                 end
-        end
-        if keybindFrame and newKFPos then
-                keybindFrame.Position = newKFPos
         end
         if targetFrame and newTFPos then
                 targetFrame.Position = newTFPos
@@ -4923,7 +4895,9 @@ local function runCleanupTick(char)
                         for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                                 if track.Name == "grab" or track.Name == "Grab"
                                         or track.Name:lower():find("grab") or track.Name:lower():find("caught")
-                                        or track.Name:lower():find("held") or track.Name:lower():find("carry") then
+                                        or track.Name:lower():find("held") or track.Name:lower():find("carry")
+                                        or track.Name:lower():find("push") or track.Name:lower():find("shove")
+                                        or track.Name:lower():find("knockback") then
                                         pcall(function() track:Stop(0) end)
                                 end
                         end
@@ -4959,6 +4933,7 @@ local function _isGrabAnim(name)
         local low = name:lower()
         return low:find("grab") or low:find("caught") or low:find("held")
                 or low:find("carry") or low:find("drag") or low:find("grapple")
+                or low:find("push") or low:find("shove") or low:find("knockback")
 end
 local function _killGrabTrack(track, char)
         pcall(function() track:Stop(0) end)
@@ -11896,32 +11871,91 @@ PlayerGui.ChildAdded:Connect(function(v)
         UpdateBar()
 end)
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
--- Aktualizuj pozycję keybindFrame względem chatInputBar
-task.spawn(function()
-        while true do
-                task.wait()
-                if keybindFrame and keybindFrame.Parent then
-                        local chatInputBar = nil
+-- Aktualizuj pozycję keybindFrame względem chatInputBar (event-driven tracking to avoid CPU overhead)
+local chatConnectionPos = nil
+local chatConnectionSize = nil
+local chatConnectionParent = nil
+local screenConnectionSize = nil
+
+local function disconnectChatListeners()
+        if chatConnectionPos then chatConnectionPos:Disconnect(); chatConnectionPos = nil end
+        if chatConnectionSize then chatConnectionSize:Disconnect(); chatConnectionSize = nil end
+        if chatConnectionParent then chatConnectionParent:Disconnect(); chatConnectionParent = nil end
+end
+
+local function disconnectScreenListener()
+        if screenConnectionSize then screenConnectionSize:Disconnect(); screenConnectionSize = nil end
+end
+
+local function updateKeybindPosition(chatInputBar)
+        if not keybindFrame or not keybindFrame.Parent then return end
+        if not chatInputBar or not chatInputBar.Parent then return end
+        
+        local chatAbsPos = chatInputBar.AbsolutePosition
+        local chatAbsSize = chatInputBar.AbsoluteSize
+        local chatBottomY = chatAbsPos.Y + chatAbsSize.Y + 80
+        local screenSize = screenGui.AbsoluteSize
+        
+        local newPos
+        if screenSize.Y > 0 then
+                local yScale = chatBottomY / screenSize.Y
+                newPos = UDim2.new(0, 10, yScale, 0)
+        else
+                newPos = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
+        end
+        
+        if keybindFrame.Position ~= newPos then
+                keybindFrame.Position = newPos
+        end
+end
+
+local function startChatInputBarTracking()
+        disconnectChatListeners()
+        disconnectScreenListener()
+        
+        local chatInputBar = nil
+        task.spawn(function()
+                while true do
+                        if not keybindFrame or not keybindFrame.Parent then
+                                task.wait(1)
+                                continue
+                        end
+                        
                         pcall(function()
-                                chatInputBar = CoreGui:FindFirstChild("ExperienceChat") and CoreGui.ExperienceChat:FindFirstChild("appLayout") and CoreGui.ExperienceChat.appLayout:FindFirstChild("chatInputBar")
+                                chatInputBar = CoreGui:FindFirstChild("ExperienceChat") 
+                                        and CoreGui.ExperienceChat:FindFirstChild("appLayout") 
+                                        and CoreGui.ExperienceChat.appLayout:FindFirstChild("chatInputBar")
                         end)
                         
                         if chatInputBar then
-                                local chatAbsPos = chatInputBar.AbsolutePosition
-                                local chatAbsSize = chatInputBar.AbsoluteSize
-                                local chatBottomY = chatAbsPos.Y + chatAbsSize.Y + 80
-                                local screenSize = screenGui.AbsoluteSize
-                                
-                                if screenSize.Y > 0 then
-                                        local yScale = chatBottomY / screenSize.Y
-                                        keybindFrame.Position = UDim2.new(0, 10, yScale, 0)
-                                else
-                                        keybindFrame.Position = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
-                                end
+                                break
                         end
+                        task.wait(0.5)
                 end
-        end
-end)
+                
+                updateKeybindPosition(chatInputBar)
+                
+                chatConnectionPos = chatInputBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+                        updateKeybindPosition(chatInputBar)
+                end)
+                chatConnectionSize = chatInputBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                        updateKeybindPosition(chatInputBar)
+                end)
+                chatConnectionParent = chatInputBar:GetPropertyChangedSignal("Parent"):Connect(function()
+                        if not chatInputBar.Parent then
+                                startChatInputBarTracking()
+                        end
+                end)
+                
+                if screenGui then
+                        screenConnectionSize = screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                                updateKeybindPosition(chatInputBar)
+                        end)
+                end
+        end)
+end
+
+startChatInputBarTracking()
 task.spawn(function()
         while true do
                 task.wait(0.1)
