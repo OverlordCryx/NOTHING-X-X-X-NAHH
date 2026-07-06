@@ -236,7 +236,6 @@ function updateAllScales()
         end
         local tOffset = math.clamp((w - 800) / (1900 - 800), 0, 1)
         local tfXOffset = -160 - tOffset * 190
-        
         local newTFPos = targetFrame and UDim2.new(1, tfXOffset, 0, 10) or nil
         for guiObject, original in pairs(scaleRegistry) do
                 if not guiObject.Parent then
@@ -11871,31 +11870,25 @@ PlayerGui.ChildAdded:Connect(function(v)
         UpdateBar()
 end)
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(UpdateBar)
--- Aktualizuj pozycję keybindFrame względem chatInputBar (event-driven tracking to avoid CPU overhead)
 local chatConnectionPos = nil
 local chatConnectionSize = nil
 local chatConnectionParent = nil
 local screenConnectionSize = nil
-
 local function disconnectChatListeners()
         if chatConnectionPos then chatConnectionPos:Disconnect(); chatConnectionPos = nil end
         if chatConnectionSize then chatConnectionSize:Disconnect(); chatConnectionSize = nil end
         if chatConnectionParent then chatConnectionParent:Disconnect(); chatConnectionParent = nil end
 end
-
 local function disconnectScreenListener()
         if screenConnectionSize then screenConnectionSize:Disconnect(); screenConnectionSize = nil end
 end
-
 local function updateKeybindPosition(chatInputBar)
         if not keybindFrame or not keybindFrame.Parent then return end
         if not chatInputBar or not chatInputBar.Parent then return end
-        
         local chatAbsPos = chatInputBar.AbsolutePosition
         local chatAbsSize = chatInputBar.AbsoluteSize
         local chatBottomY = chatAbsPos.Y + chatAbsSize.Y + 80
         local screenSize = screenGui.AbsoluteSize
-        
         local newPos
         if screenSize.Y > 0 then
                 local yScale = chatBottomY / screenSize.Y
@@ -11903,16 +11896,13 @@ local function updateKeybindPosition(chatInputBar)
         else
                 newPos = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
         end
-        
         if keybindFrame.Position ~= newPos then
                 keybindFrame.Position = newPos
         end
 end
-
 local function startChatInputBarTracking()
         disconnectChatListeners()
         disconnectScreenListener()
-        
         local chatInputBar = nil
         task.spawn(function()
                 while true do
@@ -11920,21 +11910,17 @@ local function startChatInputBarTracking()
                                 task.wait(1)
                                 continue
                         end
-                        
                         pcall(function()
-                                chatInputBar = CoreGui:FindFirstChild("ExperienceChat") 
-                                        and CoreGui.ExperienceChat:FindFirstChild("appLayout") 
+                                chatInputBar = CoreGui:FindFirstChild("ExperienceChat")
+                                        and CoreGui.ExperienceChat:FindFirstChild("appLayout")
                                         and CoreGui.ExperienceChat.appLayout:FindFirstChild("chatInputBar")
                         end)
-                        
                         if chatInputBar then
                                 break
                         end
                         task.wait(0.5)
                 end
-                
                 updateKeybindPosition(chatInputBar)
-                
                 chatConnectionPos = chatInputBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
                         updateKeybindPosition(chatInputBar)
                 end)
@@ -11946,7 +11932,6 @@ local function startChatInputBarTracking()
                                 startChatInputBarTracking()
                         end
                 end)
-                
                 if screenGui then
                         screenConnectionSize = screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
                                 updateKeybindPosition(chatInputBar)
@@ -11954,7 +11939,6 @@ local function startChatInputBarTracking()
                 end
         end)
 end
-
 startChatInputBarTracking()
 task.spawn(function()
         while true do
