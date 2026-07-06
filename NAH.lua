@@ -1221,8 +1221,8 @@ bv = nil
 bg = nil
 flySpeed = 1.5
 flySpeedMultiplier = 555
-velocity = Vector3.new()
-currentVel = Vector3.new()
+velocity = Vector3.zero
+currentVel = Vector3.zero
 local targetDisplayAccumulator = 0
 camLockEnabled = false
 camLockTarget = nil
@@ -2626,7 +2626,7 @@ function updateMovement()
         if not hrp then
                 return
         end
-        local moveVector = Vector3.new(0, 0, 0)
+        local moveVector = Vector3.zero
         if holdingW then
                 moveVector += Vector3.new(0, 0, -Speed)
         end
@@ -2896,8 +2896,8 @@ function stopFly()
                 bg:Destroy()
                 bg = nil
         end
-        velocity = Vector3.new()
-        currentVel = Vector3.new()
+        velocity = Vector3.zero
+        currentVel = Vector3.zero
         syncFlyKeybindDisplay()
 end
 function stopSetBackTravel()
@@ -3695,8 +3695,8 @@ function bindLocalCharacter(newChar)
                                 bg:Destroy()
                                 bg = nil
                         end
-                        velocity = Vector3.new()
-                        currentVel = Vector3.new()
+                        velocity = Vector3.zero
+                        currentVel = Vector3.zero
                 end)
         end
 end
@@ -9594,7 +9594,7 @@ if not targetRoot then return end
         customPresetLabel.Position = UDim2.new(0, 10, 0, 168)
         customPresetLabel.Size = UDim2.new(1, -20, 0, 14)
         customPresetLabel.Font = Enum.Font.GothamBold
-        customPresetLabel.Text = "Custom (16 presets)"
+        customPresetLabel.Text = "Custom"
         customPresetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
         customPresetLabel.TextSize = 11
         customPresetLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -11298,8 +11298,8 @@ player.CharacterRemoving:Connect(function(removingChar)
                 bg:Destroy()
                 bg = nil
         end
-        velocity = Vector3.new()
-        currentVel = Vector3.new()
+        velocity = Vector3.zero
+        currentVel = Vector3.zero
         if voidDeadActive then
                 toggleVoidDead()
         end
@@ -11382,8 +11382,8 @@ task.spawn(function()
                 if flying and bv and bg and root and root.Parent then
                         local attackTpControlling = attackTpEnabled and attackTpHolding
                         if attackTpControlling then
-                                velocity = velocity:Lerp(Vector3.new(), dt * 18)
-                                currentVel = currentVel:Lerp(Vector3.new(), dt * 20)
+                                velocity = velocity:Lerp(Vector3.zero, dt * 18)
+                                currentVel = currentVel:Lerp(Vector3.zero, dt * 20)
                                 bv.Position = root.Position
                                 bg.CFrame = getRotationOnlyCFrame(root.CFrame)
                         else
@@ -11392,7 +11392,7 @@ task.spawn(function()
                         if not attackTpControlling and cam then
                                 local z, x = getMovementInput()
                                 local inputDir = (cam.CFrame.LookVector * z) + (cam.CFrame.RightVector * x)
-                                local targetVel = inputDir.Magnitude > 0.01 and inputDir.Unit * getAppliedFlySpeed() or Vector3.new()
+                                local targetVel = inputDir.Magnitude > 0.01 and inputDir.Unit * getAppliedFlySpeed() or Vector3.zero
                                 velocity = velocity:Lerp(targetVel, dt * 16)
                                 currentVel = currentVel:Lerp(velocity, dt * 22)
                                 bv.Position = root.Position + currentVel * dt * 65
