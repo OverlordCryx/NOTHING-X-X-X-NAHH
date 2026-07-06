@@ -1165,7 +1165,7 @@ setBackKeybind = Enum.KeyCode.N
 voidDeadActive = false
 voidDeadKeybind = Enum.KeyCode.Z
 _G.SafeTeleportLock = false
-dashBypassDuration = 0.01
+dashBypassDuration = 0.15
 local voidDeadLastCF = nil
 local voidDeadConn = nil
 local getTrashState = {
@@ -4930,15 +4930,28 @@ local function runCleanupTick(char)
                 end
         end
 end
+local _antiZeroCharAddedConn = nil
 function toggleAntiZero(state)
         antiZeroEnabled = state == true
+        if _antiZeroCharAddedConn then
+                pcall(function() _antiZeroCharAddedConn:Disconnect() end)
+                _antiZeroCharAddedConn = nil
+        end
         if antiZeroEnabled then
+                local lp = game:GetService("Players").LocalPlayer
                 task.spawn(function()
-                        local lp = game:GetService("Players").LocalPlayer
                         while antiZeroEnabled do
                                 pcall(function() runCleanupTick(lp.Character) end)
                                 RunService.Heartbeat:Wait()
                         end
+                end)
+                _antiZeroCharAddedConn = lp.CharacterAdded:Connect(function(char)
+                        if not antiZeroEnabled then return end
+                        task.defer(function()
+                                if antiZeroEnabled then
+                                        _bindCleanupEvents(char)
+                                end
+                        end)
                 end)
         end
 end
@@ -4947,6 +4960,7 @@ local antiGrabZeroEnabled = false
 local _grabAnimConns    = {}
 local _grabCharConn     = nil
 local _grabCharAddedConn = nil
+local _grabZeroCharAddedConn = nil
 local function _isGrabAnim(name)
         local low = name:lower()
         return low:find("grab") or low:find("caught") or low:find("held")
@@ -5012,10 +5026,10 @@ local function _setupGrabOnChar(char)
 end
 function toggleAntiGrab(state)
         antiGrabEnabled = state == true
+        if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end); _grabCharAddedConn = nil end
         if antiGrabEnabled then
                 local lp = game:GetService("Players").LocalPlayer
                 if lp.Character then _setupGrabOnChar(lp.Character) end
-                if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end) end
                 _grabCharAddedConn = lp.CharacterAdded:Connect(function(char)
                         task.wait()
                         if antiGrabEnabled or antiGrabZeroEnabled then
@@ -5027,17 +5041,16 @@ function toggleAntiGrab(state)
                         for _, c in ipairs(_grabAnimConns) do pcall(function() c:Disconnect() end) end
                         _grabAnimConns = {}
                         if _grabCharConn then pcall(function() _grabCharConn:Disconnect() end); _grabCharConn = nil end
-                        if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end); _grabCharAddedConn = nil end
                 end
         end
 end
 function toggleAntiGrabZero(state)
         antiGrabZeroEnabled = state == true
+        if _grabZeroCharAddedConn then pcall(function() _grabZeroCharAddedConn:Disconnect() end); _grabZeroCharAddedConn = nil end
         if antiGrabZeroEnabled then
                 local lp = game:GetService("Players").LocalPlayer
                 if lp.Character then _setupGrabOnChar(lp.Character) end
-                if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end) end
-                _grabCharAddedConn = lp.CharacterAdded:Connect(function(char)
+                _grabZeroCharAddedConn = lp.CharacterAdded:Connect(function(char)
                         task.wait()
                         if antiGrabEnabled or antiGrabZeroEnabled then
                                 _setupGrabOnChar(char)
@@ -5048,7 +5061,6 @@ function toggleAntiGrabZero(state)
                         for _, c in ipairs(_grabAnimConns) do pcall(function() c:Disconnect() end) end
                         _grabAnimConns = {}
                         if _grabCharConn then pcall(function() _grabCharConn:Disconnect() end); _grabCharConn = nil end
-                        if _grabCharAddedConn then pcall(function() _grabCharAddedConn:Disconnect() end); _grabCharAddedConn = nil end
                 end
         end
 end
@@ -5117,7 +5129,14 @@ local function noTpStartForCharacter(character)
                 pcall(function() heartbeatConn:Disconnect() end)
                 pcall(function() changedConn:Disconnect() end)
                 pcall(function() diedConn:Disconnect() end)
-                noTpConnections = {}
+                local function removeConn(tbl, target)
+                        for i = #tbl, 1, -1 do
+                                if tbl[i] == target then table.remove(tbl, i) end
+                        end
+                end
+                removeConn(noTpConnections, heartbeatConn)
+                removeConn(noTpConnections, changedConn)
+                removeConn(noTpConnections, diedConn)
         end)
         table.insert(noTpConnections, heartbeatConn)
         table.insert(noTpConnections, changedConn)
@@ -5157,7 +5176,10 @@ function toggleCharacterCleanupRuntime(state)
                                 _bindCleanupEvents(char)
                         end
                         if lp.Character then onChar(lp.Character) end
-                        lp.CharacterAdded:Connect(onChar)
+                        if ModConnections.bindCleanupCharAdded then
+                                pcall(function() ModConnections.bindCleanupCharAdded:Disconnect() end)
+                        end
+                        ModConnections.bindCleanupCharAdded = lp.CharacterAdded:Connect(onChar)
                         repeat
                                 CharacterCleanupEnabled = true
                                 pcall(function()
@@ -5175,7 +5197,6 @@ function toggleCharacterCleanupRuntime(state)
                         until not CharacterCleanupEnabled
                 end)
         end
-        if state == false then antiZeroEnabled = false end
         if state == true and not hooksRegistered then
 hooksRegistered = true
 pcall(function()
@@ -5342,6 +5363,7 @@ end)
                 if ModConnections.hrpLoop then ModConnections.hrpLoop:Disconnect(); ModConnections.hrpLoop = nil end
                 if ModConnections.CharacterAdded then ModConnections.CharacterAdded:Disconnect(); ModConnections.CharacterAdded = nil end
                 if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
+                if ModConnections.bindCleanupCharAdded then ModConnections.bindCleanupCharAdded:Disconnect(); ModConnections.bindCleanupCharAdded = nil end
                 return
         end
         local Players = game:GetService("Players")
@@ -5484,6 +5506,10 @@ end)
                 end
                 task.wait(0.25)
                 if CharacterCleanupEnabled then usunPusteAccessory(Char) end
+        end
+        if ModConnections.CharacterAdded then
+                ModConnections.CharacterAdded:Disconnect()
+                ModConnections.CharacterAdded = nil
         end
         if speaker.Character then
                 characterMotor6Ds = {}
@@ -6006,7 +6032,25 @@ task.spawn(function()
         local row5 = makeRow(150)
         makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/4)
         makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/4)
-        makeHubTog(row5, "Zero", function(v) toggleAntiZero(v) toggleAntiGrab(v) toggleAntiGrabZero(v) if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end end, "AntiZeroEnabled", false, 1/4)
+        local _zeroOwnedNoStun = false
+        makeHubTog(row5, "Zero", function(v)
+                toggleAntiZero(v)
+                toggleAntiGrab(v)
+                toggleAntiGrabZero(v)
+                if v then
+                        if not CharacterCleanupEnabled then
+                                toggleCharacterCleanupRuntime(true)
+                                _zeroOwnedNoStun = true
+                        else
+                                _zeroOwnedNoStun = false
+                        end
+                else
+                        if _zeroOwnedNoStun then
+                                toggleCharacterCleanupRuntime(false)
+                                _zeroOwnedNoStun = false
+                        end
+                end
+        end, "AntiZeroEnabled", false, 1/4)
         makeHubTog(row5, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/4)
     else
         local row2 = makeRow(60)
@@ -6015,7 +6059,25 @@ task.spawn(function()
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row3 = makeRow(90)
         makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
-        makeHubTog(row3, "Zero", function(v) toggleAntiZero(v) toggleAntiGrab(v) toggleAntiGrabZero(v) if v and not CharacterCleanupEnabled then toggleCharacterCleanupRuntime(true) end end, "AntiZeroEnabled", false, 1/3)
+        local _zeroOwnedNoStun2 = false
+        makeHubTog(row3, "Zero", function(v)
+                toggleAntiZero(v)
+                toggleAntiGrab(v)
+                toggleAntiGrabZero(v)
+                if v then
+                        if not CharacterCleanupEnabled then
+                                toggleCharacterCleanupRuntime(true)
+                                _zeroOwnedNoStun2 = true
+                        else
+                                _zeroOwnedNoStun2 = false
+                        end
+                else
+                        if _zeroOwnedNoStun2 then
+                                toggleCharacterCleanupRuntime(false)
+                                _zeroOwnedNoStun2 = false
+                        end
+                end
+        end, "AntiZeroEnabled", false, 1/3)
         local row4b = makeRow(120)
         makeHubTog(row4b, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/2)
     end
