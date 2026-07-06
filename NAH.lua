@@ -97,6 +97,7 @@ local keybindToggles = {
         View = "off",
         Orbit = "off",
         AutoTPKey = "off",
+        FlingKey = "off",
 }
 local hideNamesEnabled = false
 local scaleRegistry = {}
@@ -1158,11 +1159,13 @@ attackTpKeybind = Enum.KeyCode.T
 orbitKeybind = Enum.KeyCode.H
 viewKeybind = Enum.KeyCode.Five
 autoTpKeybind = Enum.KeyCode.Y
+flingKeybind = Enum.KeyCode.Six
 targetSelectKeybind = Enum.KeyCode.C
 setBackKeybind = Enum.KeyCode.N
 voidDeadActive = false
 voidDeadKeybind = Enum.KeyCode.Z
 _G.SafeTeleportLock = false
+dashBypassDuration = 0.01
 local voidDeadLastCF = nil
 local voidDeadConn = nil
 local getTrashState = {
@@ -1525,6 +1528,9 @@ if type(controlSaveData.Overlay4Ulted) == "boolean" then espOverlayConfig.showUl
 if tonumber(controlSaveData.Speed) then
         Speed = tonumber(controlSaveData.Speed)
 end
+if tonumber(controlSaveData.DashBypassDuration) then
+        dashBypassDuration = tonumber(controlSaveData.DashBypassDuration)
+end
 if tonumber(controlSaveData.WalkFlingPower) then
         walkFlingPower = tonumber(controlSaveData.WalkFlingPower)
 end
@@ -1625,6 +1631,7 @@ do
                 Places   = "KeybindPlacesEnabled",
                 View     = "KeybindViewEnabled",
                 AutoTPKey = "KeybindAutoTPKeyEnabled",
+                FlingKey  = "KeybindFlingKeyEnabled",
         }
         for toggleKey, saveKey in pairs(keybindToggleSaveKeys) do
                 local saved = controlSaveData[saveKey]
@@ -1651,7 +1658,11 @@ function parseEnabledValue(value)
 end
 function updateKeybindText()
         local lines = {}
-        local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places", "ViewKey", "Orbit", "AutoTPKey" }
+        if keybindEntries.Orbit then keybindEntries.Orbit.enabled = orbitEnabled end
+        if keybindEntries.ViewKey then keybindEntries.ViewKey.enabled = viewing end
+        if keybindEntries.AutoTPKey then keybindEntries.AutoTPKey.enabled = autoTpEnabled end
+        if keybindEntries.FlingKey then keybindEntries.FlingKey.enabled = flingEnabled end
+        local orderedKeys = { "Speed", "Fly", "CamLock", "AttackTP", "TargetPick", "WalkFling", "SetBack", "GetTrash", "VoidDead", "Custom", "Places", "ViewKey", "Orbit", "AutoTPKey", "FlingKey" }
         local toggleKeyMap = {
                 TargetPick = "Target",
                 VoidDead = "Void",
@@ -1659,6 +1670,7 @@ function updateKeybindText()
                 ViewKey = "View",
                 Orbit = "Orbit",
                 AutoTPKey = "AutoTPKey",
+                FlingKey = "FlingKey",
         }
         local function appendEntry(entry, toggleState)
                 if not entry then
@@ -2124,6 +2136,14 @@ function syncAutoTpKeybindDisplay()
                 name = "Auto TP",
                 keybind = encodeKeybindValue(autoTpKeybind),
                 enabled = autoTpEnabled,
+        }
+        updateKeybindText()
+end
+function syncFlingKeybindDisplay()
+        keybindEntries.FlingKey = {
+                name = "Fling",
+                keybind = encodeKeybindValue(flingKeybind),
+                enabled = flingEnabled,
         }
         updateKeybindText()
 end
@@ -3586,6 +3606,7 @@ function toggleFly(nextState)
                         bv:Destroy()
                 end
                 bv = Instance.new("BodyPosition")
+                bv:SetAttribute("IsLocalMover", true)
                 bv.MaxForce = Vector3.new(1e7, 1e7, 1e7)
                 bv.Position = root.Position
                 bv.D = 2000
@@ -3595,6 +3616,7 @@ function toggleFly(nextState)
                         bg:Destroy()
                 end
                 bg = Instance.new("BodyGyro")
+                bg:SetAttribute("IsLocalMover", true)
                 bg.MaxTorque = Vector3.new(1e7, 1e7, 1e7)
                 bg.P = 28000
                 bg.D = 2200
@@ -4806,6 +4828,7 @@ local characterMotor6Ds = {}
 local _cleanupDescConn = nil
 local _cleanupHumanoidConns = {}
 local function _isBadMover(v)
+        if v:GetAttribute("IsLocalMover") then return false end
         return v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity")
                 or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
                 or v:IsA("BodyPosition") or v:IsA("BodyGyro")
@@ -4821,8 +4844,8 @@ local function _isBadWeld(v, char)
 end
 local function _handleNewDesc(v, char)
         if not CharacterCleanupEnabled and not antiZeroEnabled then return end
-        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
-        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+        local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
         if isSelfFlinging or isDashingOrSkill then return end
         if antiZeroEnabled then
                 if _isBadMover(v) then
@@ -4883,8 +4906,8 @@ local function _bindCleanupEvents(char)
         end)
 end
 local function runCleanupTick(char)
-        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
-        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+        local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
         if isSelfFlinging or isDashingOrSkill then return end
         if not char then return end
         if antiZeroEnabled then
@@ -4892,11 +4915,7 @@ local function runCleanupTick(char)
                 local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
                 if animator then
                         for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                                if track.Name == "grab" or track.Name == "Grab"
-                                        or track.Name:lower():find("grab") or track.Name:lower():find("caught")
-                                        or track.Name:lower():find("held") or track.Name:lower():find("carry")
-                                        or track.Name:lower():find("push") or track.Name:lower():find("shove")
-                                        or track.Name:lower():find("knockback") then
+                                if _isGrabAnim and _isGrabAnim(track.Name) then
                                         pcall(function() track:Stop(0) end)
                                 end
                         end
@@ -4933,6 +4952,10 @@ local function _isGrabAnim(name)
         return low:find("grab") or low:find("caught") or low:find("held")
                 or low:find("carry") or low:find("drag") or low:find("grapple")
                 or low:find("push") or low:find("shove") or low:find("knockback")
+                or low:find("knock") or low:find("flung") or low:find("launch")
+                or low:find("throw") or low:find("slam") or low:find("bump")
+                or low:find("stun") or low:find("ragdoll") or low:find("trip")
+                or low:find("toss") or low:find("airborne") or low:find("impact")
 end
 local function _killGrabTrack(track, char)
         pcall(function() track:Stop(0) end)
@@ -5078,6 +5101,8 @@ local function noTpStartForCharacter(character)
                 if not noTpEnabled then return end
                 if hrp:GetAttribute("IsAttackTP") then return end
                 if hrp:GetAttribute("IsTrashOperation") then return end
+                local isSelfFlinging = flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or orbitEnabled or autoTpEnabled or voidDeadActive or isSafeZoneActive()
+                if isSelfFlinging then return end
                 blocking = true
                 pcall(function()
                         hrp.CFrame = lastCF
@@ -5092,6 +5117,7 @@ local function noTpStartForCharacter(character)
                 pcall(function() heartbeatConn:Disconnect() end)
                 pcall(function() changedConn:Disconnect() end)
                 pcall(function() diedConn:Disconnect() end)
+                noTpConnections = {}
         end)
         table.insert(noTpConnections, heartbeatConn)
         table.insert(noTpConnections, changedConn)
@@ -5135,8 +5161,8 @@ function toggleCharacterCleanupRuntime(state)
                         repeat
                                 CharacterCleanupEnabled = true
                                 pcall(function()
-                                        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
-                                        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.0001)
+                                        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+                                        local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
                                         if isSelfFlinging or isDashingOrSkill then
                                                 return
                                         end
@@ -5328,7 +5354,7 @@ end)
                 if ModConnections.jpLoop then ModConnections.jpLoop:Disconnect() end
                 local function UpdateWalkSpeed()
                         if Human and Human.Parent and CharacterCleanupEnabled then
-                                Human.WalkSpeed = speed
+                                Human.WalkSpeed = flying and 0 or speed
                         end
                 end
                 UpdateWalkSpeed()
@@ -5390,8 +5416,8 @@ end)
                         end
                 end
                 local function handleObj(v)
-                        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or flying
-                        local isDashingOrSkill = (os.clock() - lastLocalActionTime < 0.8)
+                        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+                        local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
                         if isSelfFlinging or isDashingOrSkill then
                                 return
                         end
@@ -5413,8 +5439,7 @@ end)
                                 end
                         end
                         if antiZeroEnabled then
-                                if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("LinearVelocity") or v:IsA("AngularVelocity")
-                                        or v:IsA("BodyPosition") or v:IsA("BodyGyro") or v:IsA("VectorForce") or v:IsA("AlignPosition") or v:IsA("AlignOrientation") then
+                                if _isBadMover(v) then
                                         local hrp = Char:FindFirstChild("HumanoidRootPart")
                                         if hrp then
                                                 pcall(function()
@@ -5447,13 +5472,23 @@ end)
                 ModConnections.descAdded = Char.DescendantAdded:Connect(handleObj)
         end
         local function OnCharacterAdded(Char)
+                characterMotor6Ds = {}
                 local Human = Char:WaitForChild("Humanoid", 5)
                 if Human then SetupHumanoid(Char, Human) end
                 SetupCharacterCleanup(Char)
+                if antiGrabEnabled or antiGrabZeroEnabled then
+                        task.spawn(function()
+                                task.wait()
+                                _setupGrabOnChar(Char)
+                        end)
+                end
                 task.wait(0.25)
                 if CharacterCleanupEnabled then usunPusteAccessory(Char) end
         end
-        if speaker.Character then OnCharacterAdded(speaker.Character) end
+        if speaker.Character then
+                characterMotor6Ds = {}
+                OnCharacterAdded(speaker.Character)
+        end
         ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
         task.spawn(function()
                 while CharacterCleanupEnabled do
@@ -5781,6 +5816,7 @@ task.spawn(function()
         if isActive then
             stayPos = root.Position
             stayGyro = Instance.new("BodyGyro")
+            stayGyro:SetAttribute("IsLocalMover", true)
             stayGyro.MaxTorque = Vector3.new(1e9, 9e9, 9e9)
             stayGyro.P = 9e9
             stayGyro.CFrame = root.CFrame
@@ -9298,14 +9334,15 @@ task.spawn(function()
                         if not myRoot then return end
                         orbitCachedTarget = resolveOrbitTarget()
                         local targetModel = orbitCachedTarget
-if targetModel.Parent == nil then
-    repeat
-        task.wait()
-        targetModel = resolveOrbitTarget()
-    until targetModel and targetModel.Parent ~= nil
-end
-local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
-if not targetRoot then return end
+                        if not targetModel or targetModel.Parent == nil then
+                                stopOrbit()
+                                return
+                        end
+                        local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
+                        if not targetRoot then
+                                stopOrbit()
+                                return
+                        end
                         local targetPos = targetRoot.Position
                         local targetCF  = targetRoot.CFrame
                         if orbitAdaptBody then
@@ -9593,7 +9630,7 @@ if not targetRoot then return end
         customPresetLabel.Position = UDim2.new(0, 10, 0, 168)
         customPresetLabel.Size = UDim2.new(1, -20, 0, 14)
         customPresetLabel.Font = Enum.Font.GothamBold
-        customPresetLabel.Text = "Custom (16 presets)"
+        customPresetLabel.Text = "Custom"
         customPresetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
         customPresetLabel.TextSize = 11
         customPresetLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -10322,7 +10359,7 @@ do
 end
 task.wait(0.02)
 do
-        local keybindHub = makeControlFrame(212)
+        local keybindHub = makeControlFrame(242)
         keybindHub.Name = "KeybindSystemHub"
         keybindHub.Parent = uiX
         keybindHub.LayoutOrder = 1000000
@@ -10373,7 +10410,10 @@ do
         makeHubTogKB(row5, "View KB", function(v) keybindToggles.View = v; updateKeybindText() end, "KeybindViewEnabled", "off", 1/3)
         makeHubTogKB(row5, "Orbit KB", function(v) keybindToggles.Orbit = v; updateKeybindText() end, "KeybindOrbitEnabled", "off", 1/3)
         makeHubTogKB(row5, "Auto TP KB", function(v) keybindToggles.AutoTPKey = v; updateKeybindText() end, "KeybindAutoTPKeyEnabled", "off", 1/3)
+        local row6 = makeRow(210)
+        makeHubTogKB(row6, "Fling KB", function(v) keybindToggles.FlingKey = v; updateKeybindText() end, "KeybindFlingKeyEnabled", "off", 1.0)
         task.defer(updateKeybindText)
+        task.defer(syncFlingKeybindDisplay)
 end
 task.wait(0.02)
 task.spawn(function()
@@ -11228,6 +11268,33 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                         AutoTP_toggle()
                 end
                 syncAutoTpKeybindDisplay()
+                return
+        end
+        if key == flingKeybind and keybindToggles.FlingKey ~= "block" then
+                if targetActionControls and targetActionControls.Third then
+                        local nextFling = not flingEnabled
+                        if nextFling and not (manualAttackTpPlayer or manualAttackTpTarget or manualAttackTpTargetName) then
+                        else
+                                targetActionControls.Third.SetValue(nextFling)
+                                if not nextFling then
+                                        zeroLocalPlayerRoot()
+                                end
+                                syncTargetActionControls()
+                                syncFlingKeybindDisplay()
+                        end
+                else
+                        local nextFling = not flingEnabled
+                        if nextFling and not (manualAttackTpPlayer or manualAttackTpTarget or manualAttackTpTargetName) then
+                        else
+                                local wasEnabled = flingEnabled
+                                flingEnabled = nextFling
+                                if wasEnabled and not flingEnabled then
+                                        zeroLocalPlayerRoot()
+                                end
+                                syncTargetActionControls()
+                                syncFlingKeybindDisplay()
+                        end
+                end
                 return
         end
         if key == targetSelectKeybind and keybindToggles.Target ~= "block" then
