@@ -1165,7 +1165,7 @@ setBackKeybind = Enum.KeyCode.N
 voidDeadActive = false
 voidDeadKeybind = Enum.KeyCode.Z
 _G.SafeTeleportLock = false
-dashBypassDuration = 0.15
+dashBypassDuration = 0.22
 local voidDeadLastCF = nil
 local voidDeadConn = nil
 local getTrashState = {
@@ -4905,6 +4905,31 @@ local function _bindCleanupEvents(char)
                 end
         end)
 end
+local _badValueClasses = {
+        BoolValue = true,
+        BrickColorValue = true,
+        CFrameValue = true,
+        Color3Value = true,
+        DoubleConstrainedValue = true,
+        IntConstrainedValue = true,
+        IntValue = true,
+        NumberValue = true,
+        ObjectValue = true,
+        RayValue = true,
+        StringValue = true,
+        Vector3Value = true,
+        ForceField = true,
+}
+local function _cleanBadValues(char)
+        if not char then return end
+        for _, part in ipairs(char:GetDescendants()) do
+                local cn = part.ClassName
+                if _badValueClasses[cn] then
+                        if cn == "ObjectValue" and part.Name == "WallCombo" then continue end
+                        pcall(function() part:Destroy() end)
+                end
+        end
+end
 local function runCleanupTick(char)
         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
         local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
@@ -4920,6 +4945,7 @@ local function runCleanupTick(char)
                                 end
                         end
                 end
+                _cleanBadValues(char)
         end
         if CharacterCleanupEnabled then
                 for i = 1, #characterMotor6Ds do
@@ -4931,11 +4957,16 @@ local function runCleanupTick(char)
         end
 end
 local _antiZeroCharAddedConn = nil
+local _antiZeroGlobalHeartbeat = nil
 function toggleAntiZero(state)
         antiZeroEnabled = state == true
         if _antiZeroCharAddedConn then
                 pcall(function() _antiZeroCharAddedConn:Disconnect() end)
                 _antiZeroCharAddedConn = nil
+        end
+        if _antiZeroGlobalHeartbeat then
+                pcall(function() _antiZeroGlobalHeartbeat:Disconnect() end)
+                _antiZeroGlobalHeartbeat = nil
         end
         if antiZeroEnabled then
                 local lp = game:GetService("Players").LocalPlayer
@@ -5164,6 +5195,102 @@ function toggleNoTp(state)
         noTpCharRemovingConn = player.CharacterRemoving:Connect(function()
                 noTpCleanupConnections()
         end)
+end
+local NoDashCDEnabled = false
+local noDashCDHeartbeat = nil
+local noDashCDCharConn = nil
+local _origForwardCD = nil
+local _origSideCD = nil
+local _origNoDashCooldown = nil
+local _origEffectAffects = nil
+local _gcUpvalueTable = nil
+local function enforceDash(char)
+        if not char then return end
+        char:SetAttribute("CustomForwardDashCooldown", 0)
+        char:SetAttribute("CustomSideDashCooldown", 0)
+end
+local function restoreChar(char)
+        if not char then return end
+        if _origForwardCD ~= nil then
+                char:SetAttribute("CustomForwardDashCooldown", _origForwardCD)
+        else
+                char:SetAttribute("CustomForwardDashCooldown", nil)
+        end
+        if _origSideCD ~= nil then
+                char:SetAttribute("CustomSideDashCooldown", _origSideCD)
+        else
+                char:SetAttribute("CustomSideDashCooldown", nil)
+        end
+end
+function toggleNoDashCD(state)
+        NoDashCDEnabled = state == true
+        if noDashCDHeartbeat then
+                pcall(function() noDashCDHeartbeat:Disconnect() end)
+                noDashCDHeartbeat = nil
+        end
+        if noDashCDCharConn then
+                pcall(function() noDashCDCharConn:Disconnect() end)
+                noDashCDCharConn = nil
+        end
+        local lp = Players.LocalPlayer
+        if NoDashCDEnabled then
+                local rawNoDash = workspace:GetAttribute("NoDashCooldown")
+                local rawEffect = workspace:GetAttribute("EffectAffects")
+                _origNoDashCooldown = (type(rawNoDash) == "boolean") and rawNoDash or false
+                _origEffectAffects = (type(rawEffect) == "number" and rawEffect == rawEffect) and rawEffect or 0
+                local function safeCD(v)
+                        return (type(v) == "number" and v == v) and v or nil
+                end
+                local char = lp.Character
+                if char then
+                        _origForwardCD = safeCD(char:GetAttribute("CustomForwardDashCooldown"))
+                        _origSideCD = safeCD(char:GetAttribute("CustomSideDashCooldown"))
+                        enforceDash(char)
+                end
+                noDashCDCharConn = lp.CharacterAdded:Connect(function(c)
+                        if not NoDashCDEnabled then return end
+                        _origForwardCD = safeCD(c:GetAttribute("CustomForwardDashCooldown"))
+                        _origSideCD = safeCD(c:GetAttribute("CustomSideDashCooldown"))
+                        enforceDash(c)
+                end)
+                noDashCDHeartbeat = RunService.Heartbeat:Connect(function()
+                        if not NoDashCDEnabled then return end
+                        local c = lp.Character
+                        if c then enforceDash(c) end
+                        workspace:SetAttribute("NoDashCooldown", true)
+                        workspace:SetAttribute("EffectAffects", 1)
+                        workspace:SetAttribute("VIPServerOwner", lp.Name)
+                end)
+                task.spawn(function()
+                        if not getgc then return end
+                        local gc = getgc(true)
+                        for _, func in ipairs(gc) do
+                                if type(func) == "function" then
+                                        local ok, upvalues = pcall(debug.getupvalues, func)
+                                        if ok and upvalues then
+                                                for _, uv in ipairs(upvalues) do
+                                                        if type(uv) == "table" and uv.forwardDashCooldown ~= nil then
+                                                                _gcUpvalueTable = uv
+                                                                uv.forwardDashCooldown = 0
+                                                                uv.sideDashCooldown = 0
+                                                                return
+                                                        end
+                                                end
+                                        end
+                                end
+                        end
+                end)
+        else
+                workspace:SetAttribute("NoDashCooldown", _origNoDashCooldown)
+                workspace:SetAttribute("EffectAffects", _origEffectAffects)
+                local char = lp.Character
+                if char then restoreChar(char) end
+                if _gcUpvalueTable then
+                        _gcUpvalueTable.forwardDashCooldown = _origForwardCD or 1
+                        _gcUpvalueTable.sideDashCooldown = _origSideCD or 1
+                        _gcUpvalueTable = nil
+                end
+        end
 end
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
@@ -5440,27 +5567,26 @@ end)
                 local function handleObj(v)
                         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
                         local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
-                        if isSelfFlinging or isDashingOrSkill then
-                                return
-                        end
                         if v:IsA("Motor6D") then
                                 table.insert(characterMotor6Ds, v)
                         end
-                        if CharacterCleanupEnabled then
-                                if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
-                                        pcall(function() v:Destroy() end)
-                                        local human = Char:FindFirstChildOfClass("Humanoid")
-                                        if human then
-                                                human.PlatformStand = false
-                                                human.Sit = false
-                                        end
-                                        for i = 1, #characterMotor6Ds do
-                                                local m = characterMotor6Ds[i]
-                                                if m and m.Parent then m.Enabled = true end
+                        if not isSelfFlinging and not isDashingOrSkill then
+                                if CharacterCleanupEnabled then
+                                        if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
+                                                pcall(function() v:Destroy() end)
+                                                local human = Char:FindFirstChildOfClass("Humanoid")
+                                                if human then
+                                                        human.PlatformStand = false
+                                                        human.Sit = false
+                                                end
+                                                for i = 1, #characterMotor6Ds do
+                                                        local m = characterMotor6Ds[i]
+                                                        if m and m.Parent then m.Enabled = true end
+                                                end
                                         end
                                 end
                         end
-                        if antiZeroEnabled then
+                        if not isSelfFlinging and antiZeroEnabled then
                                 if _isBadMover(v) then
                                         local hrp = Char:FindFirstChild("HumanoidRootPart")
                                         if hrp then
@@ -5516,15 +5642,21 @@ end)
                 OnCharacterAdded(speaker.Character)
         end
         ModConnections.CharacterAdded = speaker.CharacterAdded:Connect(OnCharacterAdded)
-        task.spawn(function()
-                while CharacterCleanupEnabled do
-                        task.wait(0.1)
-                        local char = speaker.Character
-                        if char then
-                                usunPusteAccessory(char)
-                                local hrp = char:FindFirstChild("HumanoidRootPart")
-                                if hrp then hrp.Anchored = false end
-                        end
+        if ModConnections.accessoryHeartbeat then
+                ModConnections.accessoryHeartbeat:Disconnect()
+                ModConnections.accessoryHeartbeat = nil
+        end
+        ModConnections.accessoryHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+                if not CharacterCleanupEnabled then
+                        ModConnections.accessoryHeartbeat:Disconnect()
+                        ModConnections.accessoryHeartbeat = nil
+                        return
+                end
+                local char = speaker.Character
+                if char then
+                        usunPusteAccessory(char)
+                        local hrp = char:FindFirstChild("HumanoidRootPart")
+                        if hrp then hrp.Anchored = false end
                 end
         end)
         task.spawn(function()
@@ -6018,8 +6150,7 @@ task.spawn(function()
         makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
         makeHubTog(row2, "No Dash CD", function(v)
             _G.NoDashCD_Enabled = v
-            workspace:SetAttribute("EffectAffects", v and 1 or 0)
-            workspace:SetAttribute("NoDashCooldown", v)
+            toggleNoDashCD(v)
         end, "NoDashCD", false)
         makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
         local row3 = makeRow(90)
