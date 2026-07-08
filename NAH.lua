@@ -1165,7 +1165,7 @@ setBackKeybind = Enum.KeyCode.N
 voidDeadActive = false
 voidDeadKeybind = Enum.KeyCode.Z
 _G.SafeTeleportLock = false
-dashBypassDuration = 0.22
+dashBypassDuration = 0.35
 local voidDeadLastCF = nil
 local voidDeadConn = nil
 local getTrashState = {
@@ -4930,31 +4930,41 @@ local function _cleanBadValues(char)
                 end
         end
 end
+local _lastCleanBadValuesTime = 0
+local _lastCleanupTickRunTime = 0
+local CLEANUP_TICK_INTERVAL   = 0.08
+local CLEAN_BAD_VALUES_INTERVAL = 0.08
 local function runCleanupTick(char)
-        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
-        local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
-        if isSelfFlinging or isDashingOrSkill then return end
-        if not char then return end
-        if antiZeroEnabled then
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-                if animator then
-                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                                if _isGrabAnim and _isGrabAnim(track.Name) then
-                                        pcall(function() track:Stop(0) end)
-                                end
-                        end
-                end
-                _cleanBadValues(char)
-        end
-        if CharacterCleanupEnabled then
-                for i = 1, #characterMotor6Ds do
-                        local m = characterMotor6Ds[i]
-                        if m and m.Parent and not m.Enabled then
-                                pcall(function() m.Enabled = true end)
-                        end
-                end
-        end
+	local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+	local isDashingOrSkill = (os.clock() - lastLocalActionTime < dashBypassDuration)
+	if isSelfFlinging or isDashingOrSkill then return end
+	if not char then return end
+	local now = os.clock()
+	if now - _lastCleanupTickRunTime < CLEANUP_TICK_INTERVAL then return end
+	_lastCleanupTickRunTime = now
+	if antiZeroEnabled then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+		if animator then
+			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+				if _isGrabAnim and _isGrabAnim(track.Name) then
+					pcall(function() track:Stop(0) end)
+				end
+			end
+		end
+		if now - _lastCleanBadValuesTime >= CLEAN_BAD_VALUES_INTERVAL then
+			_lastCleanBadValuesTime = now
+			_cleanBadValues(char)
+		end
+	end
+	if CharacterCleanupEnabled then
+		for i = 1, #characterMotor6Ds do
+			local m = characterMotor6Ds[i]
+			if m and m.Parent and not m.Enabled then
+				pcall(function() m.Enabled = true end)
+			end
+		end
+	end
 end
 local _antiZeroCharAddedConn = nil
 local _antiZeroGlobalHeartbeat = nil
@@ -5292,6 +5302,10 @@ function toggleNoDashCD(state)
                 end
         end
 end
+local _jumpHeld = false
+local _jumpHeartbeatConn = nil
+local _jumpCharAddedConn = nil
+local _jumpHumanoid = nil
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
         if CharacterCleanupEnabled then
@@ -5322,6 +5336,51 @@ function toggleCharacterCleanupRuntime(state)
                                 end)
                                 task.wait()
                         until not CharacterCleanupEnabled
+                end)
+                local lp2 = game:GetService("Players").LocalPlayer
+                _jumpHumanoid = lp2.Character and lp2.Character:FindFirstChildWhichIsA("Humanoid")
+                local function jumpAction(actionName, inputState, inputObject)
+                        if inputState == Enum.UserInputState.Begin then
+                                _jumpHeld = true
+                                if _jumpHumanoid and _jumpHumanoid.Health > 0 then
+                                        local st = _jumpHumanoid:GetState()
+                                        if st ~= Enum.HumanoidStateType.Jumping and st ~= Enum.HumanoidStateType.Freefall then
+                                                _jumpHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                                        end
+                                end
+                        elseif inputState == Enum.UserInputState.End then
+                                _jumpHeld = false
+                        end
+                        return Enum.ContextActionResult.Sink
+                end
+                game:GetService("ContextActionService"):BindAction("NothingXNoStunJump", jumpAction, false, Enum.KeyCode.Space)
+                if _jumpHeartbeatConn then _jumpHeartbeatConn:Disconnect() end
+                _jumpHeartbeatConn = RunService.Heartbeat:Connect(function()
+                        if not CharacterCleanupEnabled then
+                                _jumpHeartbeatConn:Disconnect()
+                                _jumpHeartbeatConn = nil
+                                return
+                        end
+                        if _jumpHeld and _jumpHumanoid and _jumpHumanoid.Health > 0 then
+                                if _jumpHumanoid.FloorMaterial ~= Enum.Material.Air then
+                                        local st = _jumpHumanoid:GetState()
+                                        if st ~= Enum.HumanoidStateType.Jumping and st ~= Enum.HumanoidStateType.Freefall then
+                                                _jumpHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                                        end
+                                end
+                        end
+                end)
+                if _jumpCharAddedConn then _jumpCharAddedConn:Disconnect() end
+                _jumpCharAddedConn = lp2.CharacterAdded:Connect(function(newChar)
+                        _jumpHumanoid = nil
+                        _jumpHeld = false
+                        task.spawn(function()
+                                local hum = newChar:FindFirstChildWhichIsA("Humanoid")
+                                        or newChar:WaitForChild("Humanoid", 10)
+                                if hum and CharacterCleanupEnabled then
+                                        _jumpHumanoid = hum
+                                end
+                        end)
                 end)
         end
         if state == true and not hooksRegistered then
@@ -5491,6 +5550,11 @@ end)
                 if ModConnections.CharacterAdded then ModConnections.CharacterAdded:Disconnect(); ModConnections.CharacterAdded = nil end
                 if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
                 if ModConnections.bindCleanupCharAdded then ModConnections.bindCleanupCharAdded:Disconnect(); ModConnections.bindCleanupCharAdded = nil end
+                _jumpHeld = false
+                _jumpHumanoid = nil
+                if _jumpHeartbeatConn then _jumpHeartbeatConn:Disconnect(); _jumpHeartbeatConn = nil end
+                if _jumpCharAddedConn then _jumpCharAddedConn:Disconnect(); _jumpCharAddedConn = nil end
+                game:GetService("ContextActionService"):UnbindAction("NothingXNoStunJump")
                 return
         end
         local Players = game:GetService("Players")
@@ -5646,6 +5710,8 @@ end)
                 ModConnections.accessoryHeartbeat:Disconnect()
                 ModConnections.accessoryHeartbeat = nil
         end
+        local _lastAccessoryScanTime = 0
+        local ACCESSORY_SCAN_INTERVAL = 0.12
         ModConnections.accessoryHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
                 if not CharacterCleanupEnabled then
                         ModConnections.accessoryHeartbeat:Disconnect()
@@ -5654,9 +5720,13 @@ end)
                 end
                 local char = speaker.Character
                 if char then
-                        usunPusteAccessory(char)
                         local hrp = char:FindFirstChild("HumanoidRootPart")
                         if hrp then hrp.Anchored = false end
+                        local now2 = os.clock()
+                        if now2 - _lastAccessoryScanTime >= ACCESSORY_SCAN_INTERVAL then
+                                _lastAccessoryScanTime = now2
+                                usunPusteAccessory(char)
+                        end
                 end
         end)
         task.spawn(function()
@@ -6512,8 +6582,12 @@ do
                                                 originalParent = clientModule.Parent
                                                 displacedClient = clientModule
                                         end
+        pcall(function()
+                Workspace.FallenPartsDestroyHeight = 0/0
+                Workspace.FallenPartsDestroyHeight = 0/0
+        end)
                                         pcall(function()
-                                                for _ = 1, 5 do
+                                                for _ = 1, 8 do
                                                         clientModule.Parent = StarterPack
                                                 end
                                         end)
