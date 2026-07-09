@@ -1372,6 +1372,7 @@ orbitAngleV = 0
 orbitCachedTarget = nil
 orbitMode = "Horizontal"
 orbitConnection = nil
+WAIT_WALL_COMBO = 0.2
 walkFlingUseNormal = false
 local walkFlingBodyMode = true
 walkFlingDirections = {
@@ -1706,7 +1707,13 @@ function updateKeybindText()
         for _, key in ipairs(orderedKeys) do
                 local toggleKey = toggleKeyMap[key] or key
                 local toggleState = keybindToggles[toggleKey]
-                if toggleState == "off" or toggleState == nil then
+                if key == "Places" then
+                        if toggleState == "load" then
+                                appendEntry(keybindEntries[key], "block")
+                        elseif toggleState == "hide" then
+                                appendEntry(keybindEntries[key], "hide")
+                        end
+                elseif toggleState == "off" or toggleState == nil then
                         appendEntry(keybindEntries[key], "block")
                 elseif toggleState == "hide" then
                         appendEntry(keybindEntries[key], "hide")
@@ -1742,18 +1749,37 @@ function syncMapDependentVisibility()
         end
 end
 local lastHasMainState = nil
+local lastHasFloorState = nil
+local floorOnlyPlaces = {
+        ["Middle Of Map"] = true, ["Prison"] = true,
+        ["Montain 1 Left"] = true, ["Montain 1 Right"] = true,
+        ["Montain 2"] = true, ["Montain 2 Left"] = true, ["Montain 2 Right"] = true,
+}
 function syncPlacesKeybindDisplay()
         local hasMain = hasMapMainPart()
-        if hasMain ~= lastHasMainState then
+        local map = workspace:FindFirstChild("Map")
+        local hasFloor = map and map:FindFirstChild("Floor/Roads") ~= nil
+        if hasMain ~= lastHasMainState or hasFloor ~= lastHasFloorState then
                 lastHasMainState = hasMain
+                lastHasFloorState = hasFloor
                 if game.GameId == 3808081382 then
-                        local mapPlaces = {     "Middle Of Map", "Montain 1 Left", "Montain 1 Right", "Montain 2", "Montain 2 Left", "Montain 2 Right", "Montain 1 View", "Montain 2 View", "Montain 3 View", "Montain 4 View", }
+                        local mapPlaces = { "Middle Of Map", "Prison", "Montain 1 Left", "Montain 1 Right", "Montain 2", "Montain 2 Left", "Montain 2 Right" }
                         local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
                         local currentItems = { "/\\" }
-                        for _, v in ipairs(mapPlaces) do table.insert(currentItems, v) end
+                        for _, v in ipairs(mapPlaces) do
+                                if hasFloor or not floorOnlyPlaces[v] then
+                                        table.insert(currentItems, v)
+                                end
+                        end
                         for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
                         if placesDropdown then
-                                placesDropdown.SetItems(currentItems)
+                                local filtered = {}
+                                for _, v in ipairs(currentItems) do
+                                        if not v:find("View") then
+                                                table.insert(filtered, v)
+                                        end
+                                end
+                                placesDropdown.SetItems(filtered)
                                 placesDropdown.Frame.Visible = true
                         end
                 end
@@ -3981,7 +4007,7 @@ function updateTargetDisplay()
         local line2 = ""
         if displayedTarget then
                 local plr = game:GetService("Players"):GetPlayerFromCharacter(displayedTarget)
-                local baseName = string.sub(plr and plr.Name or displayedTarget.Name, 1, 20)
+                local baseName = plr and plr.Name or displayedTarget.Name
                 local isHPEnabled = getSavedControlValue("TargetHPEnabled") == true
                 if isHPEnabled then
                         local hum = displayedTarget:FindFirstChildOfClass("Humanoid")
@@ -3994,15 +4020,15 @@ function updateTargetDisplay()
                         line1 = "| " .. baseName
                 end
                 if plr then
-                        local dispName = string.sub(plr.DisplayName or "", 1, 20)
+                        local dispName = plr.DisplayName or ""
                         if dispName ~= "" and dispName ~= baseName then
                                 line2 = "| " .. dispName
                         end
                 end
         elseif manualAttackTpPlayer then
-                local baseName = string.sub(manualAttackTpPlayer.Name, 1, 20)
+                local baseName = manualAttackTpPlayer.Name
                 line1 = "| " .. baseName
-                local dispName = string.sub(manualAttackTpPlayer.DisplayName or "", 1, 20)
+                local dispName = manualAttackTpPlayer.DisplayName or ""
                 if dispName ~= "" and dispName ~= baseName then
                         line2 = "| " .. dispName
                 end
@@ -4907,7 +4933,6 @@ local function _bindCleanupEvents(char)
 end
 local _badValueClasses = {
         BoolValue = true,
-        BrickColorValue = true,
         CFrameValue = true,
         Color3Value = true,
         DoubleConstrainedValue = true,
@@ -4916,7 +4941,6 @@ local _badValueClasses = {
         NumberValue = true,
         ObjectValue = true,
         RayValue = true,
-        StringValue = true,
         Vector3Value = true,
         ForceField = true,
 }
@@ -6419,62 +6443,138 @@ task.spawn(function()
         setupCharacter(player.Character)
     end
     player.CharacterAdded:Connect(setupCharacter)
-    if game.GameId == 3808081382 then
-        local VIM = game:GetService("VirtualInputManager")
-        local WhirlwindDunkID = "rbxassetid://12296113986"
-        local WallComboIDs = {
-            ["rbxassetid://17325537719"]=true,["rbxassetid://10469643643"]=true,
-            ["rbxassetid://13294471966"]=true,["rbxassetid://13295936866"]=true,
-            ["rbxassetid://13378708199"]=true,["rbxassetid://14136436157"]=true,
-            ["rbxassetid://15162694192"]=true,["rbxassetid://16552234590"]=true,
-            ["rbxassetid://17889290569"]=true,
-        }
-        local function SpamQ()
-            VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
-            VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
-        end
-        local function HandleWallComboTilt(track, combatChar)
-            if not _G.WallComboEnabled or not track.Animation then return end
-            if WallComboIDs[track.Animation.AnimationId] then
-                local hrp = combatChar:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local startCFrame = hrp.CFrame
-                    local startTime = tick()
-                    local conn
-                    conn = RunService.Heartbeat:Connect(function()
-                        if not _G.WallComboEnabled or tick() - startTime >= 0.3 then
-                            if hrp and hrp.Parent then applyCFrameBypassNoTp(hrp, startCFrame) end
-                            conn:Disconnect()
-                        elseif hrp and hrp.Parent then
-                            applyCFrameBypassNoTp(hrp, startCFrame * CFrame.Angles(math.rad(-25), 0, 0))
+if game.GameId == 3808081382 then
+    local WhirlwindDunkID = "rbxassetid://12296113986"
+    local WallComboIDs = {
+        ["rbxassetid://17325537719"] = true,
+        ["rbxassetid://10469643643"] = true,
+        ["rbxassetid://13294471966"] = true,
+        ["rbxassetid://13295936866"] = true,
+        ["rbxassetid://13378708199"] = true,
+        ["rbxassetid://14136436157"] = true,
+        ["rbxassetid://15162694192"] = true,
+        ["rbxassetid://16552234590"] = true,
+        ["rbxassetid://17889290569"] = true,
+    }
+    local displacedClient
+    local function getClientModule(char)
+        local handler = char:FindFirstChild("CharacterHandler")
+        local client =
+            (handler and handler:FindFirstChild("Client"))
+            or (displacedClient and displacedClient.Parent ~= handler and displacedClient)
+        return client
+    end
+    local function FireWallCombo(char)
+        local client = getClientModule(char)
+        local fired = false
+        if client then
+            local ok, env = pcall(function()
+                return getsenv and getsenv(client)
+            end)
+            if ok and type(env) == "table" then
+                local f19 = rawget(env, "f19")
+                if not f19 then
+                    for _, v in pairs(env) do
+                        if type(v) == "function" then
+                            f19 = v
+                            break
                         end
-                    end)
+                    end
+                end
+                if f19 then
+                    pcall(f19, {Goal = "Wall Combo"})
+                    fired = true
                 end
             end
         end
-        local function SetupCombatCharacter(combatChar)
-            local combatHumanoid = combatChar:WaitForChild("Humanoid")
-            local combatAnimator = combatHumanoid:WaitForChild("Animator")
-            combatAnimator.AnimationPlayed:Connect(function(track)
-                if _G.WhirlwindEnabled and track.Animation and track.Animation.AnimationId == WhirlwindDunkID then
-                    task.wait(1.2)
-                    local hrp = combatChar:FindFirstChild("HumanoidRootPart")
-                    if hrp then applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(0, 100, 0)) end
-                end
-                HandleWallComboTilt(track, combatChar)
-            end)
-            combatChar.DescendantAdded:Connect(function(desc)
-                if desc:IsA("ObjectValue") and desc.Name:lower() == "wallcombo" and _G.WallComboEnabled then
-                    local startTime = tick()
-                    local duration = desc:GetAttribute("DeleteMe") or 0.6
-                    repeat SpamQ(); task.wait(0.01)
-                    until not desc.Parent or desc.Parent ~= combatChar or tick() - startTime >= duration
-                end
-            end)
+        if not fired then
+            local communicate = char:FindFirstChild("Communicate")
+            if communicate and communicate:IsA("RemoteEvent") then
+                communicate:FireServer({Goal = "Wall Combo"})
+				communicate:FireServer({Goal = "Wall Combo"})
+                communicate:FireServer({Goal = "Wall Combo"})
+                communicate:FireServer({Goal = "Wall Combo"})
+				communicate:FireServer({Goal = "Wall Combo"})
+				communicate:FireServer({Goal = "Wall Combo"})
+                communicate:FireServer({Goal = "Wall Combo"})
+                communicate:FireServer({Goal = "Wall Combo"})
+            end
         end
-        if player.Character then task.spawn(SetupCombatCharacter, player.Character) end
-        player.CharacterAdded:Connect(function(c) task.spawn(SetupCombatCharacter, c) end)
     end
+    local function HandleWallComboTilt(track, combatChar)
+        if not _G.WallComboEnabled then return end
+        if not track.Animation then return end
+        if not WallComboIDs[track.Animation.AnimationId] then return end
+        local hrp = combatChar:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        local start = tick()
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            if not _G.WallComboEnabled or tick() - start >= 0.3 then
+                conn:Disconnect()
+                return
+            end
+            local pos = hrp.Position
+            local look = hrp.CFrame.LookVector
+            local flat = Vector3.new(look.X,0,look.Z)
+            flat = flat.Magnitude > 0.001 and flat.Unit or Vector3.new(0,0,-1)
+            applyCFrameBypassNoTp(
+                hrp,
+                CFrame.lookAt(pos,pos+flat) * CFrame.Angles(math.rad(-25),0,0)
+            )
+			if _G.BringWallComboEnabled and selectedPlace ~= "/\\" then
+				local placeCF = resolvePlaceCF(selectedPlace)
+				if placeCF then
+                task.wait(WAIT_WALL_COMBO)
+					applyCFrameBypassNoTp(hrp, placeCF)
+				end
+			end
+        end)
+    end
+    local function SetupCombatCharacter(combatChar)
+        local handler = combatChar:FindFirstChild("CharacterHandler")
+        if handler and handler:FindFirstChild("Client") then
+            displacedClient = handler.Client
+        end
+        local humanoid = combatChar:WaitForChild("Humanoid")
+        local animator = humanoid:WaitForChild("Animator")
+        animator.AnimationPlayed:Connect(function(track)
+            if _G.WhirlwindEnabled
+                and track.Animation
+                and track.Animation.AnimationId == WhirlwindDunkID then
+                task.wait(1.2)
+                local hrp = combatChar:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(0,100,0))
+                end
+            end
+            HandleWallComboTilt(track, combatChar)
+        end)
+        combatChar.DescendantAdded:Connect(function(desc)
+            if not _G.WallComboEnabled then return end
+            if desc:IsA("ObjectValue")
+            and desc.Name:lower() == "wallcombo" then
+                local startTime = tick()
+                local timeout = desc:GetAttribute("DeleteMe") or 0.6
+                repeat
+                    task.spawn(FireWallCombo, combatChar)
+                    task.spawn(FireWallCombo, combatChar)
+                    task.spawn(FireWallCombo, combatChar)
+                    task.wait()
+                until
+                    not desc.Parent
+                    or desc.Parent ~= combatChar
+                    or tick() - startTime >= timeout
+            end
+        end)
+    end
+    if player.Character then
+        task.spawn(SetupCombatCharacter, player.Character)
+    end
+    player.CharacterAdded:Connect(function(char)
+        task.spawn(SetupCombatCharacter, char)
+    end)
+end
 end)
 task.spawn(function()
     local flingState = {
@@ -6648,6 +6748,18 @@ do
                                 displacedClient = nil
                                 originalParent = nil
                         end
+                        if isVoid and displacedClient and originalParent then
+                                local hasPlace = selectedPlace and selectedPlace ~= "" and selectedPlace ~= "/\\" and resolvePlaceCF(selectedPlace) ~= nil
+                                if not hasPlace then
+                                        pcall(function()
+                                                if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
+                                                        displacedClient.Parent = originalParent
+                                                end
+                                        end)
+                                        displacedClient = nil
+                                        originalParent = nil
+                                end
+                        end
                         if not alive and displacedClient then
                                 pcall(function()
                                         if displacedClient.Parent == StarterPack then
@@ -6764,7 +6876,7 @@ function Slider(data)
         end
         editBox:GetPropertyChangedSignal("Text"):Connect(function()
                 local text = editBox.Text
-                local filtered = text:gsub("[^-0-9%.]", "")
+                local filtered = text:gsub("[^-0-9%.eE+]", "")
                 if filtered ~= text then editBox.Text = filtered end
         end)
         local bar = Instance.new("Frame")
@@ -6824,12 +6936,24 @@ function Slider(data)
         end)
         editBox.FocusLost:Connect(function()
                 local rawText = editBox.Text
-                if rawText == "" or not string.match(rawText, "^%d*%.?%d+$") then
+                local typedValue = tonumber(rawText)
+                if rawText == "" or typedValue == nil then
                         editBox.Text = string.format("%.1f", roundToTenth(state.value))
                         return
                 end
-                local typedValue = tonumber(rawText)
-                applySliderValue(state, typedValue, true)
+                if typedValue > (tonumber(state.max) or 100) then
+                        state.value = typedValue
+                        editBox.Text = tostring(typedValue)
+                        if state.saveKey then
+                                setSavedControlValue(state.saveKey, typedValue)
+                        end
+                        if state.callback then
+                                state.callback(typedValue)
+                        end
+                        state.fill.Size = UDim2.new(1, 0, 1, 0)
+                else
+                        applySliderValue(state, typedValue, true)
+                end
         end)
         local initialValue = getSavedControlValue(state.saveKey)
         if initialValue == nil then
@@ -9700,7 +9824,7 @@ task.spawn(function()
         orbitTitle.TextSize = 14
         orbitTitle.TextXAlignment = Enum.TextXAlignment.Left
         orbitTitle.Parent = orbitHub
-        local function makeOrbitInput(yPos, labelText, defVal, saveKey, onChanged)
+        local function makeOrbitInput(yPos, labelText, defVal, saveKey, onChanged, allowInf)
                 local lbl = Instance.new("TextLabel")
                 lbl.BackgroundTransparency = 1
                 lbl.Position = UDim2.new(0, 10, 0, yPos)
@@ -9731,12 +9855,27 @@ task.spawn(function()
                 bc.Parent = box
                 box:GetPropertyChangedSignal("Text"):Connect(function()
                         local t = box.Text
-                        local f = t:gsub("[^0-9%-%.eE]", "")
+                        local f = allowInf
+                                and t:gsub("[^0-9%-%.eEiInNfF%+]", "")
+                                or  t:gsub("[^0-9%-%.eE]", "")
                         if f ~= t then box.Text = f end
                 end)
                 box.Focused:Connect(function() box.Text = "" end)
                 box.FocusLost:Connect(function()
-                        local v = tonumber(box.Text)
+                        local rawText = tostring(box.Text or ""):match("^%s*(.-)%s*$")
+                        if allowInf then
+                                local loweredText = string.lower(rawText)
+                                if loweredText == "inf" then
+                                        rawText = "20e20"
+                                elseif loweredText == "inf+" then
+                                        rawText = "50e50"
+                                elseif loweredText == "inf++" then
+                                        rawText = "99e99"
+                                elseif loweredText == "inf+++" then
+                                        rawText = "999e999"
+                                end
+                        end
+                        local v = tonumber(rawText)
                         if v then
                                 box.Text = tostring(v)
                                 if saveKey then setSavedControlValue(saveKey, v) end
@@ -9747,9 +9886,9 @@ task.spawn(function()
                 end)
                 return box
         end
-        makeOrbitInput(34,  "Horizontal (speed)", orbitSpeedH, "OrbitSpeedH",   function(v) orbitSpeedH = v end)
-        makeOrbitInput(62,  "Vertical (speed)",   orbitSpeedV, "OrbitSpeedV",   function(v) orbitSpeedV = v end)
-        makeOrbitInput(90,  "Distance",           orbitDistance,"OrbitDistance",function(v) orbitDistance = v end)
+        makeOrbitInput(34,  "Horizontal (speed)", orbitSpeedH,  "OrbitSpeedH",   function(v) orbitSpeedH = v end,   true)
+        makeOrbitInput(62,  "Vertical (speed)",   orbitSpeedV,  "OrbitSpeedV",   function(v) orbitSpeedV = v end,   true)
+        makeOrbitInput(90,  "Distance",           orbitDistance,"OrbitDistance", function(v) orbitDistance = v end, false)
         local dirLabel = Instance.new("TextLabel")
         dirLabel.BackgroundTransparency = 1
         dirLabel.Position = UDim2.new(0, 10, 0, 118)
@@ -9985,7 +10124,7 @@ task.spawn(function()
         customLabel.TextSize = 13
         customLabel.TextXAlignment = Enum.TextXAlignment.Left
         customLabel.Parent = orbitHub
-        local function makeCustomSingleBox(yPos, labelText, refKey, getter, setter)
+        local function makeCustomSingleBox(yPos, labelText, refKey, getter, setter, allowInf)
                 local lbl = Instance.new("TextLabel")
                 lbl.BackgroundTransparency = 1
                 lbl.Position = UDim2.new(0, 10, 0, yPos)
@@ -10015,7 +10154,9 @@ task.spawn(function()
                 bc.Parent = box
                 box:GetPropertyChangedSignal("Text"):Connect(function()
                         local t = box.Text
-                        local f = t:gsub("[^0-9%-%.]", "")
+                        local f = allowInf
+                                and t:gsub("[^0-9%-%.iInNfFeE%+]", "")
+                                or  t:gsub("[^0-9%-%.]", "")
                         if f ~= t then box.Text = f end
                 end)
                 box.Focused:Connect(function()
@@ -10026,7 +10167,20 @@ task.spawn(function()
                         box.Text = ""
                 end)
                 box.FocusLost:Connect(function()
-                        local v = tonumber(box.Text)
+                        local rawText = tostring(box.Text or ""):match("^%s*(.-)%s*$")
+                        if allowInf then
+                                local loweredText = string.lower(rawText)
+                                if loweredText == "inf" then
+                                        rawText = "20e20"
+                                elseif loweredText == "inf+" then
+                                        rawText = "50e50"
+                                elseif loweredText == "inf++" then
+                                        rawText = "99e99"
+                                elseif loweredText == "inf+++" then
+                                        rawText = "999e999"
+                                end
+                        end
+                        local v = tonumber(rawText)
                         if v then
                                 setter(v)
                                 box.Text = tostring(v)
@@ -10041,19 +10195,19 @@ task.spawn(function()
                 return box
         end
         makeCustomSingleBox(296, "Left",  "Left",
-                function() return orbitCustomLeft  end, function(v) orbitCustomLeft  = v end)
+                function() return orbitCustomLeft  end, function(v) orbitCustomLeft  = v end, false)
         makeCustomSingleBox(322, "Right", "Right",
-                function() return orbitCustomRight end, function(v) orbitCustomRight = v end)
+                function() return orbitCustomRight end, function(v) orbitCustomRight = v end, false)
         makeCustomSingleBox(348, "Up",    "Up",
-                function() return orbitCustomUp    end, function(v) orbitCustomUp    = v end)
+                function() return orbitCustomUp    end, function(v) orbitCustomUp    = v end, false)
         makeCustomSingleBox(374, "Down",  "Down",
-                function() return orbitCustomDown  end, function(v) orbitCustomDown  = v end)
+                function() return orbitCustomDown  end, function(v) orbitCustomDown  = v end, false)
         makeCustomSingleBox(400, "Front", "Front",
-                function() return orbitCustomFront end, function(v) orbitCustomFront = v end)
+                function() return orbitCustomFront end, function(v) orbitCustomFront = v end, false)
         makeCustomSingleBox(426, "Back",  "Back",
-                function() return orbitCustomBack  end, function(v) orbitCustomBack  = v end)
+                function() return orbitCustomBack  end, function(v) orbitCustomBack  = v end, false)
         makeCustomSingleBox(452, "Speed", "Speed",
-                function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end)
+                function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end, true)
         renderAllModeBtns()
 end)
 task.wait(0.02)
@@ -10088,6 +10242,83 @@ if game.GameId == 3808081382 then
                 end,
         })
         placesDropdown.Frame.LayoutOrder = 999998
+        local bringWallHub = makeControlFrame(84)
+        bringWallHub.Parent = uiX
+        bringWallHub.LayoutOrder = 999997
+        bringWallHub.ClipsDescendants = true
+        local bwTitle = Instance.new("TextLabel")
+        bwTitle.BackgroundTransparency = 1
+        bwTitle.Position = UDim2.new(0, 16, 0, 4)
+        bwTitle.Size = UDim2.new(1, -32, 0, 16)
+        bwTitle.Font = Enum.Font.GothamBold
+        bwTitle.Text = "Places Bring"
+        bwTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        bwTitle.TextStrokeTransparency = 1
+        bwTitle.TextSize = 13
+        bwTitle.TextXAlignment = Enum.TextXAlignment.Left
+        bwTitle.Parent = bringWallHub
+        local savedWWC = getSavedControlValue("WaitWallCombo")
+        if savedWWC ~= nil then WAIT_WALL_COMBO = savedWWC end
+        local bwWaitLabel = Instance.new("TextLabel")
+        bwWaitLabel.BackgroundTransparency = 1
+        bwWaitLabel.Position = UDim2.new(0, 8, 0, 24)
+        bwWaitLabel.Size = UDim2.new(0.55, -12, 0, 26)
+        bwWaitLabel.Font = Enum.Font.GothamBold
+        bwWaitLabel.Text = "Wait Before Tp"
+        bwWaitLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        bwWaitLabel.TextSize = 12
+        bwWaitLabel.TextScaled = false
+        bwWaitLabel.TextWrapped = true
+        bwWaitLabel.TextXAlignment = Enum.TextXAlignment.Left
+        bwWaitLabel.Parent = bringWallHub
+        local bwWaitBox = Instance.new("TextBox")
+        bwWaitBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        bwWaitBox.BackgroundTransparency = 0.5
+        bwWaitBox.BorderSizePixel = 0
+        bwWaitBox.Position = UDim2.new(0.57, 0, 0, 28)
+        bwWaitBox.Size = UDim2.new(0.39, -4, 0, 22)
+        bwWaitBox.ClearTextOnFocus = false
+        bwWaitBox.Font = Enum.Font.GothamBold
+        bwWaitBox.Text = tostring(WAIT_WALL_COMBO)
+        bwWaitBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+        bwWaitBox.TextSize = 12
+        bwWaitBox.TextScaled = false
+        bwWaitBox.Parent = bringWallHub
+        local bwWaitCorner = Instance.new("UICorner")
+        bwWaitCorner.CornerRadius = UDim.new(0, 4)
+        bwWaitCorner.Parent = bwWaitBox
+        bwWaitBox:GetPropertyChangedSignal("Text"):Connect(function()
+                local t = bwWaitBox.Text
+                local f = t:gsub("[^0-9%.]", "")
+                if f ~= t then bwWaitBox.Text = f end
+        end)
+        bwWaitBox.Focused:Connect(function() bwWaitBox.Text = "" end)
+        bwWaitBox.FocusLost:Connect(function()
+                local v = tonumber(bwWaitBox.Text)
+                if v ~= nil then
+                        v = math.clamp(v, 0, 100)
+                        WAIT_WALL_COMBO = v
+                        setSavedControlValue("WaitWallCombo", v)
+                        bwWaitBox.Text = tostring(v)
+                else
+                        bwWaitBox.Text = tostring(WAIT_WALL_COMBO)
+                end
+        end)
+        local bwRow = Instance.new("Frame")
+        bwRow.BackgroundTransparency = 1
+        bwRow.BorderSizePixel = 0
+        bwRow.Position = UDim2.new(0, 4, 0, 54)
+        bwRow.Size = UDim2.new(1, -8, 0, 26)
+        bwRow.Parent = bringWallHub
+        local bwLayout = Instance.new("UIListLayout")
+        bwLayout.FillDirection = Enum.FillDirection.Horizontal
+        bwLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        bwLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        bwLayout.Padding = UDim.new(0, 4)
+        bwLayout.Parent = bwRow
+        makeHubTog(bwRow, "Bring Wall Combo ##", function(v)
+                _G.BringWallComboEnabled = v
+        end, "BringWallComboEnabled", false, 1)
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
@@ -11468,7 +11699,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 if not selectedPlace or selectedPlace == "" or selectedPlace == "/\\" then
                         return
                 end
-                local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Montain 1 Left" or selectedPlace == "Montain 1 Right" or selectedPlace:find("^Montain %d View") or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
+                local isMapLocation = selectedPlace == "Middle Of Map" or selectedPlace == "Prison" or selectedPlace == "Montain 1 Left" or selectedPlace == "Montain 1 Right" or selectedPlace == "Montain 2" or selectedPlace == "Montain 2 Left" or selectedPlace == "Montain 2 Right"
                 if isMapLocation then
                         if game.PlaceId ~= 10449761463 and game.PlaceId ~= 131048399685555 then
                                 return
