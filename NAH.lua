@@ -1355,6 +1355,8 @@ movementFlatState = false
 flingEnabled = false
 walkFlingEnabled = false
 auraFlingEnabled = false
+bHitEnabled = false
+bHitHeartbeat = nil
 clickFlingEnabled = false
 flingAllEnabled = false
 antiFlingEnabled = false
@@ -1373,6 +1375,7 @@ orbitCachedTarget = nil
 orbitMode = "Horizontal"
 orbitConnection = nil
 WAIT_WALL_COMBO = 0.2
+local wallComboBringCustomPos = nil
 walkFlingUseNormal = false
 local walkFlingBodyMode = true
 walkFlingDirections = {
@@ -1450,14 +1453,37 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
                 end)
         end)
 end
+local _bypassNoTpActive = true
 function applyCFrameBypassNoTp(rootPart, cframe)
         if not rootPart then return end
-        rootPart:SetAttribute("IsTrashOperation", true)
-        if cframe then rootPart.CFrame = cframe end
-        rootPart:SetAttribute("IsTrashOperation", false)
+        if _bypassNoTpActive then
+                rootPart:SetAttribute("IsTrashOperation", true)
+                if cframe then rootPart.CFrame = cframe end
+                task.delay(0, function()
+                        pcall(function()
+                                rootPart:SetAttribute("IsTrashOperation", false)
+                        end)
+                end)
+        else
+                if cframe then rootPart.CFrame = cframe end
+        end
 end
 function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
         applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
+end
+function predictedReturnCFrame(myRoot, roundTripFrames)
+        if not myRoot or not myRoot.Parent then return nil end
+        roundTripFrames = roundTripFrames or 2
+        local ping = 0
+        pcall(function()
+                local stats = game:GetService("Stats")
+                ping = (stats.Network.ServerStatsItem["Data Ping"].Value or 0) / 1000
+        end)
+        local frameTime = 1 / 60
+        local totalTime = (roundTripFrames * frameTime) + (ping * 0.5)
+        local vel = myRoot.AssemblyLinearVelocity
+        local predictedPos = myRoot.Position + (vel * totalTime)
+        return CFrame.new(predictedPos) * (myRoot.CFrame - myRoot.CFrame.Position)
 end
 function encodeKeybindValue(keyCode)
         if not keyCode then
@@ -1516,6 +1542,20 @@ function saveSliderSaveData()
         end)
 end
 loadSliderSaveData()
+do
+        local _retryOk = (next(controlSaveData) ~= nil)
+        if not _retryOk and type(isfile) == "function" then
+                for _i = 1, 7 do
+                        task.wait(0.05)
+                        loadSliderSaveData()
+                        if next(controlSaveData) ~= nil then break end
+                end
+        end
+        local savedNoStunJump = controlSaveData["NoStunJumpEnabled"]
+        if type(savedNoStunJump) == "boolean" then
+                noStunJumpEnabled = savedNoStunJump
+        end
+end
 if type(controlSaveData.KeybindHideNamesEnabled) == "boolean" then
         hideNamesEnabled = controlSaveData.KeybindHideNamesEnabled
 end
@@ -1948,14 +1988,15 @@ local function toggleVoidDead(state)
 end
 local dVoidDeadActive = false
 local dVoidDeadConn = nil
-local DVoidDeadToggle = nil
 local function toggleDVoidDead(state)
         local targetState = state
         if targetState == nil then
                 targetState = not dVoidDeadActive
         end
         if targetState and isSafeZoneActive() then
-                if DVoidDeadToggle then DVoidDeadToggle.SetValue(false, true) end
+                if targetActionControls and targetActionControls.Fourth then
+                        targetActionControls.Fourth.SetValue(false, true)
+                end
                 return
         end
         if dVoidDeadActive == targetState then return end
@@ -1969,7 +2010,9 @@ local function toggleDVoidDead(state)
                         dVoidDeadConn:Disconnect()
                         dVoidDeadConn = nil
                 end
-                if DVoidDeadToggle then DVoidDeadToggle.SetValue(false, true) end
+                if targetActionControls and targetActionControls.Fourth then
+                        targetActionControls.Fourth.SetValue(false, true)
+                end
                 if voidDeadLastCF and hrp and humanoid and humanoid.Health > 0 then
                         applyTeleportRootState(hrp, voidDeadLastCF)
                 end
@@ -1980,7 +2023,9 @@ local function toggleDVoidDead(state)
                 return
         end
         if not (character and hrp and humanoid) then
-                if DVoidDeadToggle then DVoidDeadToggle.SetValue(false, true) end
+                if targetActionControls and targetActionControls.Fourth then
+                        targetActionControls.Fourth.SetValue(false, true)
+                end
                 return
         end
         if canSaveSetBackPosition(character, hrp, humanoid) then
@@ -1989,14 +2034,16 @@ local function toggleDVoidDead(state)
                 voidDeadLastCF = hrp.CFrame
         end
         dVoidDeadActive = true
-        if DVoidDeadToggle then DVoidDeadToggle.SetValue(true, true) end
+        if targetActionControls and targetActionControls.Fourth then
+                targetActionControls.Fourth.SetValue(true, true)
+        end
         pcall(function()
-                workspace.Camera.CameraType = Enum.CameraType.Scriptable
+                workspace.Camera.CameraType = Enum.CameraType.Custom
+                workspace.Camera.CameraSubject = humanoid or character
         end)
         if dVoidDeadConn then dVoidDeadConn:Disconnect() end
         dVoidDeadConn = game:GetService("RunService").Heartbeat:Connect(function()
                 local targetModel = resolveAttackTpTarget()
-                local targetPlayer = targetModel and game:GetService("Players"):GetPlayerFromCharacter(targetModel)
                 local targetHumanoid = targetModel and targetModel:FindFirstChildOfClass("Humanoid")
                 if not dVoidDeadActive or not hrp.Parent or (humanoid and humanoid.Health <= 0) or isSafeZoneActive() then
                         if dVoidDeadConn then
@@ -2008,14 +2055,27 @@ local function toggleDVoidDead(state)
                         end
                         return
                 end
-                if targetPlayer and targetHumanoid and targetHumanoid.Health > 0 then
-                hrp:SetAttribute("IsAttackTP", true)
-                hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                if targetModel and targetHumanoid and targetHumanoid.Health > 0 then
+                        pcall(function()
+                                workspace.Camera.CameraType = Enum.CameraType.Scriptable
+                        end)
+                        hrp:SetAttribute("IsAttackTP", true)
+                        hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 else
-                        if dVoidDeadActive then
-                                toggleDVoidDead(false)
+                        pcall(function()
+                                if workspace.Camera.CameraType == Enum.CameraType.Scriptable then
+                                        workspace.Camera.CameraType = Enum.CameraType.Custom
+                                        workspace.Camera.CameraSubject = humanoid or character
+                                end
+                        end)
+                        if hrp.Position.Y < -6000 then
+                                if voidDeadLastCF then
+                                        applyTeleportRootState(hrp, voidDeadLastCF)
+                                end
+                        else
+                                voidDeadLastCF = hrp.CFrame
                         end
                 end
         end)
@@ -2347,7 +2407,7 @@ function setAuraFlingEnabled(enabled)
                                 local myCharacter = player.Character
                                 local myRoot = getRootUniversal(myCharacter)
                                 if myRoot then
-                                        local savedCFrame = myRoot.CFrame
+                                        local returnCFrame = predictedReturnCFrame(myRoot, 2)
                                         local myPosition = myRoot.Position
                                         local touchedAny = false
                                         for _, targetModel in ipairs(getSelectableTargetModels()) do
@@ -2355,9 +2415,11 @@ function setAuraFlingEnabled(enabled)
                                                         local targetRoot = getRootUniversal(targetModel)
                                                         if targetRoot and (targetRoot.Position - myPosition).Magnitude <= auraRange then
                                                                 touchedAny = true
+                                                                pcall(function() myRoot:SetAttribute("IsAttackTP", true) end)
                                                                 overpowerRootState(myRoot, targetRoot.CFrame, Vector3.zero, Vector3.zero)
                                                                 nextFrame()
                                                                 if not auraFlingEnabled or not myRoot.Parent then
+                                                                        pcall(function() myRoot:SetAttribute("IsAttackTP", false) end)
                                                                         break
                                                                 end
                                                                 local flingDir = (targetRoot.CFrame.Position - myPosition)
@@ -2373,6 +2435,7 @@ function setAuraFlingEnabled(enabled)
                                                                         Vector3.new(flingPower, flingPower, flingPower)
                                                                 )
                                                                 nextFrame()
+                                                                pcall(function() myRoot:SetAttribute("IsAttackTP", false) end)
                                                                 if not auraFlingEnabled or not myRoot.Parent then
                                                                         break
                                                                 end
@@ -2380,7 +2443,7 @@ function setAuraFlingEnabled(enabled)
                                                 end
                                         end
                                         if touchedAny and myRoot.Parent then
-                                                overpowerRootState(myRoot, savedCFrame, Vector3.zero, Vector3.zero)
+                                                overpowerRootState(myRoot, returnCFrame or myRoot.CFrame, Vector3.zero, Vector3.zero)
                                         end
                                 end
                                 nextFrame()
@@ -2389,6 +2452,140 @@ function setAuraFlingEnabled(enabled)
         end
         syncFlingModeControls()
         return auraFlingEnabled and "ON" or "OFF"
+end
+function toggleBHit(state)
+        local nextState = (state == nil and not bHitEnabled) or (state == true)
+        if nextState then
+                if isSafeZoneActive() then
+                        if targetActionControls and targetActionControls.Fifth then
+                                targetActionControls.Fifth.SetValue(false, true)
+                        end
+                        return
+                end
+                local targetModel = resolveAttackTpTarget()
+                if not targetModel then
+                        if targetActionControls and targetActionControls.Fifth then
+                                targetActionControls.Fifth.SetValue(false, true)
+                        end
+                        return
+                end
+        end
+        bHitEnabled = nextState
+        if bHitHeartbeat then
+                pcall(function()
+                        bHitHeartbeat:Disconnect()
+                end)
+                bHitHeartbeat = nil
+        end
+        if targetActionControls and targetActionControls.Fifth then
+                targetActionControls.Fifth.SetValue(bHitEnabled, true)
+        end
+        if bHitEnabled then
+                bHitHeartbeat = task.spawn(function()
+                        local localPlayerInComboAreaStartTick = nil
+                        while bHitEnabled do
+                                if isSafeZoneActive() then
+                                        nextFrame()
+                                        continue
+                                end
+                                local myCharacter = player.Character
+                                local myRoot = getRootUniversal(myCharacter)
+                                local shouldDisable = false
+                                if not manualAttackTpPlayer and not manualAttackTpTargetName and not manualAttackTpTarget then
+                                        shouldDisable = true
+                                elseif manualAttackTpPlayer and not manualAttackTpPlayer:IsDescendantOf(Players) then
+                                        shouldDisable = true
+                                end
+                                if shouldDisable then
+                                        toggleBHit(false)
+                                        nextFrame()
+                                        continue
+                                end
+                                local targetModel = resolveAttackTpTarget()
+                                if targetModel and isTargetBlacklisted and isTargetBlacklisted(targetModel, Players:GetPlayerFromCharacter(targetModel)) then
+                                        targetModel = nil
+                                end
+                                if myRoot and targetModel then
+                                        local targetRoot = getRootUniversal(targetModel)
+                                        local targetHumanoid = targetModel:FindFirstChildOfClass("Humanoid")
+                                        if targetRoot then
+                                                if targetHumanoid and targetHumanoid.Health > 0 then
+                                                        local isBypassingTargetDistance = false
+                                                        if _G.BringWallComboEnabled then
+                                                                local comboPos = nil
+                                                                if wallComboBringCustomPos then
+                                                                        comboPos = wallComboBringCustomPos
+                                                                elseif selectedPlace ~= "/\\" then
+                                                                        local cf = resolvePlaceCF(selectedPlace)
+                                                                        if cf then
+                                                                                comboPos = cf.Position
+                                                                        end
+                                                                end
+                                                                if comboPos then
+                                                                        local playerDistToCombo = (myRoot.Position - comboPos).Magnitude
+                                                                        if playerDistToCombo <= 150 then
+                                                                                if not localPlayerInComboAreaStartTick then
+                                                                                        localPlayerInComboAreaStartTick = tick()
+                                                                                end
+                                                                                if tick() - localPlayerInComboAreaStartTick <= 1.5 then
+                                                                                        isBypassingTargetDistance = true
+                                                                                end
+                                                                        else
+                                                                                localPlayerInComboAreaStartTick = nil
+                                                                        end
+                                                                else
+                                                                        localPlayerInComboAreaStartTick = nil
+                                                                end
+                                                        else
+                                                                localPlayerInComboAreaStartTick = nil
+                                                        end
+                                                        local distToTarget = (myRoot.Position - targetRoot.Position).Magnitude
+                                                        if distToTarget > 155 and not isBypassingTargetDistance then
+                                                                local angle = math.random() * math.pi * 2
+                                                                local dist = 150 + (math.random() * 5)
+                                                                local randomDir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
+                                                                local baseSafePos = targetRoot.Position + (randomDir * dist) + Vector3.new(0, 50, 0)
+                                                                local raycastParams = RaycastParams.new()
+                                                                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+                                                                raycastParams.FilterDescendantsInstances = {myCharacter, targetModel}
+                                                                local raycastResult = workspace:Raycast(baseSafePos + Vector3.new(0, 50, 0), Vector3.new(0, -150, 0), raycastParams)
+                                                                local orbitCF
+                                                                if raycastResult then
+                                                                        orbitCF = CFrame.lookAt(raycastResult.Position + Vector3.new(0, 3.5, 0), targetRoot.Position)
+                                                                else
+                                                                        orbitCF = CFrame.lookAt(baseSafePos, targetRoot.Position)
+                                                                end
+                                                                overpowerRootState(myRoot, orbitCF, Vector3.zero, Vector3.zero)
+                                                                nextFrame()
+                                                        end
+                                                        local returnCF = predictedReturnCFrame(myRoot, 2) or myRoot.CFrame
+                                                        local vel = Vector3.zero
+                                                        local rot = Vector3.zero
+                                                        if flingEnabled then
+                                                                local flingDir = (targetRoot.CFrame.Position - myRoot.Position)
+                                                                if flingDir.Magnitude < 0.001 then
+                                                                        flingDir = targetRoot.CFrame.LookVector
+                                                                else
+                                                                        flingDir = flingDir.Unit
+                                                                end
+                                                                vel = flingDir * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+                                                                rot = Vector3.new(flingPower, flingPower, flingPower)
+                                                        end
+                                                        pcall(function() myRoot:SetAttribute("IsAttackTP", true) end)
+                                                        local hitCF = CFrame.lookAt(targetRoot.Position + targetRoot.CFrame.LookVector * 1, targetRoot.Position)
+                                                        overpowerRootState(myRoot, hitCF, vel, rot)
+                                                        nextFrame()
+                                                        pcall(function() myRoot:SetAttribute("IsAttackTP", false) end)
+                                                        if myRoot.Parent then
+                                                                overpowerRootState(myRoot, returnCF, Vector3.zero, Vector3.zero)
+                                                        end
+                                                end
+                                        end
+                                end
+                                nextFrame()
+                        end
+                end)
+        end
 end
 function clickFlingTargetModel(targetModel)
         if isSafeZoneActive() then return end
@@ -3679,6 +3876,9 @@ function handleCharacterDeath()
                 end)
                 auraFlingHeartbeat = nil
         end
+        if bHitEnabled then
+                toggleBHit(false)
+        end
         if clickFlingConnection then
                 clickFlingConnection:Disconnect()
                 clickFlingConnection = nil
@@ -3929,6 +4129,9 @@ syncTargetActionControls = function()
         targetActionControls.Third.SetValue(flingEnabled, true)
         if targetActionControls.Fourth then
                 targetActionControls.Fourth.SetValue(dVoidDeadActive, true)
+        end
+        if targetActionControls.Fifth then
+                targetActionControls.Fifth.SetValue(bHitEnabled, true)
         end
 end
 syncFlingModeControls = function()
@@ -4246,14 +4449,25 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
         local isTargetAir = isAirborneHumanoid(targetHumanoid)
         local useAirTracking = isTargetAir or isAirborneHumanoid(characterHumanoid) or amFlying
         local targetVelocity = targetRoot.AssemblyLinearVelocity
-        local leadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
+        local baseLeadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
+        local speed = targetVelocity.Magnitude
+        local speedScale = math.clamp(1 + (speed / 80), 1, 3)
+        local leadTime = baseLeadTime * speedScale
         local horizontalVelocity = Vector3.new(targetVelocity.X, 0, targetVelocity.Z)
         local horizontalLead = horizontalVelocity * leadTime
         if horizontalLead.Magnitude > attackTpMaxHorizontalLead then
                 horizontalLead = horizontalLead.Unit * attackTpMaxHorizontalLead
         end
         local verticalVel = targetVelocity.Y
-        local verticalLead = (verticalVel * leadTime) + (isTargetAir and attackTpVerticalLead or 0)
+        local gravityCompensation = 0
+        if isTargetAir and verticalVel < -2 then
+                local g = (Workspace.Gravity or 196.2)
+                gravityCompensation = -0.5 * g * (leadTime * leadTime)
+                gravityCompensation = math.clamp(gravityCompensation, -attackTpMaxVerticalLead, 0)
+        end
+        local verticalLead = (verticalVel * leadTime)
+                + (isTargetAir and attackTpVerticalLead or 0)
+                + gravityCompensation
         verticalLead = math.clamp(verticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
         local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
         local isRagdoll = targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll")
@@ -5174,7 +5388,7 @@ local function noTpStartForCharacter(character)
                 if not noTpEnabled then return end
                 if hrp:GetAttribute("IsAttackTP") then return end
                 if hrp:GetAttribute("IsTrashOperation") then return end
-                local isSelfFlinging = flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or orbitEnabled or autoTpEnabled or voidDeadActive or isSafeZoneActive()
+                local isSelfFlinging = active or bHitEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or orbitEnabled or autoTpEnabled or voidDeadActive or isSafeZoneActive()
                 if isSelfFlinging then return end
                 blocking = true
                 pcall(function()
@@ -5326,6 +5540,7 @@ local _jumpHeld = false
 local _jumpHeartbeatConn = nil
 local _jumpCharAddedConn = nil
 local _jumpHumanoid = nil
+local noStunJumpEnabled = true
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
         if CharacterCleanupEnabled then
@@ -5362,7 +5577,7 @@ function toggleCharacterCleanupRuntime(state)
                 local function jumpAction(actionName, inputState, inputObject)
                         if inputState == Enum.UserInputState.Begin then
                                 _jumpHeld = true
-                                if _jumpHumanoid and _jumpHumanoid.Health > 0 then
+                                if noStunJumpEnabled and _jumpHumanoid and _jumpHumanoid.Health > 0 then
                                         local st = _jumpHumanoid:GetState()
                                         if st ~= Enum.HumanoidStateType.Jumping and st ~= Enum.HumanoidStateType.Freefall then
                                                 _jumpHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -5371,7 +5586,7 @@ function toggleCharacterCleanupRuntime(state)
                         elseif inputState == Enum.UserInputState.End then
                                 _jumpHeld = false
                         end
-                        return Enum.ContextActionResult.Sink
+                        return noStunJumpEnabled and Enum.ContextActionResult.Sink or Enum.ContextActionResult.Pass
                 end
                 game:GetService("ContextActionService"):BindAction("NothingXNoStunJump", jumpAction, false, Enum.KeyCode.Space)
                 if _jumpHeartbeatConn then _jumpHeartbeatConn:Disconnect() end
@@ -5381,7 +5596,7 @@ function toggleCharacterCleanupRuntime(state)
                                 _jumpHeartbeatConn = nil
                                 return
                         end
-                        if _jumpHeld and _jumpHumanoid and _jumpHumanoid.Health > 0 then
+                        if _jumpHeld and noStunJumpEnabled and _jumpHumanoid and _jumpHumanoid.Health > 0 then
                                 if _jumpHumanoid.FloorMaterial ~= Enum.Material.Air then
                                         local st = _jumpHumanoid:GetState()
                                         if st ~= Enum.HumanoidStateType.Jumping and st ~= Enum.HumanoidStateType.Freefall then
@@ -6141,7 +6356,7 @@ task.spawn(function()
     local supportsDashBlock = game.GameId == 3808081382
     local isTSB = supportsDashBlock
     local createMovementPanel = _G["2tog_on_one_button"]
-    local movementHub = makeControlFrame(isTSB and 184 or 94)
+    local movementHub = makeControlFrame(isTSB and 214 or 124)
     movementHub.Parent = uiX
     movementHub.LayoutOrder = 1
     movementHub.ClipsDescendants = true
@@ -6181,7 +6396,7 @@ task.spawn(function()
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 6)
         corner.Parent = btn
-        btn.AutoButtonColor = true
+        btn.AutoButtonColor = false
         btn.Font = Enum.Font.GothamBold
         btn.Text = text
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -6205,7 +6420,7 @@ task.spawn(function()
     local flatCorner = Instance.new("UICorner")
     flatCorner.CornerRadius = UDim.new(0, 6)
     flatCorner.Parent = flatBtn
-    flatBtn.AutoButtonColor = true
+    flatBtn.AutoButtonColor = false
     flatBtn.Font = Enum.Font.GothamBold
     flatBtn.TextSize = 13
     flatBtn.Parent = row1
@@ -6297,6 +6512,13 @@ task.spawn(function()
         end, "AntiZeroEnabled", false, 1/3)
         local row4b = makeRow(120)
         makeHubTog(row4b, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/2)
+    end
+    do
+        local rowJump = makeRow(isTSB and 180 or 150)
+        makeHubTog(rowJump, "Jump (Emote)", function(v)
+            noStunJumpEnabled = v
+            setSavedControlValue("NoStunJumpEnabled", v)
+        end, "NoStunJumpEnabled", true, 1)
     end
     local espHub = makeControlFrame(isTSB and 184 or 124)
     espHub.Parent = uiX
@@ -6514,11 +6736,16 @@ if game.GameId == 3808081382 then
                 hrp,
                 CFrame.lookAt(pos,pos+flat) * CFrame.Angles(math.rad(-25),0,0)
             )
-			if _G.BringWallComboEnabled and selectedPlace ~= "/\\" then
-				local placeCF = resolvePlaceCF(selectedPlace)
-				if placeCF then
-                task.wait(WAIT_WALL_COMBO)
-					applyCFrameBypassNoTp(hrp, placeCF)
+			if _G.BringWallComboEnabled then
+				local targetCF = nil
+				if wallComboBringCustomPos then
+					targetCF = CFrame.new(wallComboBringCustomPos)
+				elseif selectedPlace ~= "/\\" then
+					targetCF = resolvePlaceCF(selectedPlace)
+				end
+				if targetCF then
+					task.wait(WAIT_WALL_COMBO)
+					applyCFrameBypassNoTp(hrp, targetCF)
 				end
 			end
         end)
@@ -6710,12 +6937,13 @@ do
                         local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
                         local vel = hrp.AssemblyLinearVelocity
                         local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
-                        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+                        local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or bHitEnabled
                         local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
                         local isExtremeFling = isNanPos or isNanVel or isHugeVel
                         local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
                         local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
-                        if ((isFar and not _G.SafeTeleportLock and not (attackTpEnabled and attackTpHolding)) or isVoid or isNanVel or isHugeVel) and alive then
+                        local isMidHitCycle = auraFlingEnabled or flingAllEnabled or bHitEnabled
+                        if ((isFar and not _G.SafeTeleportLock and not (attackTpEnabled and attackTpHolding) and not isMidHitCycle) or (isVoid and not isMidHitCycle) or isNanVel or isHugeVel) and alive then
                                 for i = 1, #safePositions do
                                         local targetCF = safePositions[i]
                                         if targetCF then
@@ -6769,7 +6997,7 @@ do
                                 local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
                                 local vel = hrp.AssemblyLinearVelocity
                                 local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
-                                local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
+                                local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or bHitEnabled
                                 local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
                                 forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
                         end
@@ -8259,6 +8487,9 @@ _G["3tog_on_one_one_button"] = function(data)
         local toggle4Name = data.name4Tog
         local toggle4Callback = data.fun4Tog
         local toggle4Enabled = data.default4Tog == true
+        local toggle5Name = data.name5Tog
+        local toggle5Callback = data.fun5Tog
+        local toggle5Enabled = data.default5Tog == true
         local firstCallback = data.fun1
         local secondCallback = data.fun2
         local thirdCallback = data.fun3
@@ -8281,7 +8512,7 @@ _G["3tog_on_one_one_button"] = function(data)
         titleLabel.TextScaled = false
         titleLabel.TextWrapped = true
         titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        titleLabel.Parent = holder
+        titleLabel.Parent = titleLabel.Parent or holder
         local rowFrame = Instance.new("Frame")
         rowFrame.BackgroundTransparency = 1
         rowFrame.Position = UDim2.new(0, 10, 0, 32)
@@ -8293,7 +8524,9 @@ _G["3tog_on_one_one_button"] = function(data)
         rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
         rowLayout.Padding = UDim.new(0, 6)
         rowLayout.Parent = rowFrame
-        local segmentCount = toggle4Name and 5 or 4
+        local segmentCount = 4
+        if toggle4Name then segmentCount = segmentCount + 1 end
+        if toggle5Name then segmentCount = segmentCount + 1 end
         local function createSegment(text, isToggle, initialState, callback)
                 local segmentButton = Instance.new("TextButton")
                 segmentButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -8331,11 +8564,11 @@ _G["3tog_on_one_one_button"] = function(data)
                                 enabled = not enabled
                                 render()
                                 if callback then
-                                        callback(enabled)
+                                    callback(enabled)
                                 end
                         else
                                 if callback then
-                                        callback()
+                                    callback()
                                 end
                         end
                 end)
@@ -8364,6 +8597,10 @@ _G["3tog_on_one_one_button"] = function(data)
         if toggle4Name then
                 fourthControl = createSegment(toggle4Name, true, toggle4Enabled, toggle4Callback)
         end
+        local fifthControl = nil
+        if toggle5Name then
+                fifthControl = createSegment(toggle5Name, true, toggle5Enabled, toggle5Callback)
+        end
         local buttonControl = createSegment(buttonName, false, false, buttonCallback)
         return {
                 Frame = holder,
@@ -8371,6 +8608,7 @@ _G["3tog_on_one_one_button"] = function(data)
                 Second = secondControl,
                 Third = thirdControl,
                 Fourth = fourthControl,
+                Fifth = fifthControl,
                 Button = buttonControl,
         }
 end
@@ -8779,7 +9017,7 @@ function button(data)
         actionButton.BorderSizePixel = 0
         actionButton.Position = UDim2.fromScale(0.05, 0.16)
         actionButton.Size = UDim2.fromScale(0.9, 0.56)
-        actionButton.AutoButtonColor = true
+        actionButton.AutoButtonColor = false
         actionButton.Font = Enum.Font.GothamBold
         actionButton.Text = buttonName
         actionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -9452,11 +9690,13 @@ targetActionControls = _G["3tog_on_one_one_button"]({
         name2 = "Auto TP",
         name3 = "Fling",
         name4Tog = "(V)",
+        name5Tog = "(B)",
         buttonName = "TP",
         default1 = viewing,
         default2 = autoTpEnabled,
         default3 = flingEnabled,
         default4Tog = dVoidDeadActive,
+        default5Tog = bHitEnabled,
         fun1 = function(enabled)
                 if enabled and not (manualAttackTpPlayer or manualAttackTpTarget) then
                         targetActionControls.First.SetValue(false, true)
@@ -9492,6 +9732,9 @@ targetActionControls = _G["3tog_on_one_one_button"]({
         end,
         fun4Tog = function(enabled)
                 toggleDVoidDead(enabled)
+        end,
+        fun5Tog = function(enabled)
+                toggleBHit(enabled)
         end,
         buttonfun = function()
                 if not (manualAttackTpPlayer or manualAttackTpTarget) then
@@ -10230,7 +10473,7 @@ if game.GameId == 3808081382 then
                 end,
         })
         placesDropdown.Frame.LayoutOrder = 999998
-        local bringWallHub = makeControlFrame(84)
+        local bringWallHub = makeControlFrame(178)
         bringWallHub.Parent = uiX
         bringWallHub.LayoutOrder = 999997
         bringWallHub.ClipsDescendants = true
@@ -10307,6 +10550,127 @@ if game.GameId == 3808081382 then
         makeHubTog(bwRow, "Bring Wall Combo ##", function(v)
                 _G.BringWallComboEnabled = v
         end, "BringWallComboEnabled", false, 1)
+        local bwPosLabel = Instance.new("TextLabel")
+        bwPosLabel.BackgroundTransparency = 1
+        bwPosLabel.Position = UDim2.new(0, 8, 0, 86)
+        bwPosLabel.Size = UDim2.new(1, -16, 0, 14)
+        bwPosLabel.Font = Enum.Font.GothamBold
+        bwPosLabel.Text = "Bring Position"
+        bwPosLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        bwPosLabel.TextSize = 11
+        bwPosLabel.TextXAlignment = Enum.TextXAlignment.Left
+        bwPosLabel.Parent = bringWallHub
+        local bwAxisBoxes = {}
+        local function updateWallComboBringPos()
+                local z = tonumber(bwAxisBoxes["Z"] and bwAxisBoxes["Z"].Text)
+                local y = tonumber(bwAxisBoxes["Y"] and bwAxisBoxes["Y"].Text)
+                local x = tonumber(bwAxisBoxes["X"] and bwAxisBoxes["X"].Text)
+                if x and y and z then
+                        wallComboBringCustomPos = Vector3.new(x, y, z)
+                else
+                        wallComboBringCustomPos = nil
+                end
+        end
+        local function applyBringPos(pos)
+                bwAxisBoxes["X"].Text = tostring(math.floor(pos.X * 10 + 0.5) / 10)
+                bwAxisBoxes["Y"].Text = tostring(math.floor(pos.Y * 10 + 0.5) / 10)
+                bwAxisBoxes["Z"].Text = tostring(math.floor(pos.Z * 10 + 0.5) / 10)
+                for _, axis in ipairs({"X","Y","Z"}) do
+                        setSavedControlValue("BringWallPos" .. axis, tonumber(bwAxisBoxes[axis].Text))
+                end
+                updateWallComboBringPos()
+        end
+        local axisLabels = {"Z", "Y", "X"}
+        local totalW = 1
+        local boxW = (totalW - 0.04) / 3
+        for i, axis in ipairs(axisLabels) do
+                local xStart = (i - 1) * (boxW + 0.02)
+                local axLabel = Instance.new("TextLabel")
+                axLabel.BackgroundTransparency = 1
+                axLabel.Position = UDim2.new(xStart + 0.01, 0, 0, 102)
+                axLabel.Size = UDim2.new(boxW, -2, 0, 12)
+                axLabel.Font = Enum.Font.GothamBold
+                axLabel.Text = axis
+                axLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+                axLabel.TextSize = 11
+                axLabel.TextXAlignment = Enum.TextXAlignment.Center
+                axLabel.Parent = bringWallHub
+                local savedVal = getSavedControlValue("BringWallPos" .. axis)
+                local initText = (savedVal ~= nil and tostring(savedVal)) or ""
+                local axBox = Instance.new("TextBox")
+                axBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                axBox.BackgroundTransparency = 0.5
+                axBox.BorderSizePixel = 0
+                axBox.Position = UDim2.new(xStart + 0.01, 0, 0, 114)
+                axBox.Size = UDim2.new(boxW, -2, 0, 22)
+                axBox.ClearTextOnFocus = false
+                axBox.Font = Enum.Font.GothamBold
+                axBox.PlaceholderText = axis
+                axBox.Text = initText
+                axBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+                axBox.TextSize = 11
+                axBox.TextScaled = false
+                axBox.Parent = bringWallHub
+                local axCorner = Instance.new("UICorner")
+                axCorner.CornerRadius = UDim.new(0, 4)
+                axCorner.Parent = axBox
+                axBox:GetPropertyChangedSignal("Text"):Connect(function()
+                        local t = axBox.Text
+                        local f = t:gsub("[^0-9%.%-]", "")
+                        if f ~= t then axBox.Text = f end
+                end)
+                local savedAxisText = initText
+                axBox.Focused:Connect(function()
+                        savedAxisText = axBox.Text
+                        axBox.Text = ""
+                end)
+                axBox.FocusLost:Connect(function()
+                        local t = axBox.Text
+                        local v = tonumber(t)
+                        if t == "" or v == nil then
+                                axBox.Text = savedAxisText
+                        else
+                                savedAxisText = t
+                                setSavedControlValue("BringWallPos" .. axis, v)
+                        end
+                        updateWallComboBringPos()
+                end)
+                bwAxisBoxes[axis] = axBox
+        end
+        updateWallComboBringPos()
+        local function makeBwBtn(xScale, wScale, label, onClick)
+                local btn = Instance.new("TextButton")
+                btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                btn.BackgroundTransparency = 0
+                btn.BorderSizePixel = 0
+                btn.Position = UDim2.new(xScale, 2, 0, 142)
+                btn.Size = UDim2.new(wScale, -4, 0, 26)
+                btn.AutoButtonColor = false
+                btn.Font = Enum.Font.GothamBold
+                btn.Text = label
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.TextStrokeTransparency = 1
+                btn.TextSize = 12
+                btn.Parent = bringWallHub
+                local c = Instance.new("UICorner")
+                c.CornerRadius = UDim.new(0, 6)
+                c.Parent = btn
+                btn.MouseButton1Click:Connect(onClick)
+                return btn
+        end
+        makeBwBtn(0, 0.5, "Current", function()
+                pcall(function()
+                        local char = player.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp then applyBringPos(hrp.Position) end
+                end)
+        end)
+        makeBwBtn(0.5, 0.5, "Place", function()
+                pcall(function()
+                        local cf = resolvePlaceCF(selectedPlace)
+                        if cf then applyBringPos(cf.Position) end
+                end)
+        end)
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
@@ -10643,9 +11007,10 @@ do
                 else return 3 end
         end
         function CustomUI.applyFlatState(val, silent)
+                if val == nil then val = false end
                 CustomUI.flatBtn.Text = "Flat"
-                CustomUI.flatBtn.BackgroundColor3 = CustomUI.flatColors[val]
-                CustomUI.flatBtn.TextColor3 = CustomUI.flatTextColors[val]
+                CustomUI.flatBtn.BackgroundColor3 = CustomUI.flatColors[val] or CustomUI.flatColors[false]
+                CustomUI.flatBtn.TextColor3 = CustomUI.flatTextColors[val] or CustomUI.flatTextColors[false]
                 if silent then return end
                 local cleanMode = tostring(attackTpMode):match("Custom %d+")
                 if not cleanMode then return end
@@ -11646,6 +12011,18 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if not introFinished then
                 return
         end
+        local key = input.KeyCode
+        if not UserInputService:GetFocusedTextBox() then
+                if key == Enum.KeyCode.W then
+                        holdingW = true
+                elseif key == Enum.KeyCode.S then
+                        holdingS = true
+                elseif key == Enum.KeyCode.A then
+                        holdingA = true
+                elseif key == Enum.KeyCode.D then
+                        holdingD = true
+                end
+        end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 local mousePosition = UserInputService:GetMouseLocation()
                 local guiInset = GuiService:GetGuiInset()
@@ -11816,15 +12193,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 attackTpHolding = true
                 return
-        end
-        if key == Enum.KeyCode.W then
-                holdingW = true
-        elseif key == Enum.KeyCode.S then
-                holdingS = true
-        elseif key == Enum.KeyCode.A then
-                holdingA = true
-        elseif key == Enum.KeyCode.D then
-                holdingD = true
         end
 end)
 player.CharacterRemoving:Connect(function(removingChar)
