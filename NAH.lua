@@ -1708,13 +1708,11 @@ function updateKeybindText()
                 local toggleKey = toggleKeyMap[key] or key
                 local toggleState = keybindToggles[toggleKey]
                 if key == "Places" then
-                        -- "load" = show only when a place is actively selected
                         if toggleState == "load" then
                                 appendEntry(keybindEntries[key], "block")
                         elseif toggleState == "hide" then
                                 appendEntry(keybindEntries[key], "hide")
                         end
-                        -- "off" and "block" = do not show
                 elseif toggleState == "off" or toggleState == nil then
                         appendEntry(keybindEntries[key], "block")
                 elseif toggleState == "hide" then
@@ -1769,14 +1767,12 @@ function syncPlacesKeybindDisplay()
                         local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
                         local currentItems = { "/\\" }
                         for _, v in ipairs(mapPlaces) do
-                                -- hide floor-dependent places when Floor/Roads is absent
                                 if hasFloor or not floorOnlyPlaces[v] then
                                         table.insert(currentItems, v)
                                 end
                         end
                         for _, v in ipairs(otherPlaces) do table.insert(currentItems, v) end
                         if placesDropdown then
-                                -- always strip Montain *View entries, even if they sneak back in
                                 local filtered = {}
                                 for _, v in ipairs(currentItems) do
                                         if not v:find("View") then
@@ -6441,7 +6437,6 @@ task.spawn(function()
     player.CharacterAdded:Connect(setupCharacter)
 if game.GameId == 3808081382 then
     local WhirlwindDunkID = "rbxassetid://12296113986"
-
     local WallComboIDs = {
         ["rbxassetid://17325537719"] = true,
         ["rbxassetid://10469643643"] = true,
@@ -6453,31 +6448,23 @@ if game.GameId == 3808081382 then
         ["rbxassetid://16552234590"] = true,
         ["rbxassetid://17889290569"] = true,
     }
-
     local displacedClient
-
     local function getClientModule(char)
         local handler = char:FindFirstChild("CharacterHandler")
-
         local client =
             (handler and handler:FindFirstChild("Client"))
             or (displacedClient and displacedClient.Parent ~= handler and displacedClient)
-
         return client
     end
-
     local function FireWallCombo(char)
         local client = getClientModule(char)
         local fired = false
-
         if client then
             local ok, env = pcall(function()
                 return getsenv and getsenv(client)
             end)
-
             if ok and type(env) == "table" then
                 local f19 = rawget(env, "f19")
-
                 if not f19 then
                     for _, v in pairs(env) do
                         if type(v) == "function" then
@@ -6486,17 +6473,14 @@ if game.GameId == 3808081382 then
                         end
                     end
                 end
-
                 if f19 then
                     pcall(f19, {Goal = "Wall Combo"})
                     fired = true
                 end
             end
         end
-
         if not fired then
             local communicate = char:FindFirstChild("Communicate")
-
             if communicate and communicate:IsA("RemoteEvent") then
                 communicate:FireServer({Goal = "Wall Combo"})
 				communicate:FireServer({Goal = "Wall Combo"})
@@ -6509,35 +6493,27 @@ if game.GameId == 3808081382 then
             end
         end
     end
-
     local function HandleWallComboTilt(track, combatChar)
         if not _G.WallComboEnabled then return end
         if not track.Animation then return end
         if not WallComboIDs[track.Animation.AnimationId] then return end
-
         local hrp = combatChar:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
-
         local start = tick()
-
         local conn
         conn = RunService.Heartbeat:Connect(function()
             if not _G.WallComboEnabled or tick() - start >= 0.3 then
                 conn:Disconnect()
                 return
             end
-
             local pos = hrp.Position
             local look = hrp.CFrame.LookVector
             local flat = Vector3.new(look.X,0,look.Z)
             flat = flat.Magnitude > 0.001 and flat.Unit or Vector3.new(0,0,-1)
-            
             applyCFrameBypassNoTp(
                 hrp,
                 CFrame.lookAt(pos,pos+flat) * CFrame.Angles(math.rad(-25),0,0)
             )
-            
-
 			if _G.BringWallComboEnabled and selectedPlace ~= "/\\" then
 				local placeCF = resolvePlaceCF(selectedPlace)
 				if placeCF then
@@ -6547,43 +6523,31 @@ if game.GameId == 3808081382 then
 			end
         end)
     end
-
     local function SetupCombatCharacter(combatChar)
         local handler = combatChar:FindFirstChild("CharacterHandler")
         if handler and handler:FindFirstChild("Client") then
             displacedClient = handler.Client
         end
-
         local humanoid = combatChar:WaitForChild("Humanoid")
         local animator = humanoid:WaitForChild("Animator")
-
         animator.AnimationPlayed:Connect(function(track)
-
             if _G.WhirlwindEnabled
                 and track.Animation
                 and track.Animation.AnimationId == WhirlwindDunkID then
-
                 task.wait(1.2)
-
                 local hrp = combatChar:FindFirstChild("HumanoidRootPart")
-
                 if hrp then
                     applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(0,100,0))
                 end
             end
-
             HandleWallComboTilt(track, combatChar)
         end)
-
         combatChar.DescendantAdded:Connect(function(desc)
             if not _G.WallComboEnabled then return end
-
             if desc:IsA("ObjectValue")
             and desc.Name:lower() == "wallcombo" then
-
                 local startTime = tick()
                 local timeout = desc:GetAttribute("DeleteMe") or 0.6
-
                 repeat
                     task.spawn(FireWallCombo, combatChar)
                     task.spawn(FireWallCombo, combatChar)
@@ -6596,16 +6560,13 @@ if game.GameId == 3808081382 then
             end
         end)
     end
-
     if player.Character then
         task.spawn(SetupCombatCharacter, player.Character)
     end
-
     player.CharacterAdded:Connect(function(char)
         task.spawn(SetupCombatCharacter, char)
     end)
 end
-
 end)
 task.spawn(function()
     local flingState = {
@@ -6779,7 +6740,6 @@ do
                                 displacedClient = nil
                                 originalParent = nil
                         end
-                        -- if in void and no valid TP place is set, bring client back now
                         if isVoid and displacedClient and originalParent then
                                 local hasPlace = selectedPlace and selectedPlace ~= "" and selectedPlace ~= "/\\" and resolvePlaceCF(selectedPlace) ~= nil
                                 if not hasPlace then
@@ -6974,7 +6934,6 @@ function Slider(data)
                         return
                 end
                 if typedValue > (tonumber(state.max) or 100) then
-                        -- bypass clamp: apply large value directly
                         state.value = typedValue
                         editBox.Text = tostring(typedValue)
                         if state.saveKey then
@@ -10271,8 +10230,6 @@ if game.GameId == 3808081382 then
                 end,
         })
         placesDropdown.Frame.LayoutOrder = 999998
-
-        -- Bring Wall Combo frame (sits above the Places dropdown)
         local bringWallHub = makeControlFrame(84)
         bringWallHub.Parent = uiX
         bringWallHub.LayoutOrder = 999997
@@ -10288,7 +10245,6 @@ if game.GameId == 3808081382 then
         bwTitle.TextSize = 13
         bwTitle.TextXAlignment = Enum.TextXAlignment.Left
         bwTitle.Parent = bringWallHub
-        -- Wait Before Tp textbox (auto-save / auto-load)
         local savedWWC = getSavedControlValue("WaitWallCombo")
         if savedWWC ~= nil then WAIT_WALL_COMBO = savedWWC end
         local bwWaitLabel = Instance.new("TextLabel")
@@ -10336,7 +10292,6 @@ if game.GameId == 3808081382 then
                         bwWaitBox.Text = tostring(WAIT_WALL_COMBO)
                 end
         end)
-        -- Bring Wall Combo toggle row (shifted down to make room for textbox)
         local bwRow = Instance.new("Frame")
         bwRow.BackgroundTransparency = 1
         bwRow.BorderSizePixel = 0
