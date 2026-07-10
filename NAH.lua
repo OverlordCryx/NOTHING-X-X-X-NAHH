@@ -1290,10 +1290,10 @@ local function resolvePlaceCF(name)
 		if not cutscenes then return nil end
 		if name == "Counter" then
 			local model = cutscenes:FindFirstChild("Death Cutscene")
-			return model and (model:GetPivot() * CFrame.new(0, 0, -20))
+			return model and (model:GetPivot() * CFrame.new(0, 0, -30))
 		elseif name == "Counter Up" then
 			local model = cutscenes:FindFirstChild("Death Cutscene")
-			return model and (model:GetPivot() * CFrame.new(-18, 49, -29))
+			return model and (model:GetPivot() * CFrame.new(-16, 49, -15))
 		elseif name == "Atomic Base" then
 			local model = cutscenes:FindFirstChild("Atoms")
 			return model and (model:GetPivot() * CFrame.new(0, -187, 0))
