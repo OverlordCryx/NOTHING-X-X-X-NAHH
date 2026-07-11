@@ -10066,7 +10066,7 @@ task.wait()
 Slider({
         nameSilder = "Aura Range",
         nameshow = "",
-        max = 500,
+        max = 2000,
         min = 1,
         default = auraRange,
         saveKey = "AuraRange",
