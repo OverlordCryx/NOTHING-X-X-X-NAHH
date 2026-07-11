@@ -6744,7 +6744,40 @@ if game.GameId == 3808081382 then
 					targetCF = resolvePlaceCF(selectedPlace)
 				end
 				if targetCF then
-					task.wait(WAIT_WALL_COMBO)
+					local waitTime = WAIT_WALL_COMBO
+					if _G.AutoWaitWallComboEnabled then
+						local localPing = 0
+						pcall(function()
+							local stats = game:GetService("Stats")
+							localPing = (stats.Network.ServerStatsItem["Data Ping"].Value or 0) / 1000
+						end)
+						local targetPing = 0
+						pcall(function()
+							local myPos = hrp.Position
+							local closestDist = math.huge
+							for _, p in ipairs(Players:GetPlayers()) do
+								if p ~= player and p.Character then
+									local tHrp = p.Character:FindFirstChild("HumanoidRootPart")
+									if tHrp then
+										local dist = (tHrp.Position - myPos).Magnitude
+										if dist < closestDist then
+											closestDist = dist
+											local pPing = p:GetAttribute("Ping")
+											if typeof(pPing) == "number" then
+												targetPing = pPing > 1 and pPing / 1000 or pPing
+											end
+										end
+									end
+								end
+							end
+						end)
+						local frameTime = 1 / 60
+						local localOneWay = localPing / 2
+						local targetOneWay = targetPing / 2
+						local serverProcess = frameTime * 2
+						waitTime = math.clamp(localOneWay + targetOneWay + serverProcess, 0.15, 0.28)
+					end
+					task.wait(waitTime)
 					applyCFrameBypassNoTp(hrp, targetCF)
 				end
 			end
@@ -10473,7 +10506,7 @@ if game.GameId == 3808081382 then
                 end,
         })
         placesDropdown.Frame.LayoutOrder = 999998
-        local bringWallHub = makeControlFrame(178)
+        local bringWallHub = makeControlFrame(208)
         bringWallHub.Parent = uiX
         bringWallHub.LayoutOrder = 999997
         bringWallHub.ClipsDescendants = true
@@ -10519,12 +10552,20 @@ if game.GameId == 3808081382 then
         bwWaitCorner.CornerRadius = UDim.new(0, 4)
         bwWaitCorner.Parent = bwWaitBox
         bwWaitBox:GetPropertyChangedSignal("Text"):Connect(function()
+                if _G.AutoWaitWallComboEnabled then return end
                 local t = bwWaitBox.Text
                 local f = t:gsub("[^0-9%.]", "")
                 if f ~= t then bwWaitBox.Text = f end
         end)
-        bwWaitBox.Focused:Connect(function() bwWaitBox.Text = "" end)
+        bwWaitBox.Focused:Connect(function()
+                if _G.AutoWaitWallComboEnabled then
+                        bwWaitBox:ReleaseFocus()
+                        return
+                end
+                bwWaitBox.Text = ""
+        end)
         bwWaitBox.FocusLost:Connect(function()
+                if _G.AutoWaitWallComboEnabled then return end
                 local v = tonumber(bwWaitBox.Text)
                 if v ~= nil then
                         v = math.clamp(v, 0, 100)
@@ -10535,10 +10576,44 @@ if game.GameId == 3808081382 then
                         bwWaitBox.Text = tostring(WAIT_WALL_COMBO)
                 end
         end)
+        local function updateBwWaitBoxState(autoOn)
+                if autoOn then
+                        bwWaitBox.Active = false
+                        bwWaitBox.TextEditable = false
+                        bwWaitBox.TextColor3 = Color3.fromRGB(120, 120, 120)
+                        bwWaitBox.Text = "Auto"
+                else
+                        bwWaitBox.Active = true
+                        bwWaitBox.TextEditable = true
+                        bwWaitBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        bwWaitBox.Text = tostring(WAIT_WALL_COMBO)
+                end
+        end
+        local bwAutoRow = Instance.new("Frame")
+        bwAutoRow.BackgroundTransparency = 1
+        bwAutoRow.BorderSizePixel = 0
+        bwAutoRow.Position = UDim2.new(0, 4, 0, 54)
+        bwAutoRow.Size = UDim2.new(1, -8, 0, 26)
+        bwAutoRow.Parent = bringWallHub
+        local bwAutoLayout = Instance.new("UIListLayout")
+        bwAutoLayout.FillDirection = Enum.FillDirection.Horizontal
+        bwAutoLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        bwAutoLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        bwAutoLayout.Padding = UDim.new(0, 4)
+        bwAutoLayout.Parent = bwAutoRow
+        local initialAutoVal = true
+        local savedAutoVal = getSavedControlValue("AutoWaitWallComboEnabled")
+        if savedAutoVal ~= nil then initialAutoVal = savedAutoVal == true end
+        _G.AutoWaitWallComboEnabled = initialAutoVal
+        updateBwWaitBoxState(initialAutoVal)
+        makeHubTog(bwAutoRow, "~~ Auto ~~", function(v)
+                _G.AutoWaitWallComboEnabled = v
+                updateBwWaitBoxState(v)
+        end, "AutoWaitWallComboEnabled", true, 1)
         local bwRow = Instance.new("Frame")
         bwRow.BackgroundTransparency = 1
         bwRow.BorderSizePixel = 0
-        bwRow.Position = UDim2.new(0, 4, 0, 54)
+        bwRow.Position = UDim2.new(0, 4, 0, 84)
         bwRow.Size = UDim2.new(1, -8, 0, 26)
         bwRow.Parent = bringWallHub
         local bwLayout = Instance.new("UIListLayout")
@@ -10552,7 +10627,7 @@ if game.GameId == 3808081382 then
         end, "BringWallComboEnabled", false, 1)
         local bwPosLabel = Instance.new("TextLabel")
         bwPosLabel.BackgroundTransparency = 1
-        bwPosLabel.Position = UDim2.new(0, 8, 0, 86)
+        bwPosLabel.Position = UDim2.new(0, 8, 0, 116)
         bwPosLabel.Size = UDim2.new(1, -16, 0, 14)
         bwPosLabel.Font = Enum.Font.GothamBold
         bwPosLabel.Text = "Bring Position"
@@ -10587,7 +10662,7 @@ if game.GameId == 3808081382 then
                 local xStart = (i - 1) * (boxW + 0.02)
                 local axLabel = Instance.new("TextLabel")
                 axLabel.BackgroundTransparency = 1
-                axLabel.Position = UDim2.new(xStart + 0.01, 0, 0, 102)
+                axLabel.Position = UDim2.new(xStart + 0.01, 0, 0, 132)
                 axLabel.Size = UDim2.new(boxW, -2, 0, 12)
                 axLabel.Font = Enum.Font.GothamBold
                 axLabel.Text = axis
@@ -10601,7 +10676,7 @@ if game.GameId == 3808081382 then
                 axBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
                 axBox.BackgroundTransparency = 0.5
                 axBox.BorderSizePixel = 0
-                axBox.Position = UDim2.new(xStart + 0.01, 0, 0, 114)
+                axBox.Position = UDim2.new(xStart + 0.01, 0, 0, 144)
                 axBox.Size = UDim2.new(boxW, -2, 0, 22)
                 axBox.ClearTextOnFocus = false
                 axBox.Font = Enum.Font.GothamBold
@@ -10643,7 +10718,7 @@ if game.GameId == 3808081382 then
                 btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
                 btn.BackgroundTransparency = 0
                 btn.BorderSizePixel = 0
-                btn.Position = UDim2.new(xScale, 2, 0, 142)
+                btn.Position = UDim2.new(xScale, 2, 0, 172)
                 btn.Size = UDim2.new(wScale, -4, 0, 26)
                 btn.AutoButtonColor = false
                 btn.Font = Enum.Font.GothamBold
