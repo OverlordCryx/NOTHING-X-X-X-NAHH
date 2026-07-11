@@ -938,7 +938,7 @@ local settingsStroke
 local windowOutlineStroke
 do
         settingsStroke = Instance.new("UIStroke")
-        settingsStroke.Color = Color3.fromRGB(200, 200, 200)
+        settingsStroke.Color = Color3.fromRGB(255, 255, 255)
         settingsStroke.Thickness = 1.5
         settingsStroke.Transparency = 0.05
         settingsStroke.Parent = settingsWindow
@@ -1043,6 +1043,13 @@ do
         settingsLayout.Padding = UDim.new(0, 10)
         settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
         settingsLayout.Parent = uiX
+        
+        local settingsPadding = Instance.new("UIPadding")
+        settingsPadding.PaddingTop = UDim.new(0, 5)
+        settingsPadding.PaddingBottom = UDim.new(0, 5)
+        settingsPadding.PaddingLeft = UDim.new(0, 4)
+        settingsPadding.PaddingRight = UDim.new(0, 4)
+        settingsPadding.Parent = uiX
 end
 do
         local infoHub = Instance.new("Frame")
@@ -1208,7 +1215,14 @@ task.spawn(function()
         end)
         updateFriendCache()
         _G.masterYieldCounter = _G.masterYieldCounter + 1
-        _G.MasterYieldingTasks[tostring(_G.masterYieldCounter)] = function() updateFriendCache() end
+        local lastFriendUpdate = 0
+        _G.MasterYieldingTasks[tostring(_G.masterYieldCounter)] = function()
+                local now = tick()
+                if now - lastFriendUpdate >= 5 then
+                        lastFriendUpdate = now
+                        updateFriendCache()
+                end
+        end
 end)
 keybindEntries = {}
 introFinished = true
@@ -1551,7 +1565,7 @@ function predictedReturnCFrame(myRoot, roundTripFrames)
         local ping = 0
         pcall(function()
                 local stats = game:GetService("Stats")
-                ping = (stats.Network.ServerStatsItem["Data Ping"].Value or 0) / 1000
+                ping = (stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0) / 1000
         end)
         local frameTime = 1 / 60
         local totalTime = (roundTripFrames * frameTime) + (ping * 0.5)
@@ -2173,16 +2187,28 @@ local function toggleAntiFling(enabled)
         for _, c in ipairs(antiFlingDescConn) do pcall(function() c:Disconnect() end) end
         antiFlingDescConn = {}
         if antiFlingEnabled then
-                local function disableCollision(part)
-                        if part:IsA("BasePart") and part.CanCollide then
-                                part.CanCollide = false
+                local characterPartsCache = setmetatable({}, { __mode = "k" })
+                local function registerPart(char, part)
+                        if part:IsA("BasePart") then
+                                if not characterPartsCache[char] then
+                                        characterPartsCache[char] = {}
+                                end
+                                characterPartsCache[char][part] = true
+                                pcall(function() part.CanCollide = false end)
                         end
                 end
                 local function hookCharacter(char)
                         if not char then return end
-                        for _, part in ipairs(char:GetDescendants()) do disableCollision(part) end
+                        characterPartsCache[char] = {}
+                        for _, part in ipairs(char:GetDescendants()) do
+                                registerPart(char, part)
+                        end
                         local c = char.DescendantAdded:Connect(function(part)
-                                task.defer(function() if antiFlingEnabled then disableCollision(part) end end)
+                                task.defer(function()
+                                        if antiFlingEnabled then
+                                                registerPart(char, part)
+                                        end
+                                end)
                         end)
                         antiFlingDescConn[#antiFlingDescConn + 1] = c
                 end
@@ -2205,13 +2231,19 @@ local function toggleAntiFling(enabled)
                 end)
                 antiFlingDescConn[#antiFlingDescConn + 1] = pa
                 antiFlingConnection = game:GetService("RunService").Stepped:Connect(function()
-                        for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-                                if p ~= player and p.Character then
-                                        for _, part in ipairs(p.Character:GetDescendants()) do
-                                                if part:IsA("BasePart") and part.CanCollide then
-                                                        part.CanCollide = false
+                        for char, parts in pairs(characterPartsCache) do
+                                if char and char.Parent then
+                                        for part in pairs(parts) do
+                                                if part and part.Parent then
+                                                        if part.CanCollide then
+                                                                pcall(function() part.CanCollide = false end)
+                                                        end
+                                                else
+                                                        parts[part] = nil
                                                 end
                                         end
+                                else
+                                        characterPartsCache[char] = nil
                                 end
                         end
                 end)
@@ -4412,7 +4444,31 @@ function getSelectableTargetModels()
                 end
         end
         scanFolder(Workspace:FindFirstChild("Live"))
-        scanFolder(Workspace)
+        
+        -- Throttled workspace scan for non-player dummies/objects to reduce micro-stutters
+        if now - lastWorkspaceScan > 1.5 then
+                lastWorkspaceScan = now
+                _G._cachedWorkspaceDummies = {}
+                for _, model in ipairs(Workspace:GetChildren()) do
+                        if model:IsA("Model") and model ~= currentCharacter and not Players:GetPlayerFromCharacter(model) and not Players:FindFirstChild(model.Name) and not offlinePlayers[model.Name] then
+                                local hum = model:FindFirstChildOfClass("Humanoid")
+                                local modelRoot = model:FindFirstChild("HumanoidRootPart")
+                                if hum and modelRoot then
+                                        table.insert(_G._cachedWorkspaceDummies, model)
+                                end
+                        end
+                end
+        end
+        
+        for _, model in ipairs(_G._cachedWorkspaceDummies or {}) do
+                if model.Parent == Workspace then
+                        if not seenModels[model] then
+                                seenModels[model] = true
+                                models[#models + 1] = model
+                        end
+                end
+        end
+        
         cachedSelectableModels = models
         return models
 end
@@ -4912,6 +4968,15 @@ function makeControlFrame(heightScale)
         cfGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(20, 20, 20))
         cfGradient.Rotation = 0
         cfGradient.Parent = holder
+        
+        -- Add a white border to first layer container frames
+        local cfStroke = Instance.new("UIStroke")
+        cfStroke.Color = Color3.fromRGB(255, 255, 255)
+        cfStroke.Thickness = 1
+        cfStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        cfStroke.LineJoinMode = Enum.LineJoinMode.Round
+        cfStroke.Parent = holder
+        
         return holder
 end
 function showInfo(title, text, time)
@@ -5027,7 +5092,7 @@ function toggleSeriousModeTrackerInternal(state)
                         callInfo("SERIOUS MODE", plr.Name .. " - DEATH", 7)
                         local timerId = tick()
                         SM_activeTimers[plr] = timerId
-                        task.delay(0, function()
+                        task.delay(9.45, function()
                                 if SM_activeTimers[plr] == timerId and SM_playerState[plr] == "weak" then
                                         SM_playerState[plr] = nil
                                         if char and char.Parent then
@@ -5043,10 +5108,15 @@ function toggleSeriousModeTrackerInternal(state)
         end
         local function startGlobalChecker()
                 task.spawn(function()
+                        local lastCheck = 0
                         while SeriousModeTrackerActive do
-                                for _, plr in ipairs(Players:GetPlayers()) do
-                                        if plr ~= Players.LocalPlayer then
-                                                pcall(updatePlayer, plr)
+                                local now = tick()
+                                if now - lastCheck >= 0.15 then
+                                        lastCheck = now
+                                        for _, plr in ipairs(Players:GetPlayers()) do
+                                                if plr ~= Players.LocalPlayer then
+                                                        pcall(updatePlayer, plr)
+                                                end
                                         end
                                 end
                                 task.wait()
@@ -5248,6 +5318,7 @@ local _badValueClasses = {
         IntValue = true,
         NumberValue = true,
         ObjectValue = true,
+		
         RayValue = true,
         Vector3Value = true,
         ForceField = true,
@@ -5258,7 +5329,11 @@ local function _cleanBadValues(char)
                 local cn = part.ClassName
                 if _badValueClasses[cn] then
                         if cn == "ObjectValue" and part.Name == "WallCombo" then continue end
-                        pcall(function() part:Destroy() end)
+                        if cn == "StringValue" then
+                                pcall(function() part.Parent = game:GetService("StarterPack") end)
+                        else
+                                pcall(function() part:Destroy() end)
+                        end
                 end
         end
 end
@@ -5800,9 +5875,13 @@ end)
                                                 end
                                         end
                                         game.DescendantAdded:Connect(registerCommunicate)
-                                        for _, desc in ipairs(game:GetDescendants()) do
-                                                registerCommunicate(desc)
-                                        end
+                                        task.spawn(function()
+                                                for _, service in ipairs({game:GetService("Workspace"), game:GetService("ReplicatedStorage"), game:GetService("Players")}) do
+                                                        for _, desc in ipairs(service:GetDescendants()) do
+                                                                registerCommunicate(desc)
+                                                        end
+                                                end
+                                        end)
                                         if hookfunction then
                                                 local oldConnect
                                                 oldConnect = hookfunction(rbxSignal.Connect, function(self, callback)
@@ -6747,14 +6826,19 @@ task.spawn(function()
         end
     end)
     _G.masterYieldCounter = _G.masterYieldCounter + 1
+    local lastPingReport = 0
     _G.MasterYieldingTasks[tostring(_G.masterYieldCounter)] = function()
-        if lastValidPing ~= nil then
-            local comm = player.Character and player.Character:FindFirstChild("Communicate")
-            if comm then
-                pcall(function()
-                    comm:FireServer({ Goal = "ReportPing", ms = lastValidPing })
-                end)
-            end
+        local now = tick()
+        if now - lastPingReport >= 1 then
+                lastPingReport = now
+                if lastValidPing ~= nil then
+                    local comm = player.Character and player.Character:FindFirstChild("Communicate")
+                    if comm then
+                        pcall(function()
+                            comm:FireServer({ Goal = "ReportPing", ms = lastValidPing })
+                        end)
+                    end
+                end
         end
     end
     if player.Character then
@@ -6850,7 +6934,7 @@ end
 						local localPing = 0
 						pcall(function()
 							local stats = game:GetService("Stats")
-							localPing = (stats.Network.ServerStatsItem["Data Ping"].Value or 0) / 1000
+							localPing = (stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0) / 1000
 						end)
 						local targetPing = 0
 						local closestTargetPlayer = nil
@@ -7054,7 +7138,7 @@ do
                 local function updateMonitoring()
                         local char = LocalPlayer.Character
                         if not char then
-                                displacedClient = nil
+                                                                displacedClient = nil
                                 originalParent = nil
                                 return
                         end
@@ -7103,7 +7187,7 @@ do
                                                 displacedClient.Parent = originalParent
                                         end
                                 end)
-                                displacedClient = nil
+                                                                displacedClient = nil
                                 originalParent = nil
                         end
                         if isVoid and displacedClient and originalParent then
@@ -7124,7 +7208,7 @@ do
                                                 displacedClient:Destroy()
                                         end
                                 end)
-                                displacedClient = nil
+                                                                displacedClient = nil
                                 originalParent = nil
                         end
                 end
