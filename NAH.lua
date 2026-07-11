@@ -2523,11 +2523,11 @@ function toggleBHit(state)
                                                                 end
                                                                 if comboPos then
                                                                         local playerDistToCombo = (myRoot.Position - comboPos).Magnitude
-                                                                        if playerDistToCombo <= 150 then
+                                                                        if playerDistToCombo <= 33 then
                                                                                 if not localPlayerInComboAreaStartTick then
                                                                                         localPlayerInComboAreaStartTick = tick()
                                                                                 end
-                                                                                if tick() - localPlayerInComboAreaStartTick <= 1.5 then
+                                                                                if tick() - localPlayerInComboAreaStartTick <= 1.1 then
                                                                                         isBypassingTargetDistance = true
                                                                                 end
                                                                         else
@@ -2568,11 +2568,11 @@ function toggleBHit(state)
                                                                 else
                                                                         flingDir = flingDir.Unit
                                                                 end
-                                                                vel = flingDir * flingPower + Vector3.new(0, flingPower * 0.5, 0)
+                                                                vel = flingDir * flingPower + Vector3.new(0, flingPower * 0.2, 0)
                                                                 rot = Vector3.new(flingPower, flingPower, flingPower)
                                                         end
                                                         pcall(function() myRoot:SetAttribute("IsAttackTP", true) end)
-                                                        local hitCF = CFrame.lookAt(targetRoot.Position + targetRoot.CFrame.LookVector * 1, targetRoot.Position)
+                                                        local hitCF = CFrame.lookAt(targetRoot.Position + targetRoot.CFrame.LookVector * 3, targetRoot.Position)
                                                         overpowerRootState(myRoot, hitCF, vel, rot)
                                                         nextFrame()
                                                         pcall(function() myRoot:SetAttribute("IsAttackTP", false) end)
@@ -9952,23 +9952,39 @@ task.spawn(function()
         orbitAdaptBody = false
         orbitAdaptPosition = false
         orbitAdaptRotation = false
-        function resolveOrbitTarget()
-                if manualAttackTpPlayer and manualAttackTpPlayer.Parent == Players and manualAttackTpPlayer ~= player then
-                        local tracked = getTrackedPlayerTargetModel(manualAttackTpPlayer)
-                        if tracked and tracked.Parent ~= nil then
-                                return tracked
-                        end
-                        return nil
+        local function hasValidSelectedOrbitTarget()
+                if manualAttackTpPlayer then
+                        return manualAttackTpPlayer.Parent == Players
                 end
-                if manualAttackTpTarget and manualAttackTpTarget.Parent ~= nil then
-                        return manualAttackTpTarget
+                if manualAttackTpTargetName ~= nil or manualAttackTpTarget ~= nil then
+                        local targetName = manualAttackTpTargetName or (manualAttackTpTarget and manualAttackTpTarget.Name)
+                        if targetName then
+                                local wasPlayer = false
+                                for _, p in ipairs(Players:GetPlayers()) do
+                                        if p.Name == targetName then
+                                                wasPlayer = true
+                                                break
+                                        end
+                                end
+                                if wasPlayer then
+                                        local p = Players:FindFirstChild(targetName)
+                                        return p ~= nil and p.Parent == Players
+                                end
+                        end
+                        return true
+                end
+                return false
+        end
+        function resolveOrbitTarget()
+                local model = resolveManualAttackTpTargetModel()
+                if model and model.Parent ~= nil then
+                        return model
                 end
                 return nil
         end
         function startOrbit()
                 stopOrbit()
-                local preCheckTarget = resolveOrbitTarget()
-                if not preCheckTarget or preCheckTarget.Parent == nil then
+                if not hasValidSelectedOrbitTarget() then
                         updateOrbitToggleButton()
                         syncOrbitKeybindDisplay()
                         return
@@ -9976,12 +9992,16 @@ task.spawn(function()
                 orbitEnabled = true
                 orbitAngleH = 0
                 orbitAngleV = 0
-                orbitCachedTarget = preCheckTarget
+                orbitCachedTarget = resolveOrbitTarget()
                 updateOrbitToggleButton()
                 syncOrbitKeybindDisplay()
                 orbitConnection = RunService.Heartbeat:Connect(function(dt)
                         if not orbitEnabled then
                                 if orbitConnection then orbitConnection:Disconnect(); orbitConnection = nil end
+                                return
+                        end
+                        if not hasValidSelectedOrbitTarget() then
+                                stopOrbit()
                                 return
                         end
                         local character = player.Character
@@ -9990,12 +10010,10 @@ task.spawn(function()
                         orbitCachedTarget = resolveOrbitTarget()
                         local targetModel = orbitCachedTarget
                         if not targetModel or targetModel.Parent == nil then
-                                stopOrbit()
                                 return
                         end
                         local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
                         if not targetRoot then
-                                stopOrbit()
                                 return
                         end
                         local targetPos = targetRoot.Position
