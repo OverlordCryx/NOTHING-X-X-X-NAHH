@@ -456,7 +456,6 @@ do
 end
 keybindFrame.Visible = false
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
--- ── Loading notification loop ──────────────────────────────────────────────
 task.spawn(function()
         local _sg = game:GetService("StarterGui")
         while not uiLoaded do
@@ -469,7 +468,6 @@ task.spawn(function()
                 end)
                 task.wait(0.08)
         end
-        -- brief "ready" flash
         pcall(function()
                 _sg:SetCore("SendNotification", {
                         Title = "NOTHING X",
@@ -1065,7 +1063,6 @@ do
         settingsLayout.Padding = UDim.new(0, 10)
         settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
         settingsLayout.Parent = uiX
-        
         local settingsPadding = Instance.new("UIPadding")
         settingsPadding.PaddingTop = UDim.new(0, 5)
         settingsPadding.PaddingBottom = UDim.new(0, 5)
@@ -2584,7 +2581,6 @@ function setAuraFlingEnabled(enabled)
                                                                 overpowerRootState(myRoot, targetRoot.CFrame, Vector3.zero, Vector3.zero)
                                                                 nextFrame()
                                                                 if not auraFlingEnabled or not myRoot.Parent then
-                                                                        -- IsAttackTP stays true while flinging, cleaned up on exit
                                                                         break
                                                                 end
                                                                 local flingDir = (targetRoot.CFrame.Position - myPosition)
@@ -2600,7 +2596,6 @@ function setAuraFlingEnabled(enabled)
                                                                         Vector3.new(flingPower, flingPower, flingPower)
                                                                 )
                                                                 nextFrame()
-                                                                -- IsAttackTP stays true while aura fling loop is running
                                                                 if not auraFlingEnabled or not myRoot.Parent then
                                                                         pcall(function() myRoot:SetAttribute("IsAttackTP", false) end)
                                                                         break
@@ -4487,8 +4482,6 @@ function getSelectableTargetModels()
                 end
         end
         scanFolder(Workspace:FindFirstChild("Live"))
-        
-        -- Throttled workspace scan for non-player dummies/objects to reduce micro-stutters
         if now - lastWorkspaceScan > 1.5 then
                 lastWorkspaceScan = now
                 _G._cachedWorkspaceDummies = {}
@@ -4502,7 +4495,6 @@ function getSelectableTargetModels()
                         end
                 end
         end
-        
         for _, model in ipairs(_G._cachedWorkspaceDummies or {}) do
                 if model.Parent == Workspace then
                         if not seenModels[model] then
@@ -4511,7 +4503,6 @@ function getSelectableTargetModels()
                         end
                 end
         end
-        
         cachedSelectableModels = models
         return models
 end
@@ -4651,7 +4642,6 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
                         local stats = game:GetService("Stats")
                         ping = (stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0) / 1000
                 end)
-                -- Dynamic lead prediction (ping + 120ms baseline compensation)
                 baseLeadTime = (ping > 0 and (ping * 1.5) or 0.12) + 0.05
         end
         local speed = targetVelocity.Magnitude
@@ -4724,8 +4714,6 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
                 local dist = isRagdoll and 2.5 or 4.0
                 finalCFrame = CFrame.lookAt(predictedTargetPosition + (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
         elseif mode == "Middle" then
-                -- Use target velocity to match their movement + zero our own velocity on arrival
-                -- Small 0.05 stud offset prevents physics engine from treating us as overlapping
                 finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, verticalOffset + 0.05, 0), predictedTargetPosition + Vector3.new(0, 1, 0), worldUpVector)
         elseif string.find(tostring(mode), "Custom") then
                 local cleanMode = tostring(mode):match("Custom %d+")
@@ -5022,15 +5010,12 @@ function makeControlFrame(heightScale)
         cfGradient.Color = ColorSequence.new(Color3.fromRGB(20, 20, 20), Color3.fromRGB(20, 20, 20))
         cfGradient.Rotation = 0
         cfGradient.Parent = holder
-        
-        -- Add a white border to first layer container frames
         local cfStroke = Instance.new("UIStroke")
         cfStroke.Color = Color3.fromRGB(255, 255, 255)
         cfStroke.Thickness = 1
         cfStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         cfStroke.LineJoinMode = Enum.LineJoinMode.Round
         cfStroke.Parent = holder
-        
         return holder
 end
 function showInfo(title, text, time)
@@ -5280,9 +5265,6 @@ end
 local CharacterCleanupEnabled = false
 local antiZeroEnabled = false
 local ModConnections = {}
--- ── No Stun / Zero / No-tp conflict fix ───────────────────────────────────
--- When Zero or No Stun acts (destroys movers/constraints), we set this flag
--- so No-tp allows any immediate server position corrections instead of fighting.
 local _nxDefenseActing = false
 local _nxDefenseActingUntil = 0
 local function _nxMarkDefenseActing()
@@ -5355,8 +5337,6 @@ local function _isBadWeld(v, char)
 end
 local function _isProtectedWeld(v, char)
         if not char then return false end
-
-        -- Safe property fetch to avoid Roblox indexing exceptions
         local p0, p1
         if v:IsA("RigidConstraint") then
                 local ok0, a0 = pcall(function() return v.Attachment0 end)
@@ -5369,20 +5349,14 @@ local function _isProtectedWeld(v, char)
                 p0 = ok0 and part0
                 p1 = ok1 and part1
         end
-
-        -- 1. MeshPart: nie usuwaj spawnów połączonych z MeshPart lub będących wewnątrz MeshPart
         if p0 and p0:IsA("MeshPart") then return true end
         if p1 and p1:IsA("MeshPart") then return true end
         if v.Parent and v.Parent:IsA("MeshPart") then return true end
-
-        -- 2. Model: nie usuwaj spawnów wewnątrz dowolnego pod-Modelu postaci (nie samej postaci)
         local ancestor = v.Parent
         while ancestor and ancestor ~= char do
                 if ancestor:IsA("Model") then return true end
                 ancestor = ancestor.Parent
         end
-
-        -- 3. Sprawdź czy połączone części są wewnątrz pod-Modelu postaci
         for _, part in ipairs({p0, p1}) do
                 if part then
                         local anc = part.Parent
@@ -5392,7 +5366,6 @@ local function _isProtectedWeld(v, char)
                         end
                 end
         end
-
         return false
 end
 local function _handleNewDesc(v, char)
@@ -5426,7 +5399,6 @@ local function _handleNewDesc(v, char)
                         if hrp then
                                 hrp.AssemblyLinearVelocity  = Vector3.zero
                                 hrp.AssemblyAngularVelocity = Vector3.zero
-                                -- signal No-tp to pause so it doesn't fight us
                                 _nxMarkDefenseActing()
                                 pcall(function() hrp:SetAttribute("IsTrashOperation", true) end)
                                 task.delay(0.15, function()
@@ -5451,9 +5423,7 @@ local function _handleNewDesc(v, char)
                         local par = v.Parent
                         if par and (par:IsA("Script") or par:IsA("LocalScript") or par:IsA("ModuleScript")) then return end
                         if cn == "ObjectValue" and v.Name == "WallCombo" then
-                                -- keep WallCombo
                         elseif (cn == "WeldConstraint" or cn == "Weld" or cn == "ManualWeld" or cn == "RigidConstraint" or cn == "Glue" or cn == "Snap") and _isProtectedWeld(v, char) then
-                                -- keep # model welds
                         else
                                 pcall(function() v:Destroy() end)
                         end
@@ -5463,6 +5433,18 @@ local function _handleNewDesc(v, char)
         if CharacterCleanupEnabled then
                 if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
                         pcall(function() v:Destroy() end)
+                        _nxMarkDefenseActing()
+                        local hrp2 = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp2 then
+                                pcall(function() hrp2:SetAttribute("IsTrashOperation", true) end)
+                                task.delay(0.15, function()
+                                        pcall(function()
+                                                if hrp2 and hrp2.Parent then
+                                                        hrp2:SetAttribute("IsTrashOperation", false)
+                                                end
+                                        end)
+                                end)
+                        end
                 end
         end
 end
@@ -5697,7 +5679,6 @@ local function noTpStartForCharacter(character)
         if not character then return end
         task.wait(0.25)
         if not noTpEnabled or not character.Parent then return end
-        -- wait for humanoid
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if not humanoid then
                 local t = 0
@@ -5708,7 +5689,6 @@ local function noTpStartForCharacter(character)
                 until humanoid or t > 300 or not noTpEnabled or not character.Parent
         end
         if not humanoid or not noTpEnabled or not character.Parent then return end
-        -- wait for root part
         local hrp = humanoid.RootPart
         if not hrp then
                 local t = 0
@@ -5719,62 +5699,75 @@ local function noTpStartForCharacter(character)
                 until hrp or t > 300 or not noTpEnabled or not character.Parent
         end
         if not hrp or not noTpEnabled or not character.Parent then return end
-
         local lastCF = hrp.CFrame
         local blocking = false
-
-        -- track lastCF every heartbeat using live refs
+        local trackedHrp = hrp
+        local changedConn = nil
+        local function shouldPassThrough(liveHrp)
+                if liveHrp:GetAttribute("IsAttackTP") then return true end
+                if liveHrp:GetAttribute("IsTrashOperation") then return true end
+                if _nxIsDefenseActing() then return true end
+                local isSelfFlinging = active or bHitEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or orbitEnabled or autoTpEnabled or attackTpEnabled or attackTpHolding or _G.BringWallComboEnabled or voidDeadActive or isSafeZoneActive()
+                if isSelfFlinging then return true end
+                if flying then
+                        local dist = (liveHrp.Position - lastCF.Position).Magnitude
+                        if dist < 120 then return true end
+                end
+                return false
+        end
+        local function hookHrp(newHrp)
+                if changedConn then
+                        pcall(function() changedConn:Disconnect() end)
+                        changedConn = nil
+                end
+                trackedHrp = newHrp
+                changedConn = newHrp:GetPropertyChangedSignal("CFrame"):Connect(function()
+                        if not noTpEnabled then return end
+                        if blocking then return end
+                        local liveHrp = character:FindFirstChild("HumanoidRootPart")
+                        if not liveHrp then return end
+                        if shouldPassThrough(liveHrp) then return end
+                        blocking = true
+                        local savedCF = lastCF
+                        pcall(function()
+                                liveHrp.CFrame = savedCF
+                        end)
+                        task.defer(function()
+                                blocking = false
+                        end)
+                end)
+        end
+        hookHrp(hrp)
         local heartbeatConn = RunService.Heartbeat:Connect(function()
                 if not noTpEnabled then return end
-                if blocking then return end
                 pcall(function()
-                        local h = character:FindFirstChildOfClass("Humanoid")
-                        local r = h and h.RootPart
-                        if r and r.Parent then
-                                lastCF = r.CFrame
+                        local liveHrp = character:FindFirstChild("HumanoidRootPart")
+                        if not liveHrp then return end
+                        if liveHrp ~= trackedHrp then
+                                hookHrp(liveHrp)
+                                lastCF = liveHrp.CFrame
+                                blocking = false
+                                return
                         end
+                        if blocking then return end
+                        lastCF = liveHrp.CFrame
                 end)
         end)
-
-        -- block teleports via CFrame property change — re-fetch hrp live each call
-        local changedConn = hrp:GetPropertyChangedSignal("CFrame"):Connect(function()
-                if not noTpEnabled then return end
-                if blocking then return end
-                -- re-fetch live hrp so we don't use stale ref after respawn
-                local liveHrp = character:FindFirstChild("HumanoidRootPart")
-                if not liveHrp then return end
-                if liveHrp:GetAttribute("IsAttackTP") then return end
-                if liveHrp:GetAttribute("IsTrashOperation") then return end
-                -- no conflict with Zero / No Stun when they are actively cleaning up
-                if _nxIsDefenseActing() then return end
-                local isSelfFlinging = active or bHitEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or orbitEnabled or autoTpEnabled or attackTpEnabled or attackTpHolding or _G.BringWallComboEnabled or voidDeadActive or isSafeZoneActive()
-                if flying and not isSelfFlinging then
-                        local expectedPos = lastCF.Position
-                        local actualPos = liveHrp.Position
-                        local dist = (actualPos - expectedPos).Magnitude
-                        if dist < 120 then return end
-                elseif isSelfFlinging then
-                        return
-                end
-                blocking = true
-                pcall(function()
-                        liveHrp.CFrame = lastCF
-                end)
-                task.defer(function()
-                        blocking = false
-                end)
-        end)
-
-        -- on death, do NOT disconnect. Keep No-TP active on the corpse
-        -- to prevent teleports while dead. Cleanup happens on CharacterRemoving.
-        local diedConn
-        diedConn = humanoid.Died:Connect(function()
+        local diedConn = humanoid.Died:Connect(function()
                 blocking = false
         end)
-
         noTpCleanupConnections()
         currentNoTpChar = character
-        currentNoTpConns = { heartbeatConn, changedConn, diedConn }
+        currentNoTpConns = {
+                heartbeatConn,
+                diedConn,
+                { Disconnect = function()
+                        if changedConn then
+                                pcall(function() changedConn:Disconnect() end)
+                                changedConn = nil
+                        end
+                end }
+        }
 end
 function toggleNoTp(state)
         noTpEnabled = state == true
@@ -6267,7 +6260,6 @@ end)
                                 if CharacterCleanupEnabled then
                                         if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
                                                 pcall(function() v:Destroy() end)
-                                                -- signal No-tp so it doesn't fight No Stun's recovery
                                                 _nxMarkDefenseActing()
                                                 local human = Char:FindFirstChildOfClass("Humanoid")
                                                 if human then
@@ -6302,7 +6294,6 @@ end)
                                                         hrp.AssemblyLinearVelocity = Vector3.zero
                                                         hrp.AssemblyAngularVelocity = Vector3.zero
                                                 end)
-                                                -- signal No-tp to pause (avoid fight between Zero and No-tp)
                                                 _nxMarkDefenseActing()
                                                 pcall(function() hrp:SetAttribute("IsTrashOperation", true) end)
                                                 task.delay(0.15, function()
@@ -6321,7 +6312,6 @@ end)
                                                 end)
                                         end
                                 end
-                                -- Weld deletion disabled by user request
                         end
                 end
                 for _, v in ipairs(Char:GetDescendants()) do
@@ -6342,7 +6332,6 @@ end)
                 end
                 task.wait()
                 if CharacterCleanupEnabled then usunPusteAccessory(Char) end
-                -- Cleanup old characters from the cache to prevent memory leaks
                 speaker.CharacterRemoving:Connect(function(oldChar)
                         characterMotor6DsByChar[oldChar] = nil
                 end)
@@ -6882,64 +6871,27 @@ task.spawn(function()
         makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/2)
         makeHubTog(row4, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
         local row5 = makeRow(150)
-        makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/4)
-        -- zawsze startuj OFF przy załadowaniu
-        setSavedControlValue("NoStunEnabled", false)
-        setSavedControlValue("AntiZeroEnabled", false)
-        setSavedControlValue("NoTpEnabled", false)
-        makeHubTog(row5, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/4)
-        local _zeroOwnedNoStun = false
-        makeHubTog(row5, "Zero", function(v)
+        makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/2)
+        makeHubTog(row5, "Null", function(v)
+                toggleCharacterCleanupRuntime(v)
                 toggleAntiZero(v)
                 toggleAntiGrab(v)
                 toggleAntiGrabZero(v)
-                if v then
-                        if not CharacterCleanupEnabled then
-                                toggleCharacterCleanupRuntime(true)
-                                _zeroOwnedNoStun = true
-                        else
-                                _zeroOwnedNoStun = false
-                        end
-                else
-                        if _zeroOwnedNoStun then
-                                toggleCharacterCleanupRuntime(false)
-                                _zeroOwnedNoStun = false
-                        end
-                end
-        end, "AntiZeroEnabled", false, 1/4)
-        makeHubTog(row5, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/4)
+                toggleNoTp(v)
+        end, "NullEnabled", false, 1/2)
     else
         local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row3 = makeRow(90)
-        -- zawsze startuj OFF przy załadowaniu
-        setSavedControlValue("NoStunEnabled", false)
-        setSavedControlValue("AntiZeroEnabled", false)
-        setSavedControlValue("NoTpEnabled", false)
-        makeHubTog(row3, "No Stun", function(v) toggleCharacterCleanupRuntime(v) end, "NoStunEnabled", false, 1/3)
-        local _zeroOwnedNoStun2 = false
-        makeHubTog(row3, "Zero", function(v)
+        makeHubTog(row3, "Null", function(v)
+                toggleCharacterCleanupRuntime(v)
                 toggleAntiZero(v)
                 toggleAntiGrab(v)
                 toggleAntiGrabZero(v)
-                if v then
-                        if not CharacterCleanupEnabled then
-                                toggleCharacterCleanupRuntime(true)
-                                _zeroOwnedNoStun2 = true
-                        else
-                                _zeroOwnedNoStun2 = false
-                        end
-                else
-                        if _zeroOwnedNoStun2 then
-                                toggleCharacterCleanupRuntime(false)
-                                _zeroOwnedNoStun2 = false
-                        end
-                end
-        end, "AntiZeroEnabled", false, 1/3)
-        local row4b = makeRow(120)
-        makeHubTog(row4b, "No-tp", function(v) toggleNoTp(v) end, "NoTpEnabled", false, 1/2)
+                toggleNoTp(v)
+        end, "NullEnabled", false, 1/3)
     end
     do
         local rowJump = makeRow(isTSB and 180 or 150)
@@ -13133,8 +13085,6 @@ bodyLockEnabled = false
                                         resolvedAngular = Vector3.new(power * 2, power * 2, power * 2)
                                         resolvedLinear = resolvedLinear + (characterRoot.CFrame.LookVector * power * 0.5)
                                 elseif (attackTpMode == "Middle") then
-                                        -- Middle mode: zero OUR velocity instantly so physics can't push us away
-                                        -- We match target's velocity so we drift with them
                                         resolvedLinear = targetVelocity or Vector3.zero
                                         resolvedAngular = Vector3.zero
                                 end
@@ -13175,9 +13125,6 @@ bodyLockEnabled = false
                 pendingTeleportToSelectedPlayer = false
         end
         end)
-        -- NOTE: Stepped TP loop removed. Heartbeat fires AFTER physics which is
-        -- the correct time to override position (last write wins before render).
-        -- Having both Stepped+Heartbeat caused double-TP jitter every frame.
 end
 UserInputService.InputEnded:Connect(function(input)
         local key = input.KeyCode
@@ -13203,7 +13150,6 @@ uiLoaded = true
 for _, cb in ipairs(queuedCallbacks) do
         pcall(cb)
 end
--- restore keybind display now that all toggles have loaded their saved states
 task.defer(function()
         pcall(updateKeybindText)
         pcall(syncSpeedKeybindDisplay)
