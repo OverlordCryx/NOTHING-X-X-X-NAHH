@@ -457,7 +457,6 @@ do
 end
 keybindFrame.Visible = false
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
--- NX-LOAD overlay
 local _nxSG = Instance.new("ScreenGui")
 _nxSG.Name = "NX-LOAD"
 _nxSG.ResetOnSpawn = false
@@ -465,7 +464,6 @@ _nxSG.IgnoreGuiInset = true
 _nxSG.DisplayOrder = 100000000
 _nxSG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 _nxSG.Parent = CoreGui
-
 local _nxFrame = Instance.new("Frame")
 _nxFrame.Name = "LoadFrame"
 _nxFrame.Size = UDim2.fromOffset(300, 200)
@@ -476,7 +474,6 @@ _nxFrame.BackgroundTransparency = 0.1
 _nxFrame.BorderSizePixel = 0
 _nxFrame.ZIndex = 10
 _nxFrame.Parent = _nxSG
-
 do
         local _nxCorner = Instance.new("UICorner")
         _nxCorner.CornerRadius = UDim.new(0, 10)
@@ -487,7 +484,6 @@ do
         _nxStroke.Transparency = 0
         _nxStroke.Parent = _nxFrame
 end
-
 local _nxTitle = Instance.new("TextLabel")
 _nxTitle.Name = "NXTitle"
 _nxTitle.Size = UDim2.new(1, 0, 0.5, 0)
@@ -502,7 +498,6 @@ _nxTitle.TextYAlignment = Enum.TextYAlignment.Center
 _nxTitle.TextStrokeTransparency = 1
 _nxTitle.ZIndex = 11
 _nxTitle.Parent = _nxFrame
-
 local _nxPct = Instance.new("TextLabel")
 _nxPct.Name = "NXPercent"
 _nxPct.Size = UDim2.new(1, 0, 0.5, 0)
@@ -517,7 +512,6 @@ _nxPct.TextYAlignment = Enum.TextYAlignment.Center
 _nxPct.TextStrokeTransparency = 1
 _nxPct.ZIndex = 11
 _nxPct.Parent = _nxFrame
-
 task.spawn(function()
         local _t0 = os.clock()
         local _simDur = 4.0
@@ -1626,7 +1620,6 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
                 end)
         end)
 end
--- DASH (Q) Bypass Only - Other bypasses removed
 function applyCFrameBypassNoTp(rootPart, cframe)
         if not rootPart then return end
         if cframe then
@@ -3961,7 +3954,6 @@ function startSetBackTravel()
 end
 local setBackHoldToken = 0
 local setBackKeyDown = false
-
 function handleSetBackKeybind()
         if isSafeZoneActive() then return end
         if getTrashState.blockSetBack
@@ -3985,28 +3977,23 @@ function handleSetBackKeybind()
         setBackHoldToken = (setBackHoldToken or 0) + 1
         local myToken = setBackHoldToken
         local pressTime = tick()
-        -- Hold timer: after 1.1s, save or clear
         task.delay(1.1, function()
                 if myToken ~= setBackHoldToken then return end
                 if not setBackKeyDown then return end
-                -- Key is still held: save or clear
                 if setBackSavedCFrame then
                         clearSetBackPosition()
                 else
                         saveSetBackPosition()
                 end
-                -- Invalidate so key-release won't also TP
                 setBackHoldToken = setBackHoldToken + 1
         end)
 end
-
 function handleSetBackKeybindReleased()
         if not setBackKeyDown then return end
         setBackKeyDown = false
         local myToken = setBackHoldToken
-        -- If token still matches, hold didn't fire → it was a quick press
         if myToken == setBackHoldToken then
-                setBackHoldToken = setBackHoldToken + 1 -- cancel hold timer
+                setBackHoldToken = setBackHoldToken + 1
                 if setBackSavedCFrame then
                         startSetBackTravel()
                 end
@@ -5706,7 +5693,6 @@ function toggleAntiGrabZero(state)
                 end
         end
 end
--- NoTp: blokuje zewnętrzne teleporty, przepuszcza własne (IsAttackTP)
 local _noTpEnabled = false
 local _noTpLastCF = nil
 local _noTpSaving = false
@@ -5714,7 +5700,6 @@ local _noTpHeartbeat = nil
 local _noTpCFrameConn = nil
 local _noTpDiedConn = nil
 local _noTpCharConn = nil
-
 local function _noTpStop(char)
         _noTpEnabled = false
         _noTpLastCF = nil
@@ -5723,7 +5708,6 @@ local function _noTpStop(char)
         if _noTpCFrameConn then pcall(function() _noTpCFrameConn:Disconnect() end); _noTpCFrameConn = nil end
         if _noTpDiedConn then pcall(function() _noTpDiedConn:Disconnect() end); _noTpDiedConn = nil end
 end
-
 local function _noTpStart()
         _noTpStop()
         _noTpEnabled = true
@@ -5734,8 +5718,6 @@ local function _noTpStart()
         if not humanoid then return end
         local rootPart = humanoid.RootPart
         if not rootPart then return end
-
-        -- Zapisuj ostatni CFrame co heartbeat
         _noTpHeartbeat = RealRunService.Heartbeat:Connect(function()
                 if not _noTpEnabled then return end
                 if _noTpSaving then return end
@@ -5746,15 +5728,12 @@ local function _noTpStart()
                         end
                 end)
         end)
-
-        -- Na zmianę CFrame: jeśli to NIE jest nasz własny TP → cofnij
         _noTpCFrameConn = rootPart:GetPropertyChangedSignal("CFrame"):Connect(function()
                 if not _noTpEnabled then return end
                 if _noTpSaving then return end
                 pcall(function()
                         local rp = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") and lp.Character:FindFirstChildOfClass("Humanoid").RootPart
                         if not rp then return end
-                        -- Przepuść własne teleporty (AttackTP, SetBack, itp.)
                         if rp:GetAttribute("IsAttackTP") then return end
                         if not _noTpLastCF then return end
                         _noTpSaving = true
@@ -5763,17 +5742,13 @@ local function _noTpStart()
                         _noTpSaving = false
                 end)
         end)
-
-        -- Reset po śmierci
         _noTpDiedConn = humanoid.Died:Connect(function()
                 _noTpStop()
         end)
 end
-
 function toggleNoTp(state)
         if state then
                 local lp = game:GetService("Players").LocalPlayer
-                -- Podepnij re-start po respawnie
                 if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
                 _noTpCharConn = lp.CharacterAdded:Connect(function(char)
                         if not _noTpEnabled and not state then return end
