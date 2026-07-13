@@ -84,6 +84,7 @@ function nextFrame()
 end
 local player = Players.LocalPlayer
 local uiLoaded = false
+local _nxLoadComplete = false
 local queuedCallbacks = {}
 local characterSpawnTime = os.clock()
 local espOverlayConfig = {
@@ -456,25 +457,81 @@ do
 end
 keybindFrame.Visible = false
 keybindFrame.AutomaticSize = Enum.AutomaticSize.XY
+-- NX-LOAD overlay
+local _nxSG = Instance.new("ScreenGui")
+_nxSG.Name = "NX-LOAD"
+_nxSG.ResetOnSpawn = false
+_nxSG.IgnoreGuiInset = true
+_nxSG.DisplayOrder = 100000000
+_nxSG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+_nxSG.Parent = CoreGui
+
+local _nxFrame = Instance.new("Frame")
+_nxFrame.Name = "LoadFrame"
+_nxFrame.Size = UDim2.fromOffset(300, 200)
+_nxFrame.AnchorPoint = Vector2.new(1, 1)
+_nxFrame.Position = UDim2.new(1, -10, 1, -10)
+_nxFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+_nxFrame.BackgroundTransparency = 0
+_nxFrame.BorderSizePixel = 0
+_nxFrame.ZIndex = 10
+_nxFrame.Parent = _nxSG
+
+do
+        local _nxCorner = Instance.new("UICorner")
+        _nxCorner.CornerRadius = UDim.new(0, 10)
+        _nxCorner.Parent = _nxFrame
+        local _nxStroke = Instance.new("UIStroke")
+        _nxStroke.Color = Color3.fromRGB(255, 255, 255)
+        _nxStroke.Thickness = 1.5
+        _nxStroke.Transparency = 0
+        _nxStroke.Parent = _nxFrame
+end
+
+local _nxTitle = Instance.new("TextLabel")
+_nxTitle.Name = "NXTitle"
+_nxTitle.Size = UDim2.new(1, 0, 0.5, 0)
+_nxTitle.Position = UDim2.fromScale(0, 0)
+_nxTitle.BackgroundTransparency = 1
+_nxTitle.Text = "NOTHING - X"
+_nxTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+_nxTitle.TextSize = 22
+_nxTitle.Font = Enum.Font.GothamBold
+_nxTitle.TextXAlignment = Enum.TextXAlignment.Center
+_nxTitle.TextYAlignment = Enum.TextYAlignment.Center
+_nxTitle.TextStrokeTransparency = 1
+_nxTitle.ZIndex = 11
+_nxTitle.Parent = _nxFrame
+
+local _nxPct = Instance.new("TextLabel")
+_nxPct.Name = "NXPercent"
+_nxPct.Size = UDim2.new(1, 0, 0.5, 0)
+_nxPct.Position = UDim2.fromScale(0, 0.5)
+_nxPct.BackgroundTransparency = 1
+_nxPct.Text = "0%"
+_nxPct.TextColor3 = Color3.fromRGB(180, 180, 180)
+_nxPct.TextSize = 18
+_nxPct.Font = Enum.Font.Gotham
+_nxPct.TextXAlignment = Enum.TextXAlignment.Center
+_nxPct.TextYAlignment = Enum.TextYAlignment.Center
+_nxPct.TextStrokeTransparency = 1
+_nxPct.ZIndex = 11
+_nxPct.Parent = _nxFrame
+
 task.spawn(function()
-        local _sg = game:GetService("StarterGui")
+        local _t0 = os.clock()
+        local _simDur = 4.0
         while not uiLoaded do
-                pcall(function()
-                        _sg:SetCore("SendNotification", {
-                                Title = "NOTHING X",
-                                Text  = "Loading...",
-                                Duration = 0.1,
-                        })
-                end)
-                task.wait(0.08)
+                local _prog = math.min(0.9, (os.clock() - _t0) / _simDur)
+                _nxPct.Text = tostring(math.floor(_prog * 100)) .. "%"
+                task.wait(0.05)
         end
-        pcall(function()
-                _sg:SetCore("SendNotification", {
-                        Title = "NOTHING X",
-                        Text  = "Ready!",
-                        Duration = 1.5,
-                })
-        end)
+        _nxPct.Text = "100%"
+        task.wait(0.35)
+        _nxPct.Text = "_^"
+        task.wait(0.55)
+        _nxLoadComplete = true
+        _nxSG:Destroy()
 end)
 local keybindPadding = Instance.new("UIPadding")
 keybindPadding.PaddingTop = UDim.new(0, 10)
@@ -1569,26 +1626,12 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
                 end)
         end)
 end
-local _bypassNoTpActive = true
+-- DASH (Q) Bypass Only - Other bypasses removed
 function applyCFrameBypassNoTp(rootPart, cframe)
         if not rootPart then return end
-        if _bypassNoTpActive then
-                rootPart:SetAttribute("IsTrashOperation", true)
-                if cframe then
-                        for i = 1, 50 do
-                                rootPart.CFrame = cframe
-                        end
-                end
-                task.delay(0.1, function()
-                        pcall(function()
-                                rootPart:SetAttribute("IsTrashOperation", false)
-                        end)
-                end)
-        else
-                if cframe then
-                        for i = 1, 50 do
-                                rootPart.CFrame = cframe
-                        end
+        if cframe then
+                for i = 1, 50 do
+                        rootPart.CFrame = cframe
                 end
         end
 end
@@ -2781,9 +2824,9 @@ function clickFlingTargetModel(targetModel)
                 if myRoot and myRoot.Parent then
                         myRoot.AssemblyAngularVelocity = Vector3.zero
                         myRoot.AssemblyLinearVelocity = Vector3.zero
-                        applyCFrameBypassNoTp(myRoot, savedCFrame)
+                        myRoot.CFrame = savedCFrame
                         task.wait()
-                        applyCFrameBypassNoTp(myRoot, savedCFrame)
+                        myRoot.CFrame = savedCFrame
                 end
                 clickFlingBusy = false
         end)
@@ -3036,7 +3079,7 @@ function updateMovement()
                 moveVector += Vector3.new(Speed, 0, 0)
         end
         if moveVector.Magnitude > 0 then
-                applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(moveVector))
+                hrp.CFrame = hrp.CFrame * CFrame.new(moveVector)
         end
 end
 function toggleSpeed(nextState)
@@ -3396,7 +3439,7 @@ function startGetTrashHoldLoop(runToken)
                         if rootPart and rootPart.Parent and getTrashState.holdCFrame then
                                 rootPart.AssemblyLinearVelocity = Vector3.zero
                                 rootPart.AssemblyAngularVelocity = Vector3.zero
-                                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
+                                rootPart.CFrame = getTrashState.holdCFrame
                         end
                 end
         end)
@@ -3505,7 +3548,7 @@ local function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarge
         local totalDist = (toPos - fromPos).Magnitude
         if totalDist < 0.05 then
                 getTrashState.holdCFrame = getTrashTravelCFrame(toPos, lookTarget or (toPos + rootPart.CFrame.LookVector))
-                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
+                rootPart.CFrame = getTrashState.holdCFrame
                 return true
         end
         local traveled = 0
@@ -3522,7 +3565,7 @@ local function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarge
                 local alpha = traveled / totalDist
                 currentPos = fromPos:Lerp(toPos, alpha)
                 getTrashState.holdCFrame = getTrashTravelCFrame(currentPos, lookTarget or toPos)
-                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
+                rootPart.CFrame = getTrashState.holdCFrame
         end
         return true
 end
@@ -3577,7 +3620,7 @@ function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
                 local alpha = traveled / totalDist
                 local currentPos = p2:Lerp(targetPos, alpha)
                 getTrashState.holdCFrame = startCFrame:Lerp(targetCFrame, alpha)
-                applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
+                rootPart.CFrame = getTrashState.holdCFrame
         end
         return true
 end
@@ -3605,7 +3648,7 @@ function liftOutOfTrashRun()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        applyCFrameBypassNoTp(rootPart, rootPart.CFrame + Vector3.new(0, 17, 0))
+        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 17, 0)
 end
 function teleportBackToSavedTrashPositionInstant()
         local currentCharacter = player.Character
@@ -3615,7 +3658,7 @@ function teleportBackToSavedTrashPositionInstant()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        applyCFrameBypassNoTp(rootPart, getTrashState.savedCFrame)
+        rootPart.CFrame = getTrashState.savedCFrame
 end
 function stopGetTrashImmediate()
         getTrashState.running = false
@@ -3771,7 +3814,7 @@ runGetTrash = function()
                                         getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position + rootPart.CFrame.LookVector)
                                         rootPart.AssemblyLinearVelocity = Vector3.zero
                                         rootPart.AssemblyAngularVelocity = Vector3.zero
-                                        applyCFrameBypassNoTp(rootPart, getTrashState.holdCFrame)
+                                        rootPart.CFrame = getTrashState.holdCFrame
                                         clickTrashcan()
                                         clickAttempts += 1
                                         task.wait()
@@ -3916,6 +3959,9 @@ function startSetBackTravel()
         end)
         return true
 end
+local setBackHoldToken = 0
+local setBackKeyDown = false
+
 function handleSetBackKeybind()
         if isSafeZoneActive() then return end
         if getTrashState.blockSetBack
@@ -3934,35 +3980,33 @@ function handleSetBackKeybind()
         if (_G.SafeTeleportLock == true) then
                 return
         end
-        local now = tick()
-        local timeSinceLast = now - setBackLastPressAt
-        if timeSinceLast > 0.4 then
-                setBackPressCount = 0
-        end
-        if timeSinceLast > 0.05 then
-                setBackPressCount = setBackPressCount + 1
-        end
-        setBackLastPressAt = now
-        setBackPressToken = (setBackPressToken or 0) + 1
-        local currentToken = setBackPressToken
-        if setBackPressCount == 1 then
-                task.delay(0, function()
-                        if setBackPressToken == currentToken then
-                                if setBackSavedCFrame then
-                                        startSetBackTravel()
-                                end
-                                setBackPressCount = 0
-                        end
-                end)
-        elseif setBackPressCount == 2 then
+        if setBackKeyDown then return end
+        setBackKeyDown = true
+        setBackHoldToken = (setBackHoldToken or 0) + 1
+        local myToken = setBackHoldToken
+        local pressTime = tick()
+        -- Hold timer: after 1.1s, save or clear
+        task.delay(1.1, function()
+                if myToken ~= setBackHoldToken then return end
+                if not setBackKeyDown then return end
+                -- Key is still held: save or clear
                 if setBackSavedCFrame then
                         clearSetBackPosition()
                 else
                         saveSetBackPosition()
                 end
-        elseif setBackPressCount == 3 then
-                saveSetBackPosition()
-        elseif setBackPressCount == 4 then
+                -- Invalidate so key-release won't also TP
+                setBackHoldToken = setBackHoldToken + 1
+        end)
+end
+
+function handleSetBackKeybindReleased()
+        if not setBackKeyDown then return end
+        setBackKeyDown = false
+        local myToken = setBackHoldToken
+        -- If token still matches, hold didn't fire → it was a quick press
+        if myToken == setBackHoldToken then
+                setBackHoldToken = setBackHoldToken + 1 -- cancel hold timer
                 if setBackSavedCFrame then
                         startSetBackTravel()
                 end
@@ -5662,137 +5706,88 @@ function toggleAntiGrabZero(state)
                 end
         end
 end
-local noTpEnabled = false
-local noTpConnections = {}
-local noTpCharAddedConn = nil
-local noTpCharRemovingConn = nil
-local currentNoTpConns = {}
-local currentNoTpChar = nil
-local function noTpCleanupConnections()
-        for _, conn in ipairs(currentNoTpConns) do
-                pcall(function() conn:Disconnect() end)
-        end
-        currentNoTpConns = {}
-        currentNoTpChar = nil
+-- NoTp: blokuje zewnętrzne teleporty, przepuszcza własne (IsAttackTP)
+local _noTpEnabled = false
+local _noTpLastCF = nil
+local _noTpSaving = false
+local _noTpHeartbeat = nil
+local _noTpCFrameConn = nil
+local _noTpDiedConn = nil
+local _noTpCharConn = nil
+
+local function _noTpStop(char)
+        _noTpEnabled = false
+        _noTpLastCF = nil
+        _noTpSaving = false
+        if _noTpHeartbeat then pcall(function() _noTpHeartbeat:Disconnect() end); _noTpHeartbeat = nil end
+        if _noTpCFrameConn then pcall(function() _noTpCFrameConn:Disconnect() end); _noTpCFrameConn = nil end
+        if _noTpDiedConn then pcall(function() _noTpDiedConn:Disconnect() end); _noTpDiedConn = nil end
 end
-local function noTpStartForCharacter(character)
-        if not character then return end
-        task.wait(0.25)
-        if not noTpEnabled or not character.Parent then return end
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if not humanoid then
-                local t = 0
-                repeat
-                        RunService.Heartbeat:Wait()
-                        t += 1
-                        humanoid = character:FindFirstChildOfClass("Humanoid")
-                until humanoid or t > 300 or not noTpEnabled or not character.Parent
-        end
-        if not humanoid or not noTpEnabled or not character.Parent then return end
-        local hrp = humanoid.RootPart
-        if not hrp then
-                local t = 0
-                repeat
-                        RunService.Heartbeat:Wait()
-                        t += 1
-                        hrp = humanoid.RootPart
-                until hrp or t > 300 or not noTpEnabled or not character.Parent
-        end
-        if not hrp or not noTpEnabled or not character.Parent then return end
-        local lastCF = hrp.CFrame
-        local blocking = false
-        local trackedHrp = hrp
-        local changedConn = nil
-        local function shouldPassThrough(liveHrp)
-                if liveHrp:GetAttribute("IsAttackTP") then return true end
-                if liveHrp:GetAttribute("IsTrashOperation") then return true end
-                if _nxIsDefenseActing() then return true end
-                local isSelfFlinging = active or bHitEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or orbitEnabled or autoTpEnabled or attackTpEnabled or attackTpHolding or _G.BringWallComboEnabled or voidDeadActive or isSafeZoneActive()
-                if isSelfFlinging then return true end
-                if flying then
-                        local dist = (liveHrp.Position - lastCF.Position).Magnitude
-                        if dist < 120 then return true end
-                end
-                return false
-        end
-        local function hookHrp(newHrp)
-                if changedConn then
-                        pcall(function() changedConn:Disconnect() end)
-                        changedConn = nil
-                end
-                trackedHrp = newHrp
-                changedConn = newHrp:GetPropertyChangedSignal("CFrame"):Connect(function()
-                        if not noTpEnabled then return end
-                        if blocking then return end
-                        local liveHrp = character:FindFirstChild("HumanoidRootPart")
-                        if not liveHrp then return end
-                        if shouldPassThrough(liveHrp) then return end
-                        blocking = true
-                        local savedCF = lastCF
-                        pcall(function()
-                                liveHrp.CFrame = savedCF
-                        end)
-                        task.defer(function()
-                                blocking = false
-                        end)
-                end)
-        end
-        hookHrp(hrp)
-        local heartbeatConn = RunService.Heartbeat:Connect(function()
-                if not noTpEnabled then return end
+
+local function _noTpStart()
+        _noTpStop()
+        _noTpEnabled = true
+        local lp = game:GetService("Players").LocalPlayer
+        local char = lp.Character
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        local rootPart = humanoid.RootPart
+        if not rootPart then return end
+
+        -- Zapisuj ostatni CFrame co heartbeat
+        _noTpHeartbeat = RealRunService.Heartbeat:Connect(function()
+                if not _noTpEnabled then return end
+                if _noTpSaving then return end
                 pcall(function()
-                        local liveHrp = character:FindFirstChild("HumanoidRootPart")
-                        if not liveHrp then return end
-                        if liveHrp ~= trackedHrp then
-                                hookHrp(liveHrp)
-                                lastCF = liveHrp.CFrame
-                                blocking = false
-                                return
+                        local rp = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") and lp.Character:FindFirstChildOfClass("Humanoid").RootPart
+                        if rp then
+                                _noTpLastCF = rp.CFrame
                         end
-                        if blocking then return end
-                        lastCF = liveHrp.CFrame
                 end)
         end)
-        local diedConn = humanoid.Died:Connect(function()
-                blocking = false
+
+        -- Na zmianę CFrame: jeśli to NIE jest nasz własny TP → cofnij
+        _noTpCFrameConn = rootPart:GetPropertyChangedSignal("CFrame"):Connect(function()
+                if not _noTpEnabled then return end
+                if _noTpSaving then return end
+                pcall(function()
+                        local rp = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") and lp.Character:FindFirstChildOfClass("Humanoid").RootPart
+                        if not rp then return end
+                        -- Przepuść własne teleporty (AttackTP, SetBack, itp.)
+                        if rp:GetAttribute("IsAttackTP") then return end
+                        if not _noTpLastCF then return end
+                        _noTpSaving = true
+                        rp.CFrame = _noTpLastCF
+                        RealRunService.Heartbeat:Wait()
+                        _noTpSaving = false
+                end)
         end)
-        noTpCleanupConnections()
-        currentNoTpChar = character
-        currentNoTpConns = {
-                heartbeatConn,
-                diedConn,
-                { Disconnect = function()
-                        if changedConn then
-                                pcall(function() changedConn:Disconnect() end)
-                                changedConn = nil
-                        end
-                end }
-        }
+
+        -- Reset po śmierci
+        _noTpDiedConn = humanoid.Died:Connect(function()
+                _noTpStop()
+        end)
 end
+
 function toggleNoTp(state)
-        noTpEnabled = state == true
-        noTpCleanupConnections()
-        if noTpCharAddedConn then
-                pcall(function() noTpCharAddedConn:Disconnect() end)
-                noTpCharAddedConn = nil
+        if state then
+                local lp = game:GetService("Players").LocalPlayer
+                -- Podepnij re-start po respawnie
+                if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
+                _noTpCharConn = lp.CharacterAdded:Connect(function(char)
+                        if not _noTpEnabled and not state then return end
+                        repeat RealRunService.Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid")
+                        repeat RealRunService.Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid").RootPart
+                        if _noTpEnabled or state then
+                                _noTpStart()
+                        end
+                end)
+                _noTpStart()
+        else
+                _noTpStop()
+                if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
         end
-        if noTpCharRemovingConn then
-                pcall(function() noTpCharRemovingConn:Disconnect() end)
-                noTpCharRemovingConn = nil
-        end
-        if not noTpEnabled then return end
-        if player.Character then
-                task.spawn(noTpStartForCharacter, player.Character)
-        end
-        noTpCharAddedConn = player.CharacterAdded:Connect(function(character)
-                if not noTpEnabled then return end
-                task.spawn(noTpStartForCharacter, character)
-        end)
-        noTpCharRemovingConn = player.CharacterRemoving:Connect(function(char)
-                if char == currentNoTpChar then
-                        noTpCleanupConnections()
-                end
-        end)
 end
 local NoDashCDEnabled = false
 local noDashCDHeartbeat = nil
@@ -5895,6 +5890,13 @@ local _jumpHeartbeatConn = nil
 local _jumpCharAddedConn = nil
 local _jumpHumanoid = nil
 local noStunJumpEnabled = true
+function NULL(v)
+	toggleCharacterCleanupRuntime(v)
+	toggleAntiZero(v)
+	toggleAntiGrab(v)
+	toggleAntiGrabZero(v)
+	toggleNoTp(v)
+end
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
         if CharacterCleanupEnabled then
@@ -6686,7 +6688,7 @@ task.spawn(function()
                 if root and stayPos then
                     root.AssemblyLinearVelocity = Vector3.zero
                     root.AssemblyAngularVelocity = Vector3.zero
-                    applyCFrameBypassNoTp(root, CFrame.new(stayPos) * CFrame.Angles(
+                    root.CFrame = CFrame.new(stayPos * CFrame.Angles(
                         0,
                         math.rad(root.Orientation.Y),
                         0
@@ -6872,26 +6874,14 @@ task.spawn(function()
         makeHubTog(row4, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
         local row5 = makeRow(150)
         makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/2)
-        makeHubTog(row5, "Null", function(v)
-                toggleCharacterCleanupRuntime(v)
-                toggleAntiZero(v)
-                toggleAntiGrab(v)
-                toggleAntiGrabZero(v)
-                toggleNoTp(v)
-        end, "NullEnabled", false, 1/2)
+        makeHubTog(row5, "Null", function(v) NULL(v) end, "NullEnabled", false, 1/2)
     else
         local row2 = makeRow(60)
         makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
         makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
         makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
         local row3 = makeRow(90)
-        makeHubTog(row3, "Null", function(v)
-                toggleCharacterCleanupRuntime(v)
-                toggleAntiZero(v)
-                toggleAntiGrab(v)
-                toggleAntiGrabZero(v)
-                toggleNoTp(v)
-        end, "NullEnabled", false, 1/3)
+        makeHubTog(row3, "Null", function(v) NULL(v) end, "NullEnabled", false, 1/3)
     end
     do
         local rowJump = makeRow(isTSB and 180 or 150)
@@ -7111,10 +7101,7 @@ end
             local flat = Vector3.new(look.X,0,look.Z)
             flat = flat.Magnitude > 0.001 and flat.Unit or Vector3.new(0,0,-1)
 for i = 1, 10 do
-    applyCFrameBypassNoTp(
-        hrp,
-        CFrame.lookAt(pos, pos + flat) * CFrame.Angles(math.rad(-25), 0, 0)
-    )
+    hrp.CFrame = CFrame.lookAt(pos, pos + flat) * CFrame.Angles(math.rad(-25), 0, 0)
 end
 			if _G.BringWallComboEnabled then
 				local targetCF = nil
@@ -7163,7 +7150,7 @@ end
 						end
 					end
 					task.wait(waitTime)
-					applyCFrameBypassNoTp(hrp, targetCF)
+					hrp.CFrame = targetCF
 				end
 			end
         end)
@@ -7182,7 +7169,7 @@ end
                 task.wait()
                 local hrp = combatChar:FindFirstChild("HumanoidRootPart")
                 if hrp then
-                    applyCFrameBypassNoTp(hrp, hrp.CFrame * CFrame.new(0,100,0))
+                    hrp.CFrame = hrp.CFrame * CFrame.new(0,100,0)
                 end
             end
             HandleWallComboTilt(track, combatChar)
@@ -7244,7 +7231,7 @@ task.spawn(function()
         local myChar = flingState.localPlayer.Character
         local myRoot = getRoot(myChar)
         if myRoot and flingSavedCFrame and myRoot.Parent then
-            applyCFrameBypassNoTp(myRoot, flingSavedCFrame)
+            myRoot.CFrame = flingSavedCFrame
         end
         flingSavedCFrame = nil
         flingTargetTime = 0
@@ -12526,7 +12513,7 @@ UserInputService.InputChanged:Connect(function(input)
         end
 end)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not introFinished then
+        if not introFinished or not _nxLoadComplete then
                 return
         end
         local key = input.KeyCode
@@ -12701,16 +12688,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 return
         end
         if key == setBackKeybind and keybindToggles.SetBack ~= "block" then
-                if getTrashState.blockSetBack
-                        and not getTrashState.running
-                        and not getTrashState.returning
-                        and getTrashState.holdCFrame == nil
-                        and not hasLocalTrashcan()
-                then
-                        getTrashState.blockSetBack = false
-                        setGetTrashNoclipEnabled(false)
-                        syncGetTrashKeybindDisplay()
-                end
                 handleSetBackKeybind()
                 return
         end
@@ -13131,6 +13108,9 @@ UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
                 attackTpHolding = false
                 return
+        end
+        if key == setBackKeybind then
+                handleSetBackKeybindReleased()
         end
         if key == getTrashState.keybind then
                 getTrashState.keyHeld = false
