@@ -1606,9 +1606,7 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
         if not rootPart then return end
         rootPart:SetAttribute("IsAttackTP", true)
         if cframe then
-                for i = 1, 50 do
-                        rootPart.CFrame = cframe
-                end
+                _G.NX_TP(cframe, "ApplyTeleportRootState", 4)
         end
         if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
         if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
@@ -1619,14 +1617,6 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
                         end
                 end)
         end)
-end
-function applyCFrameBypassNoTp(rootPart, cframe)
-        if not rootPart then return end
-        if cframe then
-                for i = 1, 50 do
-                        rootPart.CFrame = cframe
-                end
-        end
 end
 function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
         applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
@@ -2133,8 +2123,7 @@ local function toggleVoidDead(state)
                         end
                         return
                 end
-                hrp:SetAttribute("IsAttackTP", true)
-                hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "Void-Dead", 4)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
         end)
@@ -2219,8 +2208,7 @@ local function toggleDVoidDead(state)
                         pcall(function()
                                 workspace.Camera.CameraType = Enum.CameraType.Scriptable
                         end)
-                        hrp:SetAttribute("IsAttackTP", true)
-                        hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "DVoid-Dead", 4)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 else
@@ -2817,9 +2805,9 @@ function clickFlingTargetModel(targetModel)
                 if myRoot and myRoot.Parent then
                         myRoot.AssemblyAngularVelocity = Vector3.zero
                         myRoot.AssemblyLinearVelocity = Vector3.zero
-                        myRoot.CFrame = savedCFrame
+                        _G.NX_TP(savedCFrame, "ClickFling-Return", 5)
                         task.wait()
-                        myRoot.CFrame = savedCFrame
+                        _G.NX_TP(savedCFrame, "ClickFling-Return", 5)
                 end
                 clickFlingBusy = false
         end)
@@ -2936,21 +2924,18 @@ function restorePosition(savedCFrame)
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if hrp and savedCFrame then
                 hrp.Anchored = false
-                hrp:SetAttribute("IsAttackTP", true)
-                hrp.CFrame = CFrame.new(0, -6666, 0)
+                _G.NX_TP(CFrame.new(0, -6666, 0), "SafeZone-Restore", 3)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
                 task.wait()
                 if hrp.Parent then
-                        hrp:SetAttribute("IsAttackTP", true)
-                        hrp.CFrame = CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z)
+                        _G.NX_TP(CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z), "SafeZone-Restore", 3)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                         task.wait()
                 end
                 if hrp.Parent then
-                        hrp:SetAttribute("IsAttackTP", true)
-                        hrp.CFrame = savedCFrame
+                        _G.NX_TP(savedCFrame, "SafeZone-Restore", 3)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -3120,8 +3105,7 @@ function toggleAFK(enabled)
                 disableConflictingFeatures()
                 if hrp then
                         hrp.Anchored = false
-                hrp:SetAttribute("IsAttackTP", true)
-                hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneN-Start", 3)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -3150,15 +3134,12 @@ function toggleAFK(enabled)
                         if isFirstTp then
                                 isFirstTp = false
                                 if afkSavedCFrame then
-                                        root:SetAttribute("IsAttackTP", true)
-                                        root.CFrame = CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z)
+                                        _G.NX_TP(CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z), "SafeZoneN-Loop", 3)
                                 else
-                                        root:SetAttribute("IsAttackTP", true)
-                                        root.CFrame = CFrame.new(root.Position.X, -6666, root.Position.Z)
+                                        _G.NX_TP(CFrame.new(root.Position.X, -6666, root.Position.Z), "SafeZoneN-Loop", 3)
                                 end
                         else
-                                root:SetAttribute("IsAttackTP", true)
-                                root.CFrame = CFrame.new(loopPositions[loopIndex])
+                                _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneN-Loop", 3)
                                 loopIndex = (loopIndex % #loopPositions) + 1
                         end
                         root.AssemblyLinearVelocity = Vector3.zero
@@ -3171,7 +3152,7 @@ function toggleAFK(enabled)
                                 local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
                                 if newRoot and afkEnabled then
                                         newRoot.Anchored = false
-                                        newRoot.CFrame = CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z)
+                                        _G.NX_TP(CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z), "SafeZoneN-Respawn", 3)
                                         newRoot.AssemblyLinearVelocity = Vector3.zero
                                         newRoot.AssemblyAngularVelocity = Vector3.zero
                                         isFirstTp = true
@@ -3254,15 +3235,12 @@ function toggleSafeZoneHP(enabled)
                                         if isFirstTp then
                                                 isFirstTp = false
                                                 if safeZoneHPSavedCFrame then
-                                                        hrp:SetAttribute("IsAttackTP", true)
-                                                        hrp.CFrame = CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z)
+                                                        _G.NX_TP(CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z), "SafeZoneHP-Loop", 3)
                                                 else
-                hrp:SetAttribute("IsAttackTP", true)
-                hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                                                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneHP-Loop", 3)
                                                 end
                                         else
-                                                hrp:SetAttribute("IsAttackTP", true)
-                                                hrp.CFrame = CFrame.new(loopPositions[loopIndex])
+                                                _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneHP-Loop", 3)
                                                 loopIndex = (loopIndex % #loopPositions) + 1
                                         end
                                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -3275,8 +3253,7 @@ function toggleSafeZoneHP(enabled)
                                         safeZoneHPCharacter = character
                                         safeZoneHPInSafeZone = true
                                         hrp.Anchored = false
-                hrp:SetAttribute("IsAttackTP", true)
-                hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneHP-Start", 3)
                                         hrp.AssemblyLinearVelocity = Vector3.zero
                                         hrp.AssemblyAngularVelocity = Vector3.zero
                                         isFirstTp = false
@@ -3432,7 +3409,7 @@ function startGetTrashHoldLoop(runToken)
                         if rootPart and rootPart.Parent and getTrashState.holdCFrame then
                                 rootPart.AssemblyLinearVelocity = Vector3.zero
                                 rootPart.AssemblyAngularVelocity = Vector3.zero
-                                rootPart.CFrame = getTrashState.holdCFrame
+                                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
                         end
                 end
         end)
@@ -3558,7 +3535,7 @@ local function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarge
                 local alpha = traveled / totalDist
                 currentPos = fromPos:Lerp(toPos, alpha)
                 getTrashState.holdCFrame = getTrashTravelCFrame(currentPos, lookTarget or toPos)
-                rootPart.CFrame = getTrashState.holdCFrame
+                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
         end
         return true
 end
@@ -3613,7 +3590,7 @@ function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
                 local alpha = traveled / totalDist
                 local currentPos = p2:Lerp(targetPos, alpha)
                 getTrashState.holdCFrame = startCFrame:Lerp(targetCFrame, alpha)
-                rootPart.CFrame = getTrashState.holdCFrame
+                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
         end
         return true
 end
@@ -3641,7 +3618,7 @@ function liftOutOfTrashRun()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 17, 0)
+        _G.NX_TP(rootPart.CFrame + Vector3.new(0, 17, 0), "GetTrash", 4)
 end
 function teleportBackToSavedTrashPositionInstant()
         local currentCharacter = player.Character
@@ -3651,7 +3628,7 @@ function teleportBackToSavedTrashPositionInstant()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        rootPart.CFrame = getTrashState.savedCFrame
+        _G.NX_TP(getTrashState.savedCFrame, "GetTrash", 4)
 end
 function stopGetTrashImmediate()
         getTrashState.running = false
@@ -3807,7 +3784,7 @@ runGetTrash = function()
                                         getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position + rootPart.CFrame.LookVector)
                                         rootPart.AssemblyLinearVelocity = Vector3.zero
                                         rootPart.AssemblyAngularVelocity = Vector3.zero
-                                        rootPart.CFrame = getTrashState.holdCFrame
+                                        _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
                                         clickTrashcan()
                                         clickAttempts += 1
                                         task.wait()
@@ -5694,75 +5671,185 @@ function toggleAntiGrabZero(state)
         end
 end
 local _noTpEnabled = false
-local _noTpLastCF = nil
-local _noTpSaving = false
-local _noTpHeartbeat = nil
-local _noTpCFrameConn = nil
-local _noTpDiedConn = nil
 local _noTpCharConn = nil
-local function _noTpStop(char)
-        _noTpEnabled = false
-        _noTpLastCF = nil
-        _noTpSaving = false
-        if _noTpHeartbeat then pcall(function() _noTpHeartbeat:Disconnect() end); _noTpHeartbeat = nil end
-        if _noTpCFrameConn then pcall(function() _noTpCFrameConn:Disconnect() end); _noTpCFrameConn = nil end
-        if _noTpDiedConn then pcall(function() _noTpDiedConn:Disconnect() end); _noTpDiedConn = nil end
+local _noTpHeartbeat = nil
+local _noTpLastCF = nil
+local _noTpStopRevert = false
+local _noTpLastPriority = 99
+local _noTpLastPriorityTick = 0
+_G.NX_TP = function(targetCFrame, sourceName, priority)
+    priority = priority or 5
+    if priority > _noTpLastPriority and tick() - _noTpLastPriorityTick < 0.1 then
+        return false
+    end
+    _noTpLastPriority = priority
+    _noTpLastPriorityTick = tick()
+    local plr = game:GetService("Players").LocalPlayer
+    local char = plr.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    if targetCFrame.X ~= targetCFrame.X or targetCFrame.Y ~= targetCFrame.Y or targetCFrame.Z ~= targetCFrame.Z then
+        return false
+    end
+    _noTpStopRevert = true
+    hrp:SetAttribute("IsAttackTP", true)
+    _noTpLastCF = targetCFrame
+    hrp.CFrame = targetCFrame
+    task.delay(0, function()
+        if hrp and hrp.Parent then
+            hrp:SetAttribute("IsAttackTP", false)
+        end
+        _noTpStopRevert = false
+    end)
+    return true
+end
+local function _noTpStop()
+    _noTpEnabled = false
+    _noTpLastCF = nil
+    if _noTpHeartbeat then pcall(function() _noTpHeartbeat:Disconnect() end); _noTpHeartbeat = nil end
 end
 local function _noTpStart()
+    _noTpStop()
+    _noTpEnabled = true
+    local lp = game:GetService("Players").LocalPlayer
+    local char = lp.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local rootPart = humanoid.RootPart
+    if not rootPart then return end
+    _noTpLastCF = rootPart.CFrame
+    _noTpHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+        if not _noTpEnabled or not rootPart or not rootPart.Parent then return end
+        if _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then
+            _noTpLastCF = rootPart.CFrame
+            return
+        end
+        if _noTpLastCF then
+            local dist = (rootPart.Position - _noTpLastCF.Position).Magnitude
+            if dist > 35 then
+                _noTpStopRevert = true
+                rootPart.CFrame = _noTpLastCF
+                rootPart.AssemblyLinearVelocity = Vector3.zero
+                rootPart.AssemblyAngularVelocity = Vector3.zero
+                game:GetService("RunService").Heartbeat:Wait()
+                _noTpStopRevert = false
+                return
+            end
+        end
+        _noTpLastCF = rootPart.CFrame
+    end)
+    rootPart:GetPropertyChangedSignal("CFrame"):Connect(function()
+        if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+        _noTpStopRevert = true
+        rootPart.CFrame = _noTpLastCF
+        rootPart.AssemblyLinearVelocity = Vector3.zero
+        rootPart.AssemblyAngularVelocity = Vector3.zero
+        game:GetService("RunService").Heartbeat:Wait()
+        _noTpStopRevert = false
+    end)
+    rootPart:GetPropertyChangedSignal("Position"):Connect(function()
+        if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+        _noTpStopRevert = true
+        rootPart.CFrame = _noTpLastCF
+        rootPart.AssemblyLinearVelocity = Vector3.zero
+        rootPart.AssemblyAngularVelocity = Vector3.zero
+        game:GetService("RunService").Heartbeat:Wait()
+        _noTpStopRevert = false
+    end)
+    humanoid.Died:Connect(function()
         _noTpStop()
-        _noTpEnabled = true
+    end)
+end
+local _antiVoidEnabled = false
+local _antiVoidHeartbeat = nil
+local _antiVoidLastSafeCF = nil
+local _antiVoidCharConn = nil
+local function isPointSafe(pos)
+    local rayOrigin = pos
+    local rayDirection = Vector3.new(0, -15, 0)
+    local raycastParams = RaycastParams.new()
+    local char = game:GetService("Players").LocalPlayer.Character
+    local trash = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Trash")
+    local ignoreList = {}
+    if char then table.insert(ignoreList, char) end
+    if trash then table.insert(ignoreList, trash) end
+    raycastParams.FilterDescendantsInstances = ignoreList
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    return raycastResult ~= nil
+end
+local function _antiVoidStart()
+    if _antiVoidHeartbeat then pcall(function() _antiVoidHeartbeat:Disconnect() end) end
+    _antiVoidEnabled = true
+    _antiVoidHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
         local lp = game:GetService("Players").LocalPlayer
         local char = lp.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if not humanoid then return end
-        local rootPart = humanoid.RootPart
-        if not rootPart then return end
-        _noTpHeartbeat = RealRunService.Heartbeat:Connect(function()
-                if not _noTpEnabled then return end
-                if _noTpSaving then return end
-                pcall(function()
-                        local rp = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") and lp.Character:FindFirstChildOfClass("Humanoid").RootPart
-                        if rp then
-                                _noTpLastCF = rp.CFrame
-                        end
-                end)
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        if isPointSafe(hrp.Position) then
+            _antiVoidLastSafeCF = hrp.CFrame
+        end
+        local destroyHeight = workspace.FallenPartsDestroyHeight + 50
+        if hrp.Position.Y < destroyHeight then
+            if _antiVoidLastSafeCF then
+                _G.NX_TP(_antiVoidLastSafeCF, "Anti-Void", 1)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+            else
+                _G.NX_TP(CFrame.new(hrp.Position.X, destroyHeight + 50, hrp.Position.Z), "Anti-Void", 1)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end)
+end
+local function _antiVoidStop()
+    _antiVoidEnabled = false
+    if _antiVoidHeartbeat then pcall(function() _antiVoidHeartbeat:Disconnect() end); _antiVoidHeartbeat = nil end
+end
+function toggleAntiVoid(state)
+    if state then
+        _antiVoidStart()
+        local lp = game:GetService("Players").LocalPlayer
+        if _antiVoidCharConn then pcall(function() _antiVoidCharConn:Disconnect() end) end
+        _antiVoidCharConn = lp.CharacterAdded:Connect(function(char)
+            if not _antiVoidEnabled then return end
+            _antiVoidLastSafeCF = nil
         end)
-        _noTpCFrameConn = rootPart:GetPropertyChangedSignal("CFrame"):Connect(function()
-                if not _noTpEnabled then return end
-                if _noTpSaving then return end
-                pcall(function()
-                        local rp = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") and lp.Character:FindFirstChildOfClass("Humanoid").RootPart
-                        if not rp then return end
-                        if rp:GetAttribute("IsAttackTP") then return end
-                        if not _noTpLastCF then return end
-                        _noTpSaving = true
-                        rp.CFrame = _noTpLastCF
-                        RealRunService.Heartbeat:Wait()
-                        _noTpSaving = false
-                end)
-        end)
-        _noTpDiedConn = humanoid.Died:Connect(function()
-                _noTpStop()
-        end)
+    else
+        _antiVoidStop()
+        if _antiVoidCharConn then pcall(function() _antiVoidCharConn:Disconnect() end); _antiVoidCharConn = nil end
+    end
 end
 function toggleNoTp(state)
-        if state then
-                local lp = game:GetService("Players").LocalPlayer
-                if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
-                _noTpCharConn = lp.CharacterAdded:Connect(function(char)
-                        if not _noTpEnabled and not state then return end
-                        repeat RealRunService.Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid")
-                        repeat RealRunService.Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid").RootPart
-                        if _noTpEnabled or state then
-                                _noTpStart()
-                        end
-                end)
-                _noTpStart()
-        else
-                _noTpStop()
-                if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
+    if state then
+        local lp = game:GetService("Players").LocalPlayer
+        if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
+        _noTpCharConn = lp.CharacterAdded:Connect(function(char)
+            if not _noTpEnabled and not state then return end
+            repeat game:GetService("RunService").Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid")
+            repeat game:GetService("RunService").Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid").RootPart
+            if _noTpEnabled or state then _noTpStart() end
+        end)
+        _noTpStart()
+    else
+        _noTpStop()
+        if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
+    end
+end
+if hookmetamethod then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" and _noTpEnabled and typeof(self) == "Instance" and self.ClassName == "UnreliableRemoteEvent" and string.find(self.Name, "replicatemovement") then
+            local args = {...}
+            if typeof(args[1]) == "CFrame" and _noTpLastCF then
+                return oldNamecall(self, _noTpLastCF)
+            end
         end
+        return oldNamecall(self, ...)
+    end))
 end
 local NoDashCDEnabled = false
 local noDashCDHeartbeat = nil
@@ -5865,12 +5952,55 @@ local _jumpHeartbeatConn = nil
 local _jumpCharAddedConn = nil
 local _jumpHumanoid = nil
 local noStunJumpEnabled = true
+local _autoReturnDeathConn = nil
+local _autoReturnCharConn = nil
+local _autoReturnCharRemovingConn = nil
+local _autoReturnLastDeathCF = nil
+local function _autoReturnStart()
+    local lp = game:GetService("Players").LocalPlayer
+    local function setupChar(char)
+        if _autoReturnDeathConn then pcall(function() _autoReturnDeathConn:Disconnect() end) end
+        local hrp = char:WaitForChild("HumanoidRootPart", 5)
+        local hum = char:WaitForChild("Humanoid", 5)
+        if not hum or not hrp then return end
+        if _autoReturnLastDeathCF then
+            local savedCF = _autoReturnLastDeathCF
+            _autoReturnLastDeathCF = nil
+            task.delay(0.25, function()
+                if hrp and hrp.Parent then
+                    _G.NX_TP(savedCF, "Auto-Return", 4)
+                end
+            end)
+        end
+        _autoReturnDeathConn = hum.Died:Connect(function()
+            if hrp and hrp.Parent then
+                _autoReturnLastDeathCF = hrp.CFrame + Vector3.new(0, 3, 0)
+            end
+        end)
+    end
+    if lp.Character then
+        task.spawn(function() setupChar(lp.Character) end)
+    end
+    if _autoReturnCharConn then pcall(function() _autoReturnCharConn:Disconnect() end) end
+    _autoReturnCharConn = lp.CharacterAdded:Connect(function(char)
+        setupChar(char)
+    end)
+    if _autoReturnCharRemovingConn then pcall(function() _autoReturnCharRemovingConn:Disconnect() end) end
+    _autoReturnCharRemovingConn = lp.CharacterRemoving:Connect(function(char)
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp and not _autoReturnLastDeathCF then
+            _autoReturnLastDeathCF = hrp.CFrame + Vector3.new(0, 3, 0)
+        end
+    end)
+end
+_autoReturnStart()
 function NULL(v)
 	toggleCharacterCleanupRuntime(v)
 	toggleAntiZero(v)
 	toggleAntiGrab(v)
 	toggleAntiGrabZero(v)
 	toggleNoTp(v)
+	toggleAntiVoid(v)
 end
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
@@ -6505,39 +6635,24 @@ task.spawn(function()
         if isProcessingAntiDeath then return end
         isProcessingAntiDeath = true
         local character = player.Character
-        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-        local humanoid = character and character:FindFirstChild("Humanoid")
-        if not (hrp and humanoid) then
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if not animator then
             isProcessingAntiDeath = false
             return
         end
-        local savedCFrame = hrp.CFrame
-        workspace.Camera.CameraType = Enum.CameraType.Scriptable
-        workspace.Camera.CameraSubject = nil
         local startTime = tick()
-        local connection
-        connection = game:GetService("RunService").Heartbeat:Connect(function()
-            if not hrp or not hrp.Parent then return end
-            hrp:SetAttribute("IsAttackTP", true)
-            hrp.CFrame = CFrame.new(savedCFrame.X, -6666, savedCFrame.Z)
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end)
         repeat
             task.wait()
+            pcall(function()
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    if track.Animation and track.Animation.AnimationId == "rbxassetid://11343250001" then
+                        track:AdjustSpeed(0)
+                        track:Stop(0)
+                    end
+                end
+            end)
         until (tick() - startTime) > 2.8 or not isDeathCounterActive()
-        if connection then connection:Disconnect() end
-        if hrp and hrp.Parent then
-            hrp.CFrame = savedCFrame
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end
-        workspace.Camera.CameraType = Enum.CameraType.Custom
-        workspace.Camera.CameraSubject = humanoid
-        task.wait()
-        if humanoid and humanoid.Parent then
-            workspace.Camera.CameraSubject = humanoid
-        end
         isProcessingAntiDeath = false
     end
     _G.masterYieldCounter = _G.masterYieldCounter + 1
@@ -6660,14 +6775,14 @@ task.spawn(function()
             stayGyro.CFrame = root.CFrame
             stayGyro.Parent = root
             stayConn = RunService.Heartbeat:Connect(function()
-                if root and stayPos then
+                if root and stayPos and not isProcessingAntiDeath then
                     root.AssemblyLinearVelocity = Vector3.zero
                     root.AssemblyAngularVelocity = Vector3.zero
-                    root.CFrame = CFrame.new(stayPos * CFrame.Angles(
+                    _G.NX_TP(CFrame.new(stayPos) * CFrame.Angles(
                         0,
                         math.rad(root.Orientation.Y),
                         0
-                    ))
+                    ), "Stay", 5)
                     if stayGyro then
                         stayGyro.CFrame = root.CFrame
                     end
@@ -6832,31 +6947,31 @@ task.spawn(function()
         applyLayAction()
     end)
     if isTSB then
-        local row2 = makeRow(60)
-        makeHubTog(row2, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
-        makeHubTog(row2, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
-        makeHubTog(row2, "No Dash CD", function(v)
+        local r = makeRow(60)
+        makeHubTog(r, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
+        makeHubTog(r, "Auto Combo", function(v) _G.WallComboEnabled = v end, "AutoCombo", false)
+        makeHubTog(r, "No Dash CD", function(v)
             _G.NoDashCD_Enabled = v
             toggleNoDashCD(v)
         end, "NoDashCD", false)
-        makeHubTog(row2, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
-        local row3 = makeRow(90)
-        makeHubTog(row3, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
-        makeHubTog(row3, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
-        makeHubTog(row3, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
-        local row4 = makeRow(120)
-        makeHubTog(row4, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/2)
-        makeHubTog(row4, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
-        local row5 = makeRow(150)
-        makeHubTog(row5, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/2)
-        makeHubTog(row5, "Null", function(v) NULL(v) end, "NullEnabled", false, 1/2)
+        makeHubTog(r, "BL Trash", function(v) setTrashBlockEnabled(v) end, "BLClickTrash", false)
+        r = makeRow(90)
+        makeHubTog(r, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
+        makeHubTog(r, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
+        makeHubTog(r, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+        r = makeRow(120)
+        makeHubTog(r, "Auto Fix Cam", function(v) autoFixCamEnabled = v end, "AutoFixCamEnabled", false, 1/2)
+        makeHubTog(r, "Noclip", function(v) toggleNoclip(v) end, "NoclipEnabled", false, 1/2)
+        r = makeRow(150)
+        makeHubTog(r, "Anti-Fling", function(v) toggleAntiFling(v) end, "AntiFlingEnabled", false, 1/2)
+        makeHubTog(r, "Null", function(v) NULL(v) end, "NullEnabled", false, 1/2)
     else
-        local row2 = makeRow(60)
-        makeHubTog(row2, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
-        makeHubTog(row2, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
-        makeHubTog(row2, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
-        local row3 = makeRow(90)
-        makeHubTog(row3, "Null", function(v) NULL(v) end, "NullEnabled", false, 1/3)
+        local r = makeRow(60)
+        makeHubTog(r, "Safe Zone (N)", function(v) toggleAFK(v) end, "AFKEnabled", false, 1/3)
+        makeHubTog(r, "Safe Zone (HP)", function(v) toggleSafeZoneHP(v) end, "HPSafeZoneEnabled", false, 1/3)
+        makeHubTog(r, "HP Target", function(v) updateTargetDisplay() end, "TargetHPEnabled", false, 1/3)
+        r = makeRow(90)
+        makeHubTog(r, "Null", function(v) NULL(v) end, "NullEnabled", false, 1/3)
     end
     do
         local rowJump = makeRow(isTSB and 180 or 150)
@@ -6895,19 +7010,19 @@ task.spawn(function()
         layout.Parent = row
         return row
     end
-    local espRow1 = makeEspRow(30)
-    makeHubTog(espRow1, "HP %", function(v) espOverlayConfig.showHp = v; refreshAllOverlays() end, "Overlay4HP", false, 1/4)
-    makeHubTog(espRow1, "Name (CH)", function(v) espOverlayConfig.showCharacter = v; refreshAllOverlays() end, "Overlay4Character", false, 1/4)
-    makeHubTog(espRow1, "ULT %", function(v) espOverlayConfig.showUltimate = v; refreshAllOverlays() end, "Overlay4Ultimate", false, 1/4)
-    makeHubTog(espRow1, "Streak", function(v) espOverlayConfig.showStreak = v; refreshAllOverlays() end, "Overlay4Streak", false, 1/4)
-    local espRow2 = makeEspRow(60)
-    makeHubTog(espRow2, "ULT ESP", function(v) espOverlayConfig.showEsp = v; refreshAllOverlays() end, "Overlay4ESP", false, 1/2)
-    makeHubTog(espRow2, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v); refreshAllOverlays() end, "DeathCounterESPEnabled", false, 1/2)
-    local espRow3 = makeEspRow(90)
-    makeHubTog(espRow3, "Death Cntr", function(v) espOverlayConfig.showDeath = v; syncSeriousModeTracker(); refreshAllOverlays() end, "Overlay4Death", false, 1/2)
-    makeHubTog(espRow3, "Ulted Info", function(v) espOverlayConfig.showUlted = v; refreshAllOverlays() end, "Overlay4Ulted", false, 1/2)
-    local espRow4 = makeEspRow(120)
-    makeHubTog(espRow4, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
+    local rEsp = makeEspRow(30)
+    makeHubTog(rEsp, "HP %", function(v) espOverlayConfig.showHp = v; refreshAllOverlays() end, "Overlay4HP", false, 1/4)
+    makeHubTog(rEsp, "Name (CH)", function(v) espOverlayConfig.showCharacter = v; refreshAllOverlays() end, "Overlay4Character", false, 1/4)
+    makeHubTog(rEsp, "ULT %", function(v) espOverlayConfig.showUltimate = v; refreshAllOverlays() end, "Overlay4Ultimate", false, 1/4)
+    makeHubTog(rEsp, "Streak", function(v) espOverlayConfig.showStreak = v; refreshAllOverlays() end, "Overlay4Streak", false, 1/4)
+    rEsp = makeEspRow(60)
+    makeHubTog(rEsp, "ULT ESP", function(v) espOverlayConfig.showEsp = v; refreshAllOverlays() end, "Overlay4ESP", false, 1/2)
+    makeHubTog(rEsp, "Death Cntr ESP", function(v) toggleSeriousModeTracker(v); refreshAllOverlays() end, "DeathCounterESPEnabled", false, 1/2)
+    rEsp = makeEspRow(90)
+    makeHubTog(rEsp, "Death Cntr", function(v) espOverlayConfig.showDeath = v; syncSeriousModeTracker(); refreshAllOverlays() end, "Overlay4Death", false, 1/2)
+    makeHubTog(rEsp, "Ulted Info", function(v) espOverlayConfig.showUlted = v; refreshAllOverlays() end, "Overlay4Ulted", false, 1/2)
+    rEsp = makeEspRow(120)
+    makeHubTog(rEsp, "Anti Death Cntr", function(v) antiDeathEnabled = v end, "AntiDeathCounterEnabled", false, 1/2)
     local fakerPingHub = makeControlFrame(68)
     fakerPingHub.Parent = uiX
     fakerPingHub.LayoutOrder = 2
@@ -11718,31 +11833,33 @@ do
                 layout.Parent = row
                 return row
         end
-        local rowHideNames = makeRow(30)
-        makeHubTog(rowHideNames, "Hide Names", function(v) hideNamesEnabled = v; updateKeybindText() end, "KeybindHideNamesEnabled", false, 1.0)
-        local row1 = makeRow(60)
-        makeHubTogKB(row1, "Speed KB", function(v) keybindToggles.Speed = v; updateKeybindText() end, "KeybindSpeedEnabled", "off", 1/2)
-        makeHubTogKB(row1, "Fly KB", function(v) keybindToggles.Fly = v; updateKeybindText() end, "KeybindFlyEnabled", "off", 1/2)
-        local row2 = makeRow(90)
-        makeHubTogKB(row2, "cam lock KB", function(v) keybindToggles.CamLock = v; updateKeybindText() end, "KeybindCamLockEnabled", "block", 1/3)
-        makeHubTogKB(row2, "Attack TP KB", function(v) keybindToggles.AttackTP = v; updateKeybindText() end, "KeybindAttackTPEnabled", "off", 1/3)
-        makeHubTogKB(row2, "Target KB", function(v) keybindToggles.Target = v; updateKeybindText() end, "KeybindTargetEnabled", "hide", 1/3)
-        local row2_5 = makeRow(120)
-        makeHubTogKB(row2_5, "cam body KB", function(v) keybindToggles.BodyLock = v; updateKeybindText() end, "KeybindBodyLockEnabled", "block", 1/2)
-        makeHubTogKB(row2_5, "cam B/L KB", function(v) keybindToggles.ComboLock = v; updateKeybindText() end, "KeybindComboLockEnabled", "block", 1/2)
-        local row3 = makeRow(150)
-        makeHubTogKB(row3, "WalkFling KB", function(v) keybindToggles.WalkFling = v; updateKeybindText() end, "KeybindWalkFlingEnabled", "off", 1/3)
-        makeHubTogKB(row3, "SetBack KB", function(v) keybindToggles.SetBack = v; updateKeybindText() end, "KeybindSetBackEnabled", "off", 1/3)
-        makeHubTogKB(row3, "Trash KB", function(v) keybindToggles.Trash = v; updateKeybindText() end, "KeybindTrashEnabled", "off", 1/3)
-        local row4 = makeRow(180)
-        makeHubTogKB(row4, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", "off", 1/2)
-        makeHubTogKB(row4, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", "off", 1/2)
-        local row5 = makeRow(210)
-        makeHubTogKB(row5, "View KB", function(v) keybindToggles.View = v; updateKeybindText() end, "KeybindViewEnabled", "block", 1/3)
-        makeHubTogKB(row5, "Orbit KB", function(v) keybindToggles.Orbit = v; updateKeybindText() end, "KeybindOrbitEnabled", "block", 1/3)
-        makeHubTogKB(row5, "Auto TP KB", function(v) keybindToggles.AutoTPKey = v; updateKeybindText() end, "KeybindAutoTPKeyEnabled", "block", 1/3)
-        local row6 = makeRow(240)
-        makeHubTogKB(row6, "Fling KB", function(v) keybindToggles.FlingKey = v; updateKeybindText() end, "KeybindFlingKeyEnabled", "block", 1.0)
+        do
+                local r = makeRow(30)
+                makeHubTog(r, "Hide Names", function(v) hideNamesEnabled = v; updateKeybindText() end, "KeybindHideNamesEnabled", false, 1.0)
+                r = makeRow(60)
+                makeHubTogKB(r, "Speed KB", function(v) keybindToggles.Speed = v; updateKeybindText() end, "KeybindSpeedEnabled", "off", 1/2)
+                makeHubTogKB(r, "Fly KB", function(v) keybindToggles.Fly = v; updateKeybindText() end, "KeybindFlyEnabled", "off", 1/2)
+                r = makeRow(90)
+                makeHubTogKB(r, "cam lock KB", function(v) keybindToggles.CamLock = v; updateKeybindText() end, "KeybindCamLockEnabled", "block", 1/3)
+                makeHubTogKB(r, "Attack TP KB", function(v) keybindToggles.AttackTP = v; updateKeybindText() end, "KeybindAttackTPEnabled", "off", 1/3)
+                makeHubTogKB(r, "Target KB", function(v) keybindToggles.Target = v; updateKeybindText() end, "KeybindTargetEnabled", "hide", 1/3)
+                r = makeRow(120)
+                makeHubTogKB(r, "cam body KB", function(v) keybindToggles.BodyLock = v; updateKeybindText() end, "KeybindBodyLockEnabled", "block", 1/2)
+                makeHubTogKB(r, "cam B/L KB", function(v) keybindToggles.ComboLock = v; updateKeybindText() end, "KeybindComboLockEnabled", "block", 1/2)
+                r = makeRow(150)
+                makeHubTogKB(r, "WalkFling KB", function(v) keybindToggles.WalkFling = v; updateKeybindText() end, "KeybindWalkFlingEnabled", "off", 1/3)
+                makeHubTogKB(r, "SetBack KB", function(v) keybindToggles.SetBack = v; updateKeybindText() end, "KeybindSetBackEnabled", "off", 1/3)
+                makeHubTogKB(r, "Trash KB", function(v) keybindToggles.Trash = v; updateKeybindText() end, "KeybindTrashEnabled", "off", 1/3)
+                r = makeRow(180)
+                makeHubTogKB(r, "Void KB", function(v) keybindToggles.Void = v; updateKeybindText() end, "KeybindVoidEnabled", "off", 1/2)
+                makeHubTogKB(r, "Places TP KB", function(v) keybindToggles.Places = v; updateKeybindText() end, "KeybindPlacesEnabled", "off", 1/2)
+                r = makeRow(210)
+                makeHubTogKB(r, "View KB", function(v) keybindToggles.View = v; updateKeybindText() end, "KeybindViewEnabled", "block", 1/3)
+                makeHubTogKB(r, "Orbit KB", function(v) keybindToggles.Orbit = v; updateKeybindText() end, "KeybindOrbitEnabled", "block", 1/3)
+                makeHubTogKB(r, "Auto TP KB", function(v) keybindToggles.AutoTPKey = v; updateKeybindText() end, "KeybindAutoTPKeyEnabled", "block", 1/3)
+                r = makeRow(240)
+                makeHubTogKB(r, "Fling KB", function(v) keybindToggles.FlingKey = v; updateKeybindText() end, "KeybindFlingKeyEnabled", "block", 1.0)
+        end
         task.defer(updateKeybindText)
         task.defer(syncFlingKeybindDisplay)
 end
@@ -11826,8 +11943,8 @@ task.spawn(function()
                 return line
         end
         local function ensureOverlayBillboard(model)
-                local head = model and model:FindFirstChild("Head")
-                if not head then
+                local rootPart = model and model:FindFirstChild("HumanoidRootPart")
+                if not rootPart then
                         return nil
                 end
                 local billboard = model:FindFirstChild(ESP_BILLBOARD_NAME)
@@ -11839,9 +11956,9 @@ task.spawn(function()
                 end
                 billboard = Instance.new("BillboardGui")
                 billboard.Name = ESP_BILLBOARD_NAME
-                billboard.Adornee = head
+                billboard.Adornee = rootPart
                 billboard.AlwaysOnTop = true
-                billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 5.2, 0)
+                billboard.ExtentsOffsetWorldSpace = Vector3.new(0, 6.7, 0)
                 billboard.Size = UDim2.fromOffset(BILLBOARD_MIN_WIDTH, 0)
                 billboard.MaxDistance = 333
                 billboard.Parent = model
@@ -12065,7 +12182,7 @@ task.spawn(function()
                         billboard = ensureOverlayBillboard(model)
                         if billboard then
                                 billboard.Enabled = true
-                                billboard.Adornee = head
+                                billboard.Adornee = rootPart
                                 local frame = billboard:FindFirstChild("Root")
                                 local hpLine = frame and frame:FindFirstChild("HpLine")
                                 local sepOne = frame and frame:FindFirstChild("SepOne")
@@ -13300,7 +13417,7 @@ local function updateKeybindPosition(chatInputBar)
                 local yScale = chatBottomY / screenSize.Y
                 newPos = UDim2.new(0, 10, yScale, 0)
         else
-                newPos = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 5)
+                newPos = UDim2.new(0, 10, 0, chatAbsPos.Y + chatAbsSize.Y + 10)
         end
         if keybindFrame.Position ~= newPos then
                 keybindFrame.Position = newPos
