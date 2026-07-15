@@ -3057,7 +3057,9 @@ function updateMovement()
                 moveVector += Vector3.new(Speed, 0, 0)
         end
         if moveVector.Magnitude > 0 then
+                local vel = hrp.AssemblyLinearVelocity
                 hrp.CFrame = hrp.CFrame * CFrame.new(moveVector)
+                hrp.AssemblyLinearVelocity = vel
         end
 end
 function toggleSpeed(nextState)
@@ -5719,6 +5721,21 @@ local function _noTpStart()
     local rootPart = humanoid.RootPart
     if not rootPart then return end
     _noTpLastCF = rootPart.CFrame
+    
+    local function revertTp()
+        _noTpStopRevert = true
+        pcall(function()
+            rootPart.Anchored = false
+            humanoid.Sit = false
+            rootPart.CFrame = _noTpLastCF
+            char:PivotTo(_noTpLastCF)
+            rootPart.AssemblyLinearVelocity = Vector3.zero
+            rootPart.AssemblyAngularVelocity = Vector3.zero
+        end)
+        game:GetService("RunService").Heartbeat:Wait()
+        _noTpStopRevert = false
+    end
+
     _noTpHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
         if not _noTpEnabled or not rootPart or not rootPart.Parent then return end
         if _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then
@@ -5728,35 +5745,29 @@ local function _noTpStart()
         if _noTpLastCF then
             local dist = (rootPart.Position - _noTpLastCF.Position).Magnitude
             if dist > 35 then
-                _noTpStopRevert = true
-                rootPart.CFrame = _noTpLastCF
-                rootPart.AssemblyLinearVelocity = Vector3.zero
-                rootPart.AssemblyAngularVelocity = Vector3.zero
-                game:GetService("RunService").Heartbeat:Wait()
-                _noTpStopRevert = false
+                revertTp()
                 return
             end
         end
         _noTpLastCF = rootPart.CFrame
     end)
-    rootPart:GetPropertyChangedSignal("CFrame"):Connect(function()
-        if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
-        _noTpStopRevert = true
-        rootPart.CFrame = _noTpLastCF
-        rootPart.AssemblyLinearVelocity = Vector3.zero
-        rootPart.AssemblyAngularVelocity = Vector3.zero
-        game:GetService("RunService").Heartbeat:Wait()
-        _noTpStopRevert = false
-    end)
-    rootPart:GetPropertyChangedSignal("Position"):Connect(function()
-        if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
-        _noTpStopRevert = true
-        rootPart.CFrame = _noTpLastCF
-        rootPart.AssemblyLinearVelocity = Vector3.zero
-        rootPart.AssemblyAngularVelocity = Vector3.zero
-        game:GetService("RunService").Heartbeat:Wait()
-        _noTpStopRevert = false
-    end)
+    
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("LowerTorso")
+    local function hookPart(part)
+        if not part then return end
+        part:GetPropertyChangedSignal("CFrame"):Connect(function()
+            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+            revertTp()
+        end)
+        part:GetPropertyChangedSignal("Position"):Connect(function()
+            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+            revertTp()
+        end)
+    end
+    
+    hookPart(rootPart)
+    hookPart(torso)
+    
     humanoid.Died:Connect(function()
         _noTpStop()
     end)
@@ -5966,7 +5977,7 @@ local function _autoReturnStart()
         if _autoReturnLastDeathCF then
             local savedCF = _autoReturnLastDeathCF
             _autoReturnLastDeathCF = nil
-            task.delay(0.25, function()
+            task.delay(0.5, function()
                 if hrp and hrp.Parent then
                     _G.NX_TP(savedCF, "Auto-Return", 4)
                 end
@@ -6268,7 +6279,7 @@ end)
         end
         local Players = game:GetService("Players")
         local speaker = Players.LocalPlayer
-        local speed = 26.60
+        local speed = 26.50
         local jpower = 50.50
         local function SetupHumanoid(Char, Human)
                 if not Human or not Human.Parent then return end
@@ -6345,14 +6356,14 @@ end)
                                 if isDashing and lastQActionType == name then
                                         if name == "moveme" then
                                                 pcall(function()
-                                                        v.MaxForce = Vector3.new(40000, 0, 40000)
+                                                        v.MaxForce = Vector3.new(40000, 40000, 40000)
                                                         v.P = 1250
                                                         v:SetAttribute("Fallout", 0.95)
                                                 end)
                                                 return
                                         elseif name == "dodgevelocity" then
                                                 pcall(function()
-                                                        v.MaxForce = Vector3.new(50000, 0, 50000)
+                                                        v.MaxForce = Vector3.new(50000, 50000, 50000)
                                                         v.P = 1250
                                                 end)
                                                 return
@@ -6908,44 +6919,7 @@ task.spawn(function()
         DashToggle = makeHubTog(row1, "Dash Block", setDashBlockRuntime, "DashBlockEnabled", false, 1/4)
     end
     makeHubBtn(row1, "Fix Cam", fixCamera, isTSB and 1/4 or 1/3)
-    local flatBtn = Instance.new("TextButton")
-    flatBtn.BorderSizePixel = 0
-    flatBtn.Size = UDim2.new(isTSB and 1/4 or 1/3, 0, 1, 0)
-    local flatCorner = Instance.new("UICorner")
-    flatCorner.CornerRadius = UDim.new(0, 6)
-    flatCorner.Parent = flatBtn
-    flatBtn.AutoButtonColor = false
-    flatBtn.Font = Enum.Font.GothamBold
-    flatBtn.TextSize = 13
-    flatBtn.Parent = row1
-    local flatColors = {
-        [true]  = Color3.fromRGB(255, 255, 255),
-        [false] = Color3.fromRGB(0, 0, 0),
-    }
-    local flatTextColors = {
-        [true]  = Color3.fromRGB(0, 0, 0),
-        [false] = Color3.fromRGB(255, 255, 255),
-    }
-    local function applyLayAction()
-        local char = player.Character
-        if not char then return end
-        local humanoid = char:FindFirstChildWhichIsA("Humanoid")
-        if not humanoid then return end
-        humanoid.Sit = true
-        task.wait(0.1)
-        if humanoid.RootPart then
-            humanoid.RootPart.CFrame = humanoid.RootPart.CFrame * CFrame.Angles(math.pi * 0.5, 0, 0)
-        end
-        for _, v in ipairs(humanoid:GetPlayingAnimationTracks()) do
-            v:Stop()
-        end
-    end
-    flatBtn.Text = "Lay"
-    flatBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    flatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flatBtn.MouseButton1Click:Connect(function()
-        applyLayAction()
-    end)
+
     if isTSB then
         local r = makeRow(60)
         makeHubTog(r, "Whirlwind", function(v) _G.WhirlwindEnabled = v end, "AutoWhirlwind", false)
@@ -7173,7 +7147,7 @@ end
             end
         end
     end
-    local function HandleWallComboTilt(track, combatChar)
+     local function HandleWallComboTilt(track, combatChar)
         if not _G.WallComboEnabled then return end
         if not track.Animation then return end
         if not WallComboIDs[track.Animation.AnimationId] then return end
@@ -7191,7 +7165,9 @@ end
             local flat = Vector3.new(look.X,0,look.Z)
             flat = flat.Magnitude > 0.001 and flat.Unit or Vector3.new(0,0,-1)
 for i = 1, 10 do
+    hrp:SetAttribute("IsAttackTP", true)
     hrp.CFrame = CFrame.lookAt(pos, pos + flat) * CFrame.Angles(math.rad(-25), 0, 0)
+    hrp:SetAttribute("IsAttackTP", false)
 end
 			if _G.BringWallComboEnabled then
 				local targetCF = nil
@@ -7240,7 +7216,11 @@ end
 						end
 					end
 					task.wait(waitTime)
-					hrp.CFrame = targetCF
+					if _G.NX_TP then
+					    _G.NX_TP(targetCF, "WallCombo", 5)
+					else
+					    hrp.CFrame = targetCF
+					end
 				end
 			end
         end)
