@@ -4646,6 +4646,9 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
         local isTargetAir = isAirborneHumanoid(targetHumanoid)
         local useAirTracking = isTargetAir or isAirborneHumanoid(characterHumanoid) or amFlying
         local targetVelocity = targetRoot.AssemblyLinearVelocity
+        -- FIX: when target is being flung (very high velocity), use raw live position
+        -- instead of velocity-predicted position so TP always lands on the real spot.
+        local _isFlingVelocity = targetVelocity.Magnitude >= 300
         local baseLeadTime = useAirTracking and attackTpAirLeadTime or attackTpLeadTime
         if baseLeadTime == 0 then
                 local ping = 0
@@ -4674,7 +4677,13 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
                 + (isTargetAir and attackTpVerticalLead or 0)
                 + gravityCompensation
         verticalLead = math.clamp(verticalLead, -attackTpMaxVerticalLead, attackTpMaxVerticalLead)
-        local predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
+        -- When being flung, lock to the true live position (no prediction offset)
+        local predictedTargetPosition
+        if _isFlingVelocity then
+                predictedTargetPosition = targetRoot.Position
+        else
+                predictedTargetPosition = targetRoot.Position + horizontalLead + Vector3.new(0, verticalLead, 0)
+        end
         local isRagdoll = targetModel:FindFirstChild("RagdollSim") or targetModel:FindFirstChild("Ragdoll")
         local mode = modeOverride or attackTpMode or "Behind"
         local finalCFrame = nil
@@ -13007,9 +13016,16 @@ do
                 end
         end
         targetDisplayAccumulator = (targetDisplayAccumulator or 0) + dt
+        -- FPS FIX: split into fast (0.15s) target-display refresh and
+        -- slower (0.45s) model-scan + dropdown update to reduce per-frame work
+        -- when there are many players/models in the server.
+        targetModelScanAccumulator = (targetModelScanAccumulator or 0) + dt
         if shouldRefreshTargetDisplay or targetDisplayAccumulator >= 0.15 then
                 targetDisplayAccumulator = 0
                 updateTargetDisplay()
+        end
+        if shouldRefreshTargetDisplay or targetModelScanAccumulator >= 0.45 then
+                targetModelScanAccumulator = 0
                 local seenCurrentModels = {}
                 for _, targetModel in ipairs(getSelectableTargetModels()) do
                         if isSelectableModelDropdownTarget(targetModel) then
