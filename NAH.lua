@@ -1,7 +1,7 @@
 repeat
     task.wait(0.5);
 	warn"NOTHING X _BEST"
-until game:IsLoaded();
+	until game:IsLoaded();
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
@@ -3036,7 +3036,7 @@ function WalkFlingDirection_set(value)
         setSavedControlValue("WalkFlingDirection", type(value) == "table" and value or { tostring(value) })
         return walkFlingDirections
 end
-function updateMovement(dt)
+function updateMovement()
         if not active then
                 return
         end
@@ -3045,19 +3045,17 @@ function updateMovement(dt)
                 return
         end
         local moveVector = Vector3.zero
-        local speedMult = (dt and dt * 60) or 1
-        local currentSpeed = Speed * speedMult
         if holdingW then
-                moveVector += Vector3.new(0, 0, -currentSpeed)
+                moveVector += Vector3.new(0, 0, -Speed)
         end
         if holdingS then
-                moveVector += Vector3.new(0, 0, currentSpeed)
+                moveVector += Vector3.new(0, 0, Speed)
         end
         if holdingA then
-                moveVector += Vector3.new(-currentSpeed, 0, 0)
+                moveVector += Vector3.new(-Speed, 0, 0)
         end
         if holdingD then
-                moveVector += Vector3.new(currentSpeed, 0, 0)
+                moveVector += Vector3.new(Speed, 0, 0)
         end
         if moveVector.Magnitude > 0 then
                 local vel = hrp.AssemblyLinearVelocity
@@ -3078,8 +3076,8 @@ function toggleSpeed(nextState)
                 speedLoopRunning = true
                 task.spawn(function()
                         while active do
-                                local dt = nextFrame()
-                                updateMovement(dt)
+                                nextFrame()
+                                updateMovement()
                         end
                         speedLoopRunning = false
                 end)
@@ -5552,7 +5550,7 @@ function toggleAntiZero(state)
                 task.spawn(function()
                         while antiZeroEnabled do
                                 pcall(function() runCleanupTick(lp.Character) end)
-                                task.wait(0.2)
+                                RunService.Heartbeat:Wait()
                         end
                 end)
                 _antiZeroCharAddedConn = lp.CharacterAdded:Connect(function(char)
@@ -6064,7 +6062,7 @@ function toggleCharacterCleanupRuntime(state)
                                                 runCleanupTick(char)
                                         end
                                 end)
-                                task.wait(0.2)
+                                task.wait()
                         until not CharacterCleanupEnabled
                 end)
                 local lp2 = game:GetService("Players").LocalPlayer
@@ -9848,7 +9846,6 @@ syncAutoTpKeybindDisplay()
 syncOrbitKeybindDisplay()
 updateTargetDisplay()
 bindLocalCharacter(char)
-
 Slider({
         nameSilder = "Speed",
         nameshow = "",
@@ -9860,7 +9857,6 @@ Slider({
                 Speed = value
         end,
 })
-
 Slider({
         nameSilder = "Fly",
         nameshow = "",
@@ -9883,7 +9879,6 @@ modelDropdownControl = Dropdown({
                 applyModelDropdownSelection(value)
         end,
 })
-
 blPlayersDropdownControl = Dropdown({
         namedropdown = "BL Players",
         saveKey = "",
@@ -10016,7 +10011,6 @@ blPlayersDropdownControl = Dropdown({
                 end
         end,
 })
-
 do
         local offlineInputHolder = makeControlFrame(78)
         offlineInputHolder.Parent = uiX
@@ -10175,7 +10169,6 @@ do
                 if enterPressed then doAddOffline() end
         end)
 end
-
 targetActionControls = _G["3tog_on_one_one_button"]({
         title = "Function",
         name1 = "View",
@@ -10235,7 +10228,6 @@ targetActionControls = _G["3tog_on_one_one_button"]({
                 teleportToSelectedTarget("Front")
         end,
 })
-
 do
         local wfHolder = makeControlFrame(76)
         wfHolder.Parent = uiX
@@ -10305,7 +10297,6 @@ do
         wfAllCtrls[2] = makeWFTog("Camera", walkFlingBodyMode == false,  function() walkFlingBodyMode = false  end)
         wfAllCtrls[3] = makeWFTog("C+B",    walkFlingBodyMode == "both", function() walkFlingBodyMode = "both" end)
 end
-
 Dropdown({
         namedropdown = "Direction",
         saveKey = "WalkFlingDirection",
@@ -10316,7 +10307,6 @@ Dropdown({
                 parseWalkFlingDirectionSelection(value)
         end,
 })
-
 _G["2textbox_on_one_frame"]({
         title = "Powers",
         name1 = "Power Walkfling",
@@ -10332,7 +10322,6 @@ _G["2textbox_on_one_frame"]({
                 flingPower = value
         end,
 })
-
 Slider({
         nameSilder = "Aura Range",
         nameshow = "",
@@ -10344,7 +10333,6 @@ Slider({
                 auraRange = value
         end,
 })
-
 flingModeControls = _G["4tog_on_one_frame"]({
         title = "Flings System",
         name1 = "Normal Walkfling",
@@ -10370,7 +10358,6 @@ flingModeControls = _G["4tog_on_one_frame"]({
                 setFlingAllEnabled(enabled)
         end,
 })
-
 task.spawn(function()
         local savedOD = getSavedControlValue("OrbitDistance")
         if savedOD ~= nil then orbitDistance = savedOD end
@@ -10961,7 +10948,6 @@ task.spawn(function()
                 function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end, true)
         renderAllModeBtns()
 end)
-
 if game.GameId == 3808081382 then
         placesDropdown = Dropdown({
                 namedropdown = "Places",
@@ -11675,7 +11661,6 @@ do
 end
 customOffsetFrame.Parent = uiX
 updateCustomUI()
-
 do
         local charSaveKey = "SelectedCharacter"
         local characterList = { "Bald", "Hunter", "Monster", "Cyborg", "Ninja", "Batter", "Blade", "Esper", "Purple", "Tech", "Zombie", "KJ", "Sorcerer" }
@@ -11797,7 +11782,6 @@ do
                 charCallbackReady = true
         end)
 end
-
 do
         local keybindHub = makeControlFrame(310)
         keybindHub.Name = "KeybindSystemHub"
@@ -11860,7 +11844,6 @@ do
         task.defer(updateKeybindText)
         task.defer(syncFlingKeybindDisplay)
 end
-
 task.spawn(function()
         if game.GameId ~= 3808081382 then
                 return
@@ -11871,7 +11854,7 @@ task.spawn(function()
         if not screenGui.Parent then
                 return
         end
-        local ESP_BILLBOARD_NAME = "NOTHING_X_X"
+        local ESP_BILLBOARD_NAME = "NOTHING_X_OverlayBillboard"
         local ESP_HIGHLIGHT_NAME = "NOTHING-X"
         local TextService = game:GetService("TextService")
         local BILLBOARD_MIN_WIDTH = 72
@@ -13245,7 +13228,7 @@ end
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local NORMAL_TRANSPARENCY = 0.8
+local NORMAL_TRANSPARENCY = 0.66
 local ULT_TRANSPARENCY = 0.55
 local function Hide(Object)
         if not Object then
@@ -13427,7 +13410,7 @@ local function startChatInputBarTracking()
         task.spawn(function()
                 while true do
                         if not keybindFrame or not keybindFrame.Parent then
-                                task.wait(0.1)
+                                task.wait()
                                 continue
                         end
                         pcall(function()
@@ -13438,7 +13421,7 @@ local function startChatInputBarTracking()
                         if chatInputBar then
                                 break
                         end
-                        task.wait(0.1)
+                        task.wait()
                 end
                 updateKeybindPosition(chatInputBar)
                 chatConnectionPos = chatInputBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
@@ -13462,7 +13445,7 @@ end
 startChatInputBarTracking()
 task.spawn(function()
         while true do
-                task.wait(0.5)
+                task.wait()
                 for _,v in ipairs(HiddenObjects) do
                         pcall(function()
                                 if v.Visible then
@@ -13480,7 +13463,7 @@ task.spawn(function()
 end)
 task.spawn(function()
         while true do
-                task.wait(1)
+                task.wait()
                 syncPlacesKeybindDisplay()
         end
 end)
