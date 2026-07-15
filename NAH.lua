@@ -5556,7 +5556,7 @@ function toggleAntiZero(state)
                 _antiZeroCharAddedConn = lp.CharacterAdded:Connect(function(char)
                         if not antiZeroEnabled then return end
                         task.spawn(function()
-                                task.wait(0.25)
+                                task.wait()
                                 if antiZeroEnabled and char and char.Parent then
                                         _bindCleanupEvents(char)
                                 end
@@ -5739,7 +5739,7 @@ local function _noTpStart()
 
     _noTpHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
         if not _noTpEnabled or not rootPart or not rootPart.Parent then return end
-        if _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then
+        if _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then
             _noTpLastCF = rootPart.CFrame
             return
         end
@@ -5757,11 +5757,11 @@ local function _noTpStart()
     local function hookPart(part)
         if not part then return end
         part:GetPropertyChangedSignal("CFrame"):Connect(function()
-            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then return end
             revertTp()
         end)
         part:GetPropertyChangedSignal("Position"):Connect(function()
-            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then return end
             revertTp()
         end)
     end
@@ -6039,7 +6039,7 @@ function toggleCharacterCleanupRuntime(state)
                         local function onChar(char)
                                 if not char then return end
                                 task.spawn(function()
-                                        task.wait(0.25)
+                                        task.wait()
                                         if CharacterCleanupEnabled and char and char.Parent then
                                                 _bindCleanupEvents(char)
                                         end
@@ -13365,7 +13365,7 @@ task.spawn(function()
         UpdateBar()
 end)
 PlayerGui.ChildAdded:Connect(function(v)
-        task.wait()
+        task.wait(1)
         if v.Name == "Hotbar" then
                 RegisterHotbar(v)
         end
@@ -13410,7 +13410,7 @@ local function startChatInputBarTracking()
         task.spawn(function()
                 while true do
                         if not keybindFrame or not keybindFrame.Parent then
-                                task.wait()
+                                task.wait(1)
                                 continue
                         end
                         pcall(function()
@@ -13421,7 +13421,7 @@ local function startChatInputBarTracking()
                         if chatInputBar then
                                 break
                         end
-                        task.wait()
+                        task.wait(1)
                 end
                 updateKeybindPosition(chatInputBar)
                 chatConnectionPos = chatInputBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
@@ -13445,7 +13445,7 @@ end
 startChatInputBarTracking()
 task.spawn(function()
         while true do
-                task.wait()
+                task.wait(1)
                 for _,v in ipairs(HiddenObjects) do
                         pcall(function()
                                 if v.Visible then
@@ -13463,7 +13463,7 @@ task.spawn(function()
 end)
 task.spawn(function()
         while true do
-                task.wait()
+                task.wait(1)
                 syncPlacesKeybindDisplay()
         end
 end)
