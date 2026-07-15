@@ -83,11 +83,11 @@ function nextFrame()
         return RunService.Heartbeat:Wait()
 end
 local player = Players.LocalPlayer
-local uiLoaded = false
-local _nxLoadComplete = false
-local queuedCallbacks = {}
-local characterSpawnTime = os.clock()
-local espOverlayConfig = {
+uiLoaded = false
+_nxLoadComplete = false
+queuedCallbacks = {}
+characterSpawnTime = os.clock()
+espOverlayConfig = {
     showCharacter = false,
     showUltimate = false,
     showHp = false,
@@ -96,8 +96,8 @@ local espOverlayConfig = {
     showDeath = false,
     showUlted = false,
 }
-local espOverlayState = {}
-local refreshAllOverlays = function() end
+espOverlayState = {}
+refreshAllOverlays = function() end
 function showExistingGuiInfo(gui, title, text, duration)
         local infoContainer = gui:FindFirstChild("InfoContainer")
         local infoTitle = infoContainer and infoContainer:FindFirstChild("InfoTitle")
@@ -152,9 +152,9 @@ screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
 screenGui.Parent = CoreGui
-local keybindFrame
-local targetFrame
-local keybindToggles = {
+keybindFrame = nil
+targetFrame = nil
+keybindToggles = {
         BodyLock = "block",
         ComboLock = "block",
         Speed = "off",
@@ -172,9 +172,9 @@ local keybindToggles = {
         AutoTPKey = "off",
         FlingKey = "off",
 }
-local hideNamesEnabled = false
-local scaleRegistry = {}
-local baseResolution = Vector2.new(1900, 1200)
+hideNamesEnabled = false
+scaleRegistry = {}
+baseResolution = Vector2.new(1900, 1200)
 function getViewportScale()
         local sizeX = screenGui and screenGui.AbsoluteSize.X or 1920
         local sizeY = screenGui and screenGui.AbsoluteSize.Y or 1080
@@ -1610,13 +1610,6 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
         end
         if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
         if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
-        task.delay(0.1, function()
-                pcall(function()
-                        if not autoTpEnabled and not attackTpEnabled and not attackTpHolding then
-                                rootPart:SetAttribute("IsAttackTP", false)
-                        end
-                end)
-        end)
 end
 function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
         applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
@@ -4516,7 +4509,13 @@ function getSelectableTargetModels()
         cachedSelectableModels = models
         return models
 end
+local _cachedClosestTarget = nil
+local _cachedClosestTargetTime = 0
 function getClosestAlivePlayerTarget()
+        if tick() - _cachedClosestTargetTime < 0.2 then
+                return _cachedClosestTarget
+        end
+        _cachedClosestTargetTime = tick()
         local currentCharacter = player.Character
         local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
         if not currentRoot then
@@ -4536,6 +4535,7 @@ function getClosestAlivePlayerTarget()
                         end
                 end
         end
+        _cachedClosestTarget = bestModel
         return bestModel
 end
 function getPreferredAttackTpTarget()
@@ -5679,6 +5679,7 @@ local _noTpLastCF = nil
 local _noTpStopRevert = false
 local _noTpLastPriority = 99
 local _noTpLastPriorityTick = 0
+local _noTpLastTpTime = 0
 _G.NX_TP = function(targetCFrame, sourceName, priority)
     priority = priority or 5
     if priority > _noTpLastPriority and tick() - _noTpLastPriorityTick < 0.1 then
@@ -5697,14 +5698,20 @@ _G.NX_TP = function(targetCFrame, sourceName, priority)
     hrp:SetAttribute("IsAttackTP", true)
     _noTpLastCF = targetCFrame
     hrp.CFrame = targetCFrame
-    task.delay(0, function()
-        if hrp and hrp.Parent then
-            hrp:SetAttribute("IsAttackTP", false)
-        end
-        _noTpStopRevert = false
-    end)
+    _noTpLastTpTime = tick()
     return true
 end
+RunService.Heartbeat:Connect(function()
+    if tick() - _noTpLastTpTime > 0.1 then
+        _noTpStopRevert = false
+        local plr = game:GetService("Players").LocalPlayer
+        local char = plr and plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp:SetAttribute("IsAttackTP", false)
+        end
+    end
+end)
 local function _noTpStop()
     _noTpEnabled = false
     _noTpLastCF = nil
@@ -5723,17 +5730,13 @@ local function _noTpStart()
     _noTpLastCF = rootPart.CFrame
     
     local function revertTp()
-        _noTpStopRevert = true
         pcall(function()
             rootPart.Anchored = false
-            humanoid.Sit = false
+            if humanoid.Sit then humanoid.Sit = false end
             rootPart.CFrame = _noTpLastCF
-            char:PivotTo(_noTpLastCF)
             rootPart.AssemblyLinearVelocity = Vector3.zero
             rootPart.AssemblyAngularVelocity = Vector3.zero
         end)
-        game:GetService("RunService").Heartbeat:Wait()
-        _noTpStopRevert = false
     end
 
     _noTpHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
@@ -5752,22 +5755,6 @@ local function _noTpStart()
         _noTpLastCF = rootPart.CFrame
     end)
     
-    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("LowerTorso")
-    local function hookPart(part)
-        if not part then return end
-        part:GetPropertyChangedSignal("CFrame"):Connect(function()
-            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
-            revertTp()
-        end)
-        part:GetPropertyChangedSignal("Position"):Connect(function()
-            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
-            revertTp()
-        end)
-    end
-    
-    hookPart(rootPart)
-    hookPart(torso)
-    
     humanoid.Died:Connect(function()
         _noTpStop()
     end)
@@ -5776,19 +5763,22 @@ local _antiVoidEnabled = false
 local _antiVoidHeartbeat = nil
 local _antiVoidLastSafeCF = nil
 local _antiVoidCharConn = nil
+local _antiVoidRayParams = RaycastParams.new()
+_antiVoidRayParams.FilterType = Enum.RaycastFilterType.Exclude
+local _antiVoidLastChar = nil
+
 local function isPointSafe(pos)
-    local rayOrigin = pos
-    local rayDirection = Vector3.new(0, -15, 0)
-    local raycastParams = RaycastParams.new()
     local char = game:GetService("Players").LocalPlayer.Character
-    local trash = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Trash")
-    local ignoreList = {}
-    if char then table.insert(ignoreList, char) end
-    if trash then table.insert(ignoreList, trash) end
-    raycastParams.FilterDescendantsInstances = ignoreList
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    return raycastResult ~= nil
+    if _antiVoidLastChar ~= char then
+        _antiVoidLastChar = char
+        local trash = workspace:FindFirstChild("Map")
+        if trash then trash = trash:FindFirstChild("Trash") end
+        local ignore = {}
+        if char then ignore[1] = char end
+        if trash then ignore[2] = trash end
+        _antiVoidRayParams.FilterDescendantsInstances = ignore
+    end
+    return workspace:Raycast(pos, Vector3.new(0, -15, 0), _antiVoidRayParams) ~= nil
 end
 local function _antiVoidStart()
     if _antiVoidHeartbeat then pcall(function() _antiVoidHeartbeat:Disconnect() end) end
@@ -7366,6 +7356,7 @@ do
         local displacedClient = nil
         local originalParent = nil
         ;(function()
+                local _fpdhSet = false
                 local function forceClientDisplace(char, pos, isExtremeFling)
                         if pos.Y <= CLIENT_MOVE_Y or isExtremeFling then
                                 local charHandler = char:FindFirstChild("CharacterHandler")
@@ -7375,15 +7366,13 @@ do
                                                 originalParent = clientModule.Parent
                                                 displacedClient = clientModule
                                         end
-        pcall(function()
-                Workspace.FallenPartsDestroyHeight = 0/0
-                Workspace.FallenPartsDestroyHeight = 0/0
-        end)
-                                        pcall(function()
-                                                for _ = 1, 8 do
-                                                        clientModule.Parent = StarterPack
-                                                end
-                                        end)
+                                        if not _fpdhSet then
+                                                _fpdhSet = true
+                                                pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
+                                        end
+                                        if clientModule.Parent ~= StarterPack then
+                                                clientModule.Parent = StarterPack
+                                        end
                                 end
                         end
                 end
@@ -7421,13 +7410,9 @@ do
                                 for i = 1, #safePositions do
                                         local targetCF = safePositions[i]
                                         if targetCF then
-                                                pcall(function()
-                                                        for _ = 1, 5 do
-                                                                hrp.AssemblyLinearVelocity = Vector3.zero
-                                                                hrp.AssemblyAngularVelocity = Vector3.zero
-                                                                hrp.CFrame = targetCF
-                                                        end
-                                                end)
+                                                hrp.AssemblyLinearVelocity = Vector3.zero
+                                                hrp.AssemblyAngularVelocity = Vector3.zero
+                                                hrp.CFrame = targetCF
                                                 break
                                         end
                                 end
@@ -7463,27 +7448,6 @@ do
                                                                 displacedClient = nil
                                 originalParent = nil
                         end
-                end
-                local function setupHrpListeners(hrp, char)
-                        if not hrp then return end
-                        local function fastCheck()
-                                local pos = hrp.Position
-                                local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
-                                local vel = hrp.AssemblyLinearVelocity
-                                local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
-                                local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or bHitEnabled
-                                local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
-                                forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
-                        end
-                        hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
-                        hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
-                end
-                LocalPlayer.CharacterAdded:Connect(function(char)
-                        local hrp = char:WaitForChild("HumanoidRootPart", 5)
-                        setupHrpListeners(hrp, char)
-                end)
-                if LocalPlayer.Character then
-                        setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
                 end
                 RunService.Heartbeat:Connect(updateMonitoring)
         end)()
@@ -11383,7 +11347,7 @@ do
         end
         local behindCustomInput = createBehindCustomInput("Distance")
         behindCustomFrame.LayoutOrder = 1002
-        local function makeCustomRow(yPos, height)
+        function makeCustomRow(yPos, height)
                 local row = Instance.new("Frame")
                 row.BackgroundTransparency = 1
                 row.BorderSizePixel = 0
@@ -11535,7 +11499,7 @@ do
                 end)
                 return box
         end
-        local posTitleLbl = Instance.new("TextLabel")
+        posTitleLbl = Instance.new("TextLabel")
         posTitleLbl.BackgroundTransparency = 1
         posTitleLbl.Position = UDim2.new(0, 0, 0, 7)
         posTitleLbl.Size = UDim2.new(1, 0, 0, 15)
@@ -11672,10 +11636,10 @@ do
                 end
                 return characterList[1]
         end
-        local charCallbackReady = false
-        local characterDropdown
-        local charPendingValue = nil
-        local charPendingToken = 0
+        charCallbackReady = false
+        characterDropdown = nil
+        charPendingValue = nil
+        charPendingToken = 0
         characterDropdown = Dropdown({
                 namedropdown = "Character",
                 inside = characterList,
@@ -11751,7 +11715,7 @@ do
                 end,
         })
         characterDropdown.Frame.LayoutOrder = 999999
-        local function syncCharDropdown()
+        function syncCharDropdown()
                 if not characterDropdown then return end
                 if charPendingValue ~= nil then return end
                 local char = player.Character
@@ -11761,7 +11725,7 @@ do
                         characterDropdown.SetValue(tostring(attr), true)
                 end
         end
-        local function watchCharacterAttrs(char)
+        function watchCharacterAttrs(char)
                 if not char then return end
                 char:GetAttributeChangedSignal("Character"):Connect(function()
                         pcall(syncCharDropdown)
@@ -13445,7 +13409,7 @@ end
 startChatInputBarTracking()
 task.spawn(function()
         while true do
-                task.wait()
+                task.wait(0.2)
                 for _,v in ipairs(HiddenObjects) do
                         pcall(function()
                                 if v.Visible then
@@ -13463,7 +13427,7 @@ task.spawn(function()
 end)
 task.spawn(function()
         while true do
-                task.wait()
+                task.wait(1)
                 syncPlacesKeybindDisplay()
         end
 end)
