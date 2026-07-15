@@ -1,5 +1,6 @@
 repeat
-    task.wait();
+    task.wait(0.5);
+	warn"NOTHING X _BEST"
 until game:IsLoaded();
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
@@ -83,11 +84,11 @@ function nextFrame()
         return RunService.Heartbeat:Wait()
 end
 local player = Players.LocalPlayer
-uiLoaded = false
-_nxLoadComplete = false
-queuedCallbacks = {}
-characterSpawnTime = os.clock()
-espOverlayConfig = {
+local uiLoaded = false
+local _nxLoadComplete = false
+local queuedCallbacks = {}
+local characterSpawnTime = os.clock()
+local espOverlayConfig = {
     showCharacter = false,
     showUltimate = false,
     showHp = false,
@@ -96,8 +97,8 @@ espOverlayConfig = {
     showDeath = false,
     showUlted = false,
 }
-espOverlayState = {}
-refreshAllOverlays = function() end
+local espOverlayState = {}
+local refreshAllOverlays = function() end
 function showExistingGuiInfo(gui, title, text, duration)
         local infoContainer = gui:FindFirstChild("InfoContainer")
         local infoTitle = infoContainer and infoContainer:FindFirstChild("InfoTitle")
@@ -152,9 +153,9 @@ screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.DisplayOrder = 9999999
 screenGui.Parent = CoreGui
-keybindFrame = nil
-targetFrame = nil
-keybindToggles = {
+local keybindFrame
+local targetFrame
+local keybindToggles = {
         BodyLock = "block",
         ComboLock = "block",
         Speed = "off",
@@ -172,9 +173,9 @@ keybindToggles = {
         AutoTPKey = "off",
         FlingKey = "off",
 }
-hideNamesEnabled = false
-scaleRegistry = {}
-baseResolution = Vector2.new(1900, 1200)
+local hideNamesEnabled = false
+local scaleRegistry = {}
+local baseResolution = Vector2.new(1900, 1200)
 function getViewportScale()
         local sizeX = screenGui and screenGui.AbsoluteSize.X or 1920
         local sizeY = screenGui and screenGui.AbsoluteSize.Y or 1080
@@ -1610,6 +1611,13 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
         end
         if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
         if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
+        task.delay(0.1, function()
+                pcall(function()
+                        if not autoTpEnabled and not attackTpEnabled and not attackTpHolding then
+                                rootPart:SetAttribute("IsAttackTP", false)
+                        end
+                end)
+        end)
 end
 function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
         applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
@@ -3028,7 +3036,7 @@ function WalkFlingDirection_set(value)
         setSavedControlValue("WalkFlingDirection", type(value) == "table" and value or { tostring(value) })
         return walkFlingDirections
 end
-function updateMovement()
+function updateMovement(dt)
         if not active then
                 return
         end
@@ -3037,17 +3045,19 @@ function updateMovement()
                 return
         end
         local moveVector = Vector3.zero
+        local speedMult = (dt and dt * 60) or 1
+        local currentSpeed = Speed * speedMult
         if holdingW then
-                moveVector += Vector3.new(0, 0, -Speed)
+                moveVector += Vector3.new(0, 0, -currentSpeed)
         end
         if holdingS then
-                moveVector += Vector3.new(0, 0, Speed)
+                moveVector += Vector3.new(0, 0, currentSpeed)
         end
         if holdingA then
-                moveVector += Vector3.new(-Speed, 0, 0)
+                moveVector += Vector3.new(-currentSpeed, 0, 0)
         end
         if holdingD then
-                moveVector += Vector3.new(Speed, 0, 0)
+                moveVector += Vector3.new(currentSpeed, 0, 0)
         end
         if moveVector.Magnitude > 0 then
                 local vel = hrp.AssemblyLinearVelocity
@@ -3068,8 +3078,8 @@ function toggleSpeed(nextState)
                 speedLoopRunning = true
                 task.spawn(function()
                         while active do
-                                nextFrame()
-                                updateMovement()
+                                local dt = nextFrame()
+                                updateMovement(dt)
                         end
                         speedLoopRunning = false
                 end)
@@ -4509,13 +4519,7 @@ function getSelectableTargetModels()
         cachedSelectableModels = models
         return models
 end
-local _cachedClosestTarget = nil
-local _cachedClosestTargetTime = 0
 function getClosestAlivePlayerTarget()
-        if tick() - _cachedClosestTargetTime < 0.2 then
-                return _cachedClosestTarget
-        end
-        _cachedClosestTargetTime = tick()
         local currentCharacter = player.Character
         local currentRoot = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
         if not currentRoot then
@@ -4535,7 +4539,6 @@ function getClosestAlivePlayerTarget()
                         end
                 end
         end
-        _cachedClosestTarget = bestModel
         return bestModel
 end
 function getPreferredAttackTpTarget()
@@ -5549,7 +5552,7 @@ function toggleAntiZero(state)
                 task.spawn(function()
                         while antiZeroEnabled do
                                 pcall(function() runCleanupTick(lp.Character) end)
-                                RunService.Heartbeat:Wait()
+                                task.wait(0.2)
                         end
                 end)
                 _antiZeroCharAddedConn = lp.CharacterAdded:Connect(function(char)
@@ -5679,7 +5682,6 @@ local _noTpLastCF = nil
 local _noTpStopRevert = false
 local _noTpLastPriority = 99
 local _noTpLastPriorityTick = 0
-local _noTpLastTpTime = 0
 _G.NX_TP = function(targetCFrame, sourceName, priority)
     priority = priority or 5
     if priority > _noTpLastPriority and tick() - _noTpLastPriorityTick < 0.1 then
@@ -5698,20 +5700,14 @@ _G.NX_TP = function(targetCFrame, sourceName, priority)
     hrp:SetAttribute("IsAttackTP", true)
     _noTpLastCF = targetCFrame
     hrp.CFrame = targetCFrame
-    _noTpLastTpTime = tick()
-    return true
-end
-RunService.Heartbeat:Connect(function()
-    if tick() - _noTpLastTpTime > 0.1 then
-        _noTpStopRevert = false
-        local plr = game:GetService("Players").LocalPlayer
-        local char = plr and plr.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
+    task.delay(0, function()
+        if hrp and hrp.Parent then
             hrp:SetAttribute("IsAttackTP", false)
         end
-    end
-end)
+        _noTpStopRevert = false
+    end)
+    return true
+end
 local function _noTpStop()
     _noTpEnabled = false
     _noTpLastCF = nil
@@ -5730,13 +5726,17 @@ local function _noTpStart()
     _noTpLastCF = rootPart.CFrame
     
     local function revertTp()
+        _noTpStopRevert = true
         pcall(function()
             rootPart.Anchored = false
-            if humanoid.Sit then humanoid.Sit = false end
+            humanoid.Sit = false
             rootPart.CFrame = _noTpLastCF
+            char:PivotTo(_noTpLastCF)
             rootPart.AssemblyLinearVelocity = Vector3.zero
             rootPart.AssemblyAngularVelocity = Vector3.zero
         end)
+        game:GetService("RunService").Heartbeat:Wait()
+        _noTpStopRevert = false
     end
 
     _noTpHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
@@ -5755,6 +5755,22 @@ local function _noTpStart()
         _noTpLastCF = rootPart.CFrame
     end)
     
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("LowerTorso")
+    local function hookPart(part)
+        if not part then return end
+        part:GetPropertyChangedSignal("CFrame"):Connect(function()
+            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+            revertTp()
+        end)
+        part:GetPropertyChangedSignal("Position"):Connect(function()
+            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp then return end
+            revertTp()
+        end)
+    end
+    
+    hookPart(rootPart)
+    hookPart(torso)
+    
     humanoid.Died:Connect(function()
         _noTpStop()
     end)
@@ -5763,23 +5779,21 @@ local _antiVoidEnabled = false
 local _antiVoidHeartbeat = nil
 local _antiVoidLastSafeCF = nil
 local _antiVoidCharConn = nil
-local _antiVoidRayParams = RaycastParams.new()
-_antiVoidRayParams.FilterType = Enum.RaycastFilterType.Exclude
-local _antiVoidLastChar = nil
-
 local function isPointSafe(pos)
+    local rayOrigin = pos
+    local rayDirection = Vector3.new(0, -15, 0)
+    local raycastParams = RaycastParams.new()
     local char = game:GetService("Players").LocalPlayer.Character
-    if _antiVoidLastChar ~= char then
-        _antiVoidLastChar = char
-        local trash = workspace:FindFirstChild("Map")
-        if trash then trash = trash:FindFirstChild("Trash") end
-        local ignore = {}
-        if char then ignore[1] = char end
-        if trash then ignore[2] = trash end
-        _antiVoidRayParams.FilterDescendantsInstances = ignore
-    end
-    return workspace:Raycast(pos, Vector3.new(0, -15, 0), _antiVoidRayParams) ~= nil
+    local trash = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Trash")
+    local ignoreList = {}
+    if char then table.insert(ignoreList, char) end
+    if trash then table.insert(ignoreList, trash) end
+    raycastParams.FilterDescendantsInstances = ignoreList
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    return raycastResult ~= nil
 end
+local _antiVoidPart = nil
 local function _antiVoidStart()
     if _antiVoidHeartbeat then pcall(function() _antiVoidHeartbeat:Disconnect() end) end
     _antiVoidEnabled = true
@@ -5788,11 +5802,25 @@ local function _antiVoidStart()
         local char = lp.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
+        
+        local destroyHeight = workspace.FallenPartsDestroyHeight + 50
+        
+        if not _antiVoidPart or not _antiVoidPart.Parent then
+            _antiVoidPart = Instance.new("Part")
+            _antiVoidPart.Name = "NX_AntiVoid_Boundary"
+            _antiVoidPart.Size = Vector3.new(2048, 5, 2048)
+            _antiVoidPart.Anchored = true
+            _antiVoidPart.CanCollide = true
+            _antiVoidPart.Transparency = 1
+            _antiVoidPart.Parent = workspace
+        end
+        
+        _antiVoidPart.Position = Vector3.new(hrp.Position.X, destroyHeight - 2.5, hrp.Position.Z)
+        
         if isPointSafe(hrp.Position) then
             _antiVoidLastSafeCF = hrp.CFrame
         end
-        local destroyHeight = workspace.FallenPartsDestroyHeight + 50
-        if hrp.Position.Y < destroyHeight then
+        if hrp.Position.Y < destroyHeight - 5 then
             if _antiVoidLastSafeCF then
                 _G.NX_TP(_antiVoidLastSafeCF, "Anti-Void", 1)
                 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -5808,6 +5836,7 @@ end
 local function _antiVoidStop()
     _antiVoidEnabled = false
     if _antiVoidHeartbeat then pcall(function() _antiVoidHeartbeat:Disconnect() end); _antiVoidHeartbeat = nil end
+    if _antiVoidPart then pcall(function() _antiVoidPart:Destroy() end); _antiVoidPart = nil end
 end
 function toggleAntiVoid(state)
     if state then
@@ -6001,8 +6030,8 @@ function NULL(v)
 	toggleAntiGrab(v)
 	toggleAntiGrabZero(v)
 	toggleNoTp(v)
-	toggleAntiVoid(v)
 end
+toggleAntiVoid(true)
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
         if CharacterCleanupEnabled then
@@ -6035,7 +6064,7 @@ function toggleCharacterCleanupRuntime(state)
                                                 runCleanupTick(char)
                                         end
                                 end)
-                                task.wait()
+                                task.wait(0.2)
                         until not CharacterCleanupEnabled
                 end)
                 local lp2 = game:GetService("Players").LocalPlayer
@@ -7356,7 +7385,6 @@ do
         local displacedClient = nil
         local originalParent = nil
         ;(function()
-                local _fpdhSet = false
                 local function forceClientDisplace(char, pos, isExtremeFling)
                         if pos.Y <= CLIENT_MOVE_Y or isExtremeFling then
                                 local charHandler = char:FindFirstChild("CharacterHandler")
@@ -7366,13 +7394,15 @@ do
                                                 originalParent = clientModule.Parent
                                                 displacedClient = clientModule
                                         end
-                                        if not _fpdhSet then
-                                                _fpdhSet = true
-                                                pcall(function() Workspace.FallenPartsDestroyHeight = 0/0 end)
-                                        end
-                                        if clientModule.Parent ~= StarterPack then
-                                                clientModule.Parent = StarterPack
-                                        end
+        pcall(function()
+                Workspace.FallenPartsDestroyHeight = 0/0
+                Workspace.FallenPartsDestroyHeight = 0/0
+        end)
+                                        pcall(function()
+                                                for _ = 1, 8 do
+                                                        clientModule.Parent = StarterPack
+                                                end
+                                        end)
                                 end
                         end
                 end
@@ -7410,9 +7440,13 @@ do
                                 for i = 1, #safePositions do
                                         local targetCF = safePositions[i]
                                         if targetCF then
-                                                hrp.AssemblyLinearVelocity = Vector3.zero
-                                                hrp.AssemblyAngularVelocity = Vector3.zero
-                                                hrp.CFrame = targetCF
+                                                pcall(function()
+                                                        for _ = 1, 5 do
+                                                                hrp.AssemblyLinearVelocity = Vector3.zero
+                                                                hrp.AssemblyAngularVelocity = Vector3.zero
+                                                                hrp.CFrame = targetCF
+                                                        end
+                                                end)
                                                 break
                                         end
                                 end
@@ -7448,6 +7482,27 @@ do
                                                                 displacedClient = nil
                                 originalParent = nil
                         end
+                end
+                local function setupHrpListeners(hrp, char)
+                        if not hrp then return end
+                        local function fastCheck()
+                                local pos = hrp.Position
+                                local isNanPos = pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z
+                                local vel = hrp.AssemblyLinearVelocity
+                                local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
+                                local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or bHitEnabled
+                                local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
+                                forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
+                        end
+                        hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
+                        hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
+                end
+                LocalPlayer.CharacterAdded:Connect(function(char)
+                        local hrp = char:WaitForChild("HumanoidRootPart", 5)
+                        setupHrpListeners(hrp, char)
+                end)
+                if LocalPlayer.Character then
+                        setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
                 end
                 RunService.Heartbeat:Connect(updateMonitoring)
         end)()
@@ -9793,7 +9848,7 @@ syncAutoTpKeybindDisplay()
 syncOrbitKeybindDisplay()
 updateTargetDisplay()
 bindLocalCharacter(char)
-task.wait()
+
 Slider({
         nameSilder = "Speed",
         nameshow = "",
@@ -9805,7 +9860,7 @@ Slider({
                 Speed = value
         end,
 })
-task.wait()
+
 Slider({
         nameSilder = "Fly",
         nameshow = "",
@@ -9817,7 +9872,6 @@ Slider({
                 flySpeed = value
         end,
 })
-task.wait()
 modelDropdownControl = Dropdown({
         namedropdown = "Players",
         saveKey = "",
@@ -9829,7 +9883,7 @@ modelDropdownControl = Dropdown({
                 applyModelDropdownSelection(value)
         end,
 })
-task.wait()
+
 blPlayersDropdownControl = Dropdown({
         namedropdown = "BL Players",
         saveKey = "",
@@ -9962,7 +10016,7 @@ blPlayersDropdownControl = Dropdown({
                 end
         end,
 })
-task.wait()
+
 do
         local offlineInputHolder = makeControlFrame(78)
         offlineInputHolder.Parent = uiX
@@ -10121,7 +10175,7 @@ do
                 if enterPressed then doAddOffline() end
         end)
 end
-task.wait()
+
 targetActionControls = _G["3tog_on_one_one_button"]({
         title = "Function",
         name1 = "View",
@@ -10181,7 +10235,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
                 teleportToSelectedTarget("Front")
         end,
 })
-task.wait()
+
 do
         local wfHolder = makeControlFrame(76)
         wfHolder.Parent = uiX
@@ -10251,7 +10305,7 @@ do
         wfAllCtrls[2] = makeWFTog("Camera", walkFlingBodyMode == false,  function() walkFlingBodyMode = false  end)
         wfAllCtrls[3] = makeWFTog("C+B",    walkFlingBodyMode == "both", function() walkFlingBodyMode = "both" end)
 end
-task.wait()
+
 Dropdown({
         namedropdown = "Direction",
         saveKey = "WalkFlingDirection",
@@ -10262,7 +10316,7 @@ Dropdown({
                 parseWalkFlingDirectionSelection(value)
         end,
 })
-task.wait()
+
 _G["2textbox_on_one_frame"]({
         title = "Powers",
         name1 = "Power Walkfling",
@@ -10278,11 +10332,11 @@ _G["2textbox_on_one_frame"]({
                 flingPower = value
         end,
 })
-task.wait()
+
 Slider({
         nameSilder = "Aura Range",
         nameshow = "",
-        max = 500,
+        max = 5000,
         min = 1,
         default = auraRange,
         saveKey = "AuraRange",
@@ -10290,7 +10344,7 @@ Slider({
                 auraRange = value
         end,
 })
-task.wait()
+
 flingModeControls = _G["4tog_on_one_frame"]({
         title = "Flings System",
         name1 = "Normal Walkfling",
@@ -10316,7 +10370,7 @@ flingModeControls = _G["4tog_on_one_frame"]({
                 setFlingAllEnabled(enabled)
         end,
 })
-task.wait()
+
 task.spawn(function()
         local savedOD = getSavedControlValue("OrbitDistance")
         if savedOD ~= nil then orbitDistance = savedOD end
@@ -10907,7 +10961,7 @@ task.spawn(function()
                 function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end, true)
         renderAllModeBtns()
 end)
-task.wait()
+
 if game.GameId == 3808081382 then
         placesDropdown = Dropdown({
                 namedropdown = "Places",
@@ -11210,7 +11264,6 @@ if game.GameId == 3808081382 then
 end
 syncVoidDeadKeybindDisplay()
 syncPlacesKeybindDisplay()
-task.wait()
 local customOffsetFrame = makeControlFrame(215)
 customOffsetFrame.Visible = false
 local CustomUI = {}
@@ -11347,7 +11400,7 @@ do
         end
         local behindCustomInput = createBehindCustomInput("Distance")
         behindCustomFrame.LayoutOrder = 1002
-        function makeCustomRow(yPos, height)
+        local function makeCustomRow(yPos, height)
                 local row = Instance.new("Frame")
                 row.BackgroundTransparency = 1
                 row.BorderSizePixel = 0
@@ -11499,7 +11552,7 @@ do
                 end)
                 return box
         end
-        posTitleLbl = Instance.new("TextLabel")
+        local posTitleLbl = Instance.new("TextLabel")
         posTitleLbl.BackgroundTransparency = 1
         posTitleLbl.Position = UDim2.new(0, 0, 0, 7)
         posTitleLbl.Size = UDim2.new(1, 0, 0, 15)
@@ -11622,7 +11675,7 @@ do
 end
 customOffsetFrame.Parent = uiX
 updateCustomUI()
-task.wait()
+
 do
         local charSaveKey = "SelectedCharacter"
         local characterList = { "Bald", "Hunter", "Monster", "Cyborg", "Ninja", "Batter", "Blade", "Esper", "Purple", "Tech", "Zombie", "KJ", "Sorcerer" }
@@ -11636,10 +11689,10 @@ do
                 end
                 return characterList[1]
         end
-        charCallbackReady = false
-        characterDropdown = nil
-        charPendingValue = nil
-        charPendingToken = 0
+        local charCallbackReady = false
+        local characterDropdown
+        local charPendingValue = nil
+        local charPendingToken = 0
         characterDropdown = Dropdown({
                 namedropdown = "Character",
                 inside = characterList,
@@ -11715,7 +11768,7 @@ do
                 end,
         })
         characterDropdown.Frame.LayoutOrder = 999999
-        function syncCharDropdown()
+        local function syncCharDropdown()
                 if not characterDropdown then return end
                 if charPendingValue ~= nil then return end
                 local char = player.Character
@@ -11725,7 +11778,7 @@ do
                         characterDropdown.SetValue(tostring(attr), true)
                 end
         end
-        function watchCharacterAttrs(char)
+        local function watchCharacterAttrs(char)
                 if not char then return end
                 char:GetAttributeChangedSignal("Character"):Connect(function()
                         pcall(syncCharDropdown)
@@ -11744,7 +11797,7 @@ do
                 charCallbackReady = true
         end)
 end
-task.wait()
+
 do
         local keybindHub = makeControlFrame(310)
         keybindHub.Name = "KeybindSystemHub"
@@ -11807,7 +11860,7 @@ do
         task.defer(updateKeybindText)
         task.defer(syncFlingKeybindDisplay)
 end
-task.wait()
+
 task.spawn(function()
         if game.GameId ~= 3808081382 then
                 return
@@ -11818,7 +11871,7 @@ task.spawn(function()
         if not screenGui.Parent then
                 return
         end
-        local ESP_BILLBOARD_NAME = "NOTHING_X_OverlayBillboard"
+        local ESP_BILLBOARD_NAME = "NOTHING_X_X"
         local ESP_HIGHLIGHT_NAME = "NOTHING-X"
         local TextService = game:GetService("TextService")
         local BILLBOARD_MIN_WIDTH = 72
@@ -13192,7 +13245,7 @@ end
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local NORMAL_TRANSPARENCY = 0.66
+local NORMAL_TRANSPARENCY = 0.8
 local ULT_TRANSPARENCY = 0.55
 local function Hide(Object)
         if not Object then
@@ -13374,7 +13427,7 @@ local function startChatInputBarTracking()
         task.spawn(function()
                 while true do
                         if not keybindFrame or not keybindFrame.Parent then
-                                task.wait()
+                                task.wait(0.1)
                                 continue
                         end
                         pcall(function()
@@ -13385,7 +13438,7 @@ local function startChatInputBarTracking()
                         if chatInputBar then
                                 break
                         end
-                        task.wait()
+                        task.wait(0.1)
                 end
                 updateKeybindPosition(chatInputBar)
                 chatConnectionPos = chatInputBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
@@ -13409,7 +13462,7 @@ end
 startChatInputBarTracking()
 task.spawn(function()
         while true do
-                task.wait(0.2)
+                task.wait(0.5)
                 for _,v in ipairs(HiddenObjects) do
                         pcall(function()
                                 if v.Visible then
