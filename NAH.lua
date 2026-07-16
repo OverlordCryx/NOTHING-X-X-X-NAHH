@@ -1582,7 +1582,18 @@ function updateOrbitToggleButton()
         end
 end
 function resolveAttackTpTarget() end
+-- Returns true when any fling type is currently active.
+-- Used to prevent other systems from zeroing the local player's velocity mid-fling.
+function isAnyFlingActive()
+        return walkFlingEnabled == true
+                or flingEnabled == true
+                or clickFlingEnabled == true
+                or auraFlingEnabled == true
+                or flingAllEnabled == true
+end
 function zeroLocalPlayerRoot()
+	-- Do NOT zero velocity while any fling is active — it would break the fling.
+	if isAnyFlingActive() then return end
 	local character = player.Character
 	if not character then return end
 	for _, part in ipairs(character:GetDescendants()) do
@@ -1737,7 +1748,7 @@ if type(controlSaveData.WalkFlingUseNormal) == "boolean" then
 end
 if controlSaveData.WalkFlingBodyMode ~= nil then
         local v = controlSaveData.WalkFlingBodyMode
-        if v == "both" or v == true or v == false then
+        if v == "both" or v == true or v == false or v == "target" then
                 walkFlingBodyMode = v
         end
 end
@@ -2457,6 +2468,24 @@ function getWalkFlingDirectionVector(rootPart)
         end
         local direction = Vector3.zero
         local lookVector
+        -- T-Target mode: precise aim toward selected target or closest player
+        if walkFlingBodyMode == "target" then
+                -- resolve target root
+                local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
+                local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
+                if not targetRoot then
+                        local closest = getClosestAlivePlayerTarget and getClosestAlivePlayerTarget()
+                        if not closest then closest = getClosestAliveTarget and getClosestAliveTarget() end
+                        targetRoot = closest and closest:FindFirstChild("HumanoidRootPart")
+                end
+                if targetRoot then
+                        local toTarget = (targetRoot.Position - rootPart.Position)
+                        if toTarget.Magnitude > 0.01 then
+                                return toTarget.Unit
+                        end
+                end
+                return rootPart.CFrame.LookVector
+        end
         if walkFlingBodyMode == "both" then
                 lookVector = (rootPart.CFrame.LookVector + workspace.CurrentCamera.CFrame.LookVector) * 0.5
         elseif walkFlingBodyMode then
@@ -2486,6 +2515,31 @@ function getWalkFlingDirectionVector(rootPart)
                 return nil
         end
         return direction.Unit
+end
+-- Resolves the fling target: selected target first, then closest player, then closest model.
+-- Called every Heartbeat frame — returns HumanoidRootPart or nil.
+function resolveWalkFlingTarget()
+        local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
+        local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
+        if targetRoot then return targetRoot end
+        local closest = getClosestAlivePlayerTarget and getClosestAlivePlayerTarget()
+        if not closest then closest = getClosestAliveTarget and getClosestAliveTarget() end
+        return closest and closest:FindFirstChild("HumanoidRootPart") or nil
+end
+
+-- Cached ping (refreshed every 2 s) so we don't pcall Stats every Heartbeat.
+_walkFlingCachedPing     = 0
+_walkFlingPingLastUpdate = 0
+function getWalkFlingCachedPing()
+        local now = tick()
+        if now - _walkFlingPingLastUpdate >= 2 then
+                _walkFlingPingLastUpdate = now
+                pcall(function()
+                        local stats = game:GetService("Stats")
+                        _walkFlingCachedPing = (stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0) / 1000
+                end)
+        end
+        return _walkFlingCachedPing
 end
 function resetGlobalFlingMotion()
         flingOrbitTime = 0
@@ -2539,9 +2593,23 @@ function setWalkFlingEnabled(enabled)
                                 if currentCharacter and rootPart then
                                         if not walkFlingUseNormal then
                                                 local vel = rootPart.Velocity
-                                                local direction = getWalkFlingDirectionVector(rootPart)
-                                                if direction then
-                                                        rootPart.Velocity = direction * walkFlingPower
+                                                if walkFlingBodyMode == "target" then
+                                                        -- T-Target: OP Precision (frame-perfect physics prediction without forced rotation)
+                                                        local targetRoot = resolveWalkFlingTarget()
+                                                        if targetRoot then
+                                                                -- Predict where target will be on the exact next physics step (1/60s)
+                                                                local nextFramePos = targetRoot.Position + (targetRoot.AssemblyLinearVelocity * (1/60))
+                                                                local toTarget = nextFramePos - rootPart.Position
+                                                                if toTarget.Magnitude > 0.01 then
+                                                                        rootPart.AssemblyLinearVelocity = toTarget.Unit * walkFlingPower
+                                                                end
+                                                        end
+                                                else
+                                                        -- Body / Camera / C+B: direction from look vector, full power
+                                                        local direction = getWalkFlingDirectionVector(rootPart)
+                                                        if direction then
+                                                                rootPart.Velocity = direction * walkFlingPower
+                                                        end
                                                 end
                                                 RunService.RenderStepped:Wait()
                                                 if walkFlingEnabled and walkFlingTaskToken == currentToken and rootPart.Parent then
@@ -3145,8 +3213,11 @@ function toggleAFK(enabled)
                                 _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneN-Loop", 3)
                                 loopIndex = (loopIndex % #loopPositions) + 1
                         end
-                        root.AssemblyLinearVelocity = Vector3.zero
-                        root.AssemblyAngularVelocity = Vector3.zero
+                        -- Don't zero velocity while any fling is active
+                        if not isAnyFlingActive() then
+                                root.AssemblyLinearVelocity = Vector3.zero
+                                root.AssemblyAngularVelocity = Vector3.zero
+                        end
                 end)
                 afkCharAddedConnection = player.CharacterAdded:Connect(function(newChar)
                         afkSavedCFrame = nil
@@ -5411,14 +5482,16 @@ local function _handleNewDesc(v, char)
         end
         if not CharacterCleanupEnabled and not antiZeroEnabled then return end
         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
-        if isSelfFlinging then return end
+        
         if antiZeroEnabled then
                 if _isBadMover(v) then
                         pcall(function() v:Destroy() end)
                         local hrp = char:FindFirstChild("HumanoidRootPart")
                         if hrp then
-                                hrp.AssemblyLinearVelocity  = Vector3.zero
-                                hrp.AssemblyAngularVelocity = Vector3.zero
+                                if not isSelfFlinging then
+                                        hrp.AssemblyLinearVelocity  = Vector3.zero
+                                        hrp.AssemblyAngularVelocity = Vector3.zero
+                                end
                                 _nxMarkDefenseActing()
                                 pcall(function() hrp:SetAttribute("IsTrashOperation", true) end)
                                 task.delay(0.15, function()
@@ -6400,44 +6473,44 @@ end)
                         if v:IsA("Motor6D") then
                                 table.insert(myMotor6Ds, v)
                         end
-                        if not isSelfFlinging then
-                                if CharacterCleanupEnabled then
-                                        if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
-                                                pcall(function() v:Destroy() end)
-                                                _nxMarkDefenseActing()
-                                                local human = Char:FindFirstChildOfClass("Humanoid")
-                                                if human then
-                                                        human.PlatformStand = false
+                        if CharacterCleanupEnabled then
+                                if v:IsA("BallSocketConstraint") or v:IsA("NoCollisionConstraint") then
+                                        pcall(function() v:Destroy() end)
+                                        _nxMarkDefenseActing()
+                                        local human = Char:FindFirstChildOfClass("Humanoid")
+                                        if human then
+                                                human.PlatformStand = false
+                                        end
+                                        local myMotor6Ds = characterMotor6DsByChar[Char]
+                                        if myMotor6Ds then
+                                                for i = 1, #myMotor6Ds do
+                                                        local m = myMotor6Ds[i]
+                                                        if m and m.Parent then m.Enabled = true end
                                                 end
-                                                local myMotor6Ds = characterMotor6DsByChar[Char]
-                                                if myMotor6Ds then
-                                                        for i = 1, #myMotor6Ds do
-                                                                local m = myMotor6Ds[i]
-                                                                if m and m.Parent then m.Enabled = true end
-                                                        end
-                                                end
-                                                local hrp = Char:FindFirstChild("HumanoidRootPart")
-                                                if hrp then
-                                                        pcall(function() hrp:SetAttribute("IsTrashOperation", true) end)
-                                                        task.delay(0.15, function()
-                                                                pcall(function()
-                                                                        if hrp and hrp.Parent then
-                                                                                hrp:SetAttribute("IsTrashOperation", false)
-                                                                        end
-                                                                end)
+                                        end
+                                        local hrp = Char:FindFirstChild("HumanoidRootPart")
+                                        if hrp then
+                                                pcall(function() hrp:SetAttribute("IsTrashOperation", true) end)
+                                                task.delay(0.15, function()
+                                                        pcall(function()
+                                                                if hrp and hrp.Parent then
+                                                                        hrp:SetAttribute("IsTrashOperation", false)
+                                                                end
                                                         end)
-                                                end
+                                                end)
                                         end
                                 end
                         end
-                        if not isSelfFlinging and antiZeroEnabled then
+                        if antiZeroEnabled then
                                 if _isBadMover(v) then
                                         local hrp = Char:FindFirstChild("HumanoidRootPart")
                                         if hrp then
-                                                pcall(function()
-                                                        hrp.AssemblyLinearVelocity = Vector3.zero
-                                                        hrp.AssemblyAngularVelocity = Vector3.zero
-                                                end)
+                                                if not isSelfFlinging then
+                                                        pcall(function()
+                                                                hrp.AssemblyLinearVelocity = Vector3.zero
+                                                                hrp.AssemblyAngularVelocity = Vector3.zero
+                                                        end)
+                                                end
                                                 _nxMarkDefenseActing()
                                                 pcall(function() hrp:SetAttribute("IsTrashOperation", true) end)
                                                 task.delay(0.15, function()
@@ -10270,7 +10343,7 @@ do
                 local btn = Instance.new("TextButton")
                 btn.BackgroundTransparency = 0
                 btn.BorderSizePixel = 0
-                btn.Size = UDim2.new(1/3, -5, 1, 0)
+                btn.Size = UDim2.new(1/4, -5, 1, 0)
                 btn.AutoButtonColor = false
                 btn.Font = Enum.Font.GothamBold
                 btn.Text = text
@@ -10302,9 +10375,12 @@ do
                 render()
                 return ctrl
         end
-        wfAllCtrls[1] = makeWFTog("Body",   walkFlingBodyMode == true,   function() walkFlingBodyMode = true   end)
-        wfAllCtrls[2] = makeWFTog("Camera", walkFlingBodyMode == false,  function() walkFlingBodyMode = false  end)
-        wfAllCtrls[3] = makeWFTog("C+B",    walkFlingBodyMode == "both", function() walkFlingBodyMode = "both" end)
+        -- Resize buttons to 1/4 each to fit the new T-Target button
+        wfAllCtrls[1] = makeWFTog("Body",     walkFlingBodyMode == true,       function() walkFlingBodyMode = true     end)
+        wfAllCtrls[2] = makeWFTog("Camera",   walkFlingBodyMode == false,      function() walkFlingBodyMode = false    end)
+        wfAllCtrls[3] = makeWFTog("C+B",      walkFlingBodyMode == "both",     function() walkFlingBodyMode = "both"   end)
+        wfAllCtrls[4] = makeWFTog("T-Target", walkFlingBodyMode == "target",   function() walkFlingBodyMode = "target" end)
+
 end
 Dropdown({
         namedropdown = "Direction",
@@ -10473,11 +10549,26 @@ task.spawn(function()
                         end
                         local targetPos = targetRoot.Position
                         local targetCF  = targetRoot.CFrame
+                        -- FIX: use live position for orbit; when target is being flung
+                        -- (velocity >= 300), skip prediction so orbit doesn't fly off.
+                        local _orbitTargetVel = targetRoot.AssemblyLinearVelocity
+                        local _orbitIsFling   = _orbitTargetVel.Magnitude >= 300
+                        if not _orbitIsFling then
+                                -- small prediction so orbit tracks normal movement cleanly
+                                local _orbitPing = 0
+                                pcall(function()
+                                        local stats = game:GetService("Stats")
+                                        _orbitPing = (stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 0) / 1000
+                                end)
+                                local _orbitLead = (_orbitPing > 0 and (_orbitPing * 1.2) or 0.05)
+                                local _orbitHorizVel = Vector3.new(_orbitTargetVel.X, 0, _orbitTargetVel.Z)
+                                targetPos = targetPos + _orbitHorizVel * _orbitLead
+                        end
                         if orbitAdaptBody then
                                 targetPos = targetCF.Position
                         end
                         if orbitAdaptPosition then
-                                targetPos = targetRoot.Position
+                                targetPos = _orbitIsFling and targetRoot.Position or targetPos
                         end
                         local dist = math.max(0, orbitDistance)
                         local ox, oy, oz
