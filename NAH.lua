@@ -1339,7 +1339,7 @@ task.spawn(function()
 end)
 function updateFriendCache()
         for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= player and friendCache[p.UserId] ~= true then
+                if p ~= player and friendCache[p.UserId] == nil then
                         if friendsList[p.UserId] then
                                 friendCache[p.UserId] = true
                         else
@@ -1353,9 +1353,7 @@ function updateFriendCache()
                                                         isFriend = p:IsFriendsWith(player.UserId)
                                                 end)
                                         end
-                                        if isFriend then
-                                                friendCache[p.UserId] = true
-                                        end
+                                        friendCache[p.UserId] = isFriend == true
                                 end)
                         end
                 end
@@ -1363,10 +1361,13 @@ function updateFriendCache()
 end
 task.spawn(function()
         Players.PlayerAdded:Connect(function(p)
-                task.spawn(function()
+                task.defer(function()
                         if friendsList[p.UserId] then
                                 friendCache[p.UserId] = true
-                        else
+                                return
+                        end
+                        task.delay(0.5, function()
+                                if not p.Parent then return end
                                 local isFriend = false
                                 pcall(function()
                                         isFriend = player:IsFriendsWith(p.UserId)
@@ -1376,18 +1377,19 @@ task.spawn(function()
                                                 isFriend = p:IsFriendsWith(player.UserId)
                                         end)
                                 end
-                                if isFriend then
-                                        friendCache[p.UserId] = true
-                                end
-                        end
+                                friendCache[p.UserId] = isFriend == true
+                        end)
                 end)
+        end)
+        Players.PlayerRemoving:Connect(function(p)
+                friendCache[p.UserId] = nil
         end)
         updateFriendCache()
         _G.masterYieldCounter = _G.masterYieldCounter + 1
         local lastFriendUpdate = 0
         _G.MasterYieldingTasks[tostring(_G.masterYieldCounter)] = function()
                 local now = tick()
-                if now - lastFriendUpdate >= 5 then
+                if now - lastFriendUpdate >= 10 then
                         lastFriendUpdate = now
                         updateFriendCache()
                 end
@@ -8870,6 +8872,7 @@ do
                 modelDropdownControl.SetValue(getModelDropdownLabelForSelection(resolveManualAttackTpTargetModel(), manualAttackTpPlayer), true)
         end
         _refreshDropdownPending = false
+        _refreshDropdownPreferred = nil
         _rawRefreshModelDropdown = function(preferredValue)
                 if not modelDropdownControl or not modelDropdownControl.SetItems then
                         return
@@ -8986,12 +8989,15 @@ function updateDynamicDropdownDisplays()
         end
 end
 refreshModelDropdown = function(preferredValue)
+        _refreshDropdownPreferred = preferredValue or _refreshDropdownPreferred
         if _refreshDropdownPending then return end
         _refreshDropdownPending = true
-        task.delay(0.3, function()
+        task.delay(0.75, function()
                 _refreshDropdownPending = false
+                local pref = _refreshDropdownPreferred
+                _refreshDropdownPreferred = nil
                 if screenGui.Parent then
-                        _rawRefreshModelDropdown(preferredValue)
+                        _rawRefreshModelDropdown(pref)
                 end
         end)
 end
@@ -12647,8 +12653,20 @@ task.spawn(function()
                         task.spawn(onCharAdded, char)
                 end)
                 table.insert(conns, charAddedConn)
-                local charRemovingConn = targetPlayer.CharacterRemoving:Connect(function()
-                        cleanupPlayerOverlay(targetPlayer)
+                local charRemovingConn = targetPlayer.CharacterRemoving:Connect(function(removingChar)
+                        local state = espOverlayState[targetPlayer]
+                        if state and state.model == removingChar then
+                                local highlight = removingChar:FindFirstChild(ESP_HIGHLIGHT_NAME)
+                                if highlight and highlight:IsA("Highlight") then
+                                        highlight.Enabled = false
+                                        scheduleHighlightDestroy(removingChar)
+                                end
+                                local billboard = removingChar:FindFirstChild(ESP_BILLBOARD_NAME)
+                                if billboard then
+                                        pcall(function() billboard:Destroy() end)
+                                end
+                                state.model = nil
+                        end
                 end)
                 table.insert(conns, charRemovingConn)
                 local playerAttrConn = targetPlayer.AttributeChanged:Connect(function(attr)
@@ -12668,8 +12686,18 @@ task.spawn(function()
         for _, targetPlayer in ipairs(Players:GetPlayers()) do
                 setupPlayerOverlay(targetPlayer)
         end
-        local playerAddedOverlayConn = Players.PlayerAdded:Connect(setupPlayerOverlay)
-        local playerRemovingOverlayConn = Players.PlayerRemoving:Connect(cleanupPlayerOverlay)
+        local playerAddedOverlayConn = Players.PlayerAdded:Connect(function(p)
+                task.defer(function()
+                        if p.Parent == Players then
+                                setupPlayerOverlay(p)
+                        end
+                end)
+        end)
+        local playerRemovingOverlayConn = Players.PlayerRemoving:Connect(function(p)
+                task.defer(function()
+                        cleanupPlayerOverlay(p)
+                end)
+        end)
         task.spawn(function()
                 while screenGui.Parent do
                         local overlayEnabled = espOverlayConfig.showHp
@@ -12685,7 +12713,7 @@ task.spawn(function()
                                         end
                                 end
                         end
-                        task.wait(0.5)
+                        task.wait(1)
                 end
         end)
         screenGui.Destroying:Connect(function()
@@ -12714,10 +12742,18 @@ task.defer(function()
 end)
 task.spawn(function()
         local updatePending = false
+        local updateToken = 0
         local function updateDropdownsEvent()
+                updateToken += 1
+                local token = updateToken
                 if updatePending then return end
                 updatePending = true
-                task.delay(0, function()
+                task.delay(0.75, function()
+                        if token ~= updateToken then
+                                updatePending = false
+                                updateDropdownsEvent()
+                                return
+                        end
                         updatePending = false
                         if screenGui.Parent then
                                 refreshModelDropdown()
@@ -12726,60 +12762,50 @@ task.spawn(function()
         end
         local function setupCharacterSpawnCheck(char)
                 task.spawn(function()
-                        local elapsed = 0
-                        local waitTime = 0.1
-                        while elapsed < 10 and char.Parent do
-                                local humanoid = char:FindFirstChild("Humanoid")
-                                local hrp = char:FindFirstChild("HumanoidRootPart")
-                                if humanoid and hrp then
-                                        updateDropdownsEvent()
-                                        break
-                                end
-                                task.wait(waitTime)
-                                elapsed = elapsed + waitTime
-                                if elapsed >= 1.0 then
-                                        waitTime = 2.0
-                                end
+                        local humanoid = char:FindFirstChild("Humanoid") or char:WaitForChild("Humanoid", 8)
+                        local hrp = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 8)
+                        if humanoid and hrp and char.Parent then
+                                updateDropdownsEvent()
                         end
                 end)
         end
         Players.PlayerAdded:Connect(function(p)
-                updateDropdownsEvent()
+                task.defer(updateDropdownsEvent)
                 p.CharacterAdded:Connect(setupCharacterSpawnCheck)
-                p.CharacterRemoving:Connect(updateDropdownsEvent)
         end)
         Players.PlayerRemoving:Connect(function(leavingPlayer)
-                for label, entry in pairs(modelDropdownLookup) do
-                        if entry.player == leavingPlayer and not entry.isOffline then
-                                if blacklistedTargets[label] then
-                                        local leavingName = leavingPlayer.Name
-                                        if not offlinePlayers[leavingName] then
-                                                offlinePlayers[leavingName] = {
-                                                        name = leavingName,
-                                                        displayName = leavingPlayer.DisplayName or leavingName,
-                                                        userId = leavingPlayer.UserId,
-                                                }
-                                                local blNames = {}
-                                                for lbl in pairs(blacklistedTargets) do
-                                                        local e = modelDropdownLookup[lbl]
-                                                        if e and e.player and not e.isOffline and e.baseNameStr then
-                                                                blNames[#blNames + 1] = e.baseNameStr
+                task.defer(function()
+                        for label, entry in pairs(modelDropdownLookup) do
+                                if entry.player == leavingPlayer and not entry.isOffline then
+                                        if blacklistedTargets[label] then
+                                                local leavingName = leavingPlayer.Name
+                                                if not offlinePlayers[leavingName] then
+                                                        offlinePlayers[leavingName] = {
+                                                                name = leavingName,
+                                                                displayName = leavingPlayer.DisplayName or leavingName,
+                                                                userId = leavingPlayer.UserId,
+                                                        }
+                                                        local blNames = {}
+                                                        for lbl in pairs(blacklistedTargets) do
+                                                                local e = modelDropdownLookup[lbl]
+                                                                if e and e.player and not e.isOffline and e.baseNameStr then
+                                                                        blNames[#blNames + 1] = e.baseNameStr
+                                                                end
                                                         end
+                                                        blNames[#blNames + 1] = leavingName
+                                                        controlSaveData.BLPlayerNames = blNames
+                                                        controlSaveData.OfflinePlayers = offlinePlayers
+                                                        saveSliderSaveData()
                                                 end
-                                                blNames[#blNames + 1] = leavingName
-                                                controlSaveData.BLPlayerNames = blNames
-                                                controlSaveData.OfflinePlayers = offlinePlayers
-                                                saveSliderSaveData()
                                         end
+                                        break
                                 end
-                                break
                         end
-                end
-                updateDropdownsEvent()
+                        updateDropdownsEvent()
+                end)
         end)
         for _, p in ipairs(Players:GetPlayers()) do
                 p.CharacterAdded:Connect(setupCharacterSpawnCheck)
-                p.CharacterRemoving:Connect(updateDropdownsEvent)
         end
 end)
 targetDragPosition = nil
