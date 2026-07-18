@@ -1,7 +1,12 @@
 repeat task.wait(0.1) until game:IsLoaded() local CONFIG={MAX_RETRIES=10,INITIAL_WAIT=0.3,MAX_WAIT=2.0,EXPONENTIAL_BACKOFF=true,ELEMENT_TIMEOUT=15} local GameState={placeId=nil,gameId=nil,serverId=nil,loadStartTime=nil,isReady=false} local LoaderEngine={} function LoaderEngine:new() local o={elements={},results={successful={},failed={},total=0,completed=0},startTime=nil,isRunning=false} setmetatable(o,{__index=LoaderEngine}) return o end local function updateGameState() GameState.placeId=game.PlaceId GameState.gameId=game.GameId GameState.serverId=game.JobId if GameState.placeId and GameState.gameId and GameState.serverId then GameState.isReady=true GameState.loadStartTime=tick() return true end return false end local function waitForGameState() local e=0 while not GameState.isReady and e<30 do if updateGameState() then return true end task.wait(0.5) e=e+0.5 end return GameState.isReady end local function calcWait(r) local w=CONFIG.INITIAL_WAIT*(1.5^(r-1)) return math.min(w,CONFIG.MAX_WAIT) end function LoaderEngine:loadElement(el) local r=0 local st=tick() while r<CONFIG.MAX_RETRIES do if tick()-st>el.timeout then return false end r=r+1 local s,res=pcall(el.checkFunction) if s and res then el.status="SUCCESS" el.retries=r el.loadTime=tick()-st self.results.successful[el.name]=el self.results.completed+=1 return true end if r>=CONFIG.MAX_RETRIES then el.status="FAILED" el.error=tostring(res) self.results.failed[el.name]=el return false end task.wait(calcWait(r)) end return false end function LoaderEngine:register(n,f,t) t=t or CONFIG.ELEMENT_TIMEOUT table.insert(self.elements,{name=n,checkFunction=f,timeout=t,status="PENDING",retries=0,loadTime=0,error=nil}) self.results.total+=1 end function LoaderEngine:start() if self.isRunning then return false end self.isRunning=true self.startTime=tick() if not waitForGameState() then self.isRunning=false return false end local sc=0 for _,el in ipairs(self.elements) do if self:loadElement(el) then sc+=1 end end self.isRunning=false return sc==self.results.total end local loader=LoaderEngine:new() loader:register("Players Service",function() return game:GetService("Players")~=nil end,5) loader:register("LocalPlayer",function() return game:GetService("Players").LocalPlayer~=nil end,10) loader:register("Character",function() local p=game:GetService("Players").LocalPlayer return p and p.Character~=nil end,15) loader:register("HumanoidRootPart",function() local p=game:GetService("Players").LocalPlayer return p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") end,15) loader:register("Humanoid",function() local p=game:GetService("Players").LocalPlayer return p and p.Character and p.Character:FindFirstChildOfClass("Humanoid") end,10) loader:register("PlayerGui",function() local p=game:GetService("Players").LocalPlayer return p and p:FindFirstChild("PlayerGui") end,10) loader:register("Workspace",function() return game:GetService("Workspace")~=nil end,5) task.spawn(function() loader:start() end) _G.NXLoaderAdv={loader=loader,gameState=GameState,register=function(n,f,t)if not loader.isRunning then loader:register(n,f,t)end end,start=function()return loader:start()end,getStatus=function()return{total=loader.results.total,completed=loader.results.completed,failed=loader.results.total-loader.results.completed}end}
-warn"NOTHING-X"
-
-
+print("NOTHING_X")
+task.wait(3)
+warn(string.format(
+    "Place  | %s | Game  | %s | Server  | %s |",
+    game.PlaceId,
+    game.GameId,
+    game.JobId
+))
 Players = game:GetService("Players")
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
@@ -21,6 +26,70 @@ end)
 _G.NX_VelCache = {}
 _G.NX_PosCache = {}
 _G.NX_ClosestTarget = nil
+do
+	local _nxDeadCbs = {}
+	local _nxBackCbs = {}
+	local _nxWasDead = false
+	local _nxDeathConn = nil
+	local function _nxFire(list, ...)
+		for i = 1, #list do
+			pcall(list[i], ...)
+		end
+	end
+	local function _nxUnreg(list, fn)
+		for i = #list, 1, -1 do
+			if list[i] == fn then
+				table.remove(list, i)
+			end
+		end
+	end
+	_G.NX_DEAD = function(fn)
+		if type(fn) ~= "function" then
+			return function() end
+		end
+		_nxDeadCbs[#_nxDeadCbs + 1] = fn
+		return function()
+			_nxUnreg(_nxDeadCbs, fn)
+		end
+	end
+	_G.NX_BACK = function(fn)
+		if type(fn) ~= "function" then
+			return function() end
+		end
+		_nxBackCbs[#_nxBackCbs + 1] = fn
+		return function()
+			_nxUnreg(_nxBackCbs, fn)
+		end
+	end
+	local function _nxBindChar(char)
+		if _nxDeathConn then
+			pcall(function()
+				_nxDeathConn:Disconnect()
+			end)
+			_nxDeathConn = nil
+		end
+		if not char then
+			return
+		end
+		local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 10)
+		if not hum then
+			return
+		end
+		if _nxWasDead then
+			_nxWasDead = false
+			_nxFire(_nxBackCbs, char, hum)
+		end
+		_nxDeathConn = hum.Died:Connect(function()
+			_nxWasDead = true
+			_nxFire(_nxDeadCbs, char, hum)
+		end)
+	end
+	local _nxLp = game:GetService("Players").LocalPlayer
+	if _nxLp.Character then
+		task.spawn(_nxBindChar, _nxLp.Character)
+	end
+	_nxLp.CharacterAdded:Connect(_nxBindChar)
+end
 RealRunService.Heartbeat:Connect(function()
     local velCache = {}
     local posCache = {}
@@ -1640,11 +1709,11 @@ function zeroLocalPlayerRoot()
 end
 function syncFlingModeControls() end
 function runGetTrash() end
-function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
+function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity, priority)
         if not rootPart then return end
         rootPart:SetAttribute("IsAttackTP", true)
         if cframe then
-                _G.NX_TP(cframe, "ApplyTeleportRootState", 4)
+                _G.NX_TP(cframe, "ApplyTeleportRootState", priority or 5)
         end
         if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
         if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
@@ -1656,8 +1725,8 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
                 end)
         end)
 end
-function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity)
-        applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity)
+function overpowerRootState(rootPart, cframe, linearVelocity, angularVelocity, priority)
+        applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocity, priority)
 end
 function predictedReturnCFrame(myRoot, roundTripFrames)
         if not myRoot or not myRoot.Parent then return nil end
@@ -2131,7 +2200,7 @@ function toggleVoidDead(state)
                 end
                 if VoidDeadToggle then VoidDeadToggle:SetValue(false, true) end
                 if voidDeadLastCF and hrp and humanoid and humanoid.Health > 0 then
-                        applyTeleportRootState(hrp, voidDeadLastCF)
+                        applyTeleportRootState(hrp, voidDeadLastCF, nil, nil, 4)
                 end
                 pcall(function()
                         workspace.Camera.CameraType = Enum.CameraType.Custom
@@ -2171,14 +2240,12 @@ function toggleVoidDead(state)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
         end)
-        local deathConn
-        deathConn = humanoid.Died:Connect(function()
-                if voidDeadActive then
-                        toggleVoidDead(false)
-                end
-                deathConn:Disconnect()
-        end)
 end
+_G.NX_DEAD(function()
+        if voidDeadActive then
+                toggleVoidDead(false)
+        end
+end)
 dVoidDeadActive = false
 dVoidDeadConn = nil
 function toggleDVoidDead(state)
@@ -2207,7 +2274,7 @@ function toggleDVoidDead(state)
                         targetActionControls.Fourth.SetValue(false, true)
                 end
                 if voidDeadLastCF and hrp and humanoid and humanoid.Health > 0 then
-                        applyTeleportRootState(hrp, voidDeadLastCF)
+                        applyTeleportRootState(hrp, voidDeadLastCF, nil, nil, 4)
                 end
                 pcall(function()
                         workspace.Camera.CameraType = Enum.CameraType.Custom
@@ -2264,21 +2331,19 @@ function toggleDVoidDead(state)
                         end)
                         if hrp.Position.Y < -6000 then
                                 if voidDeadLastCF then
-                                        applyTeleportRootState(hrp, voidDeadLastCF)
+                                        applyTeleportRootState(hrp, voidDeadLastCF, nil, nil, 4)
                                 end
                         else
                                 voidDeadLastCF = hrp.CFrame
                         end
                 end
         end)
-        local deathConn
-        deathConn = humanoid.Died:Connect(function()
-                if dVoidDeadActive then
-                        toggleDVoidDead(false)
-                end
-                deathConn:Disconnect()
-        end)
 end
+_G.NX_DEAD(function()
+        if dVoidDeadActive then
+                toggleDVoidDead(false)
+        end
+end)
 antiFlingEnabled = false
 antiFlingConnection = nil
 antiFlingDescConn = {}
@@ -3016,18 +3081,18 @@ function restorePosition(savedCFrame)
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if hrp and savedCFrame then
                 hrp.Anchored = false
-                _G.NX_TP(CFrame.new(0, -6666, 0), "SafeZone-Restore", 3)
+                _G.NX_TP(CFrame.new(0, -6666, 0), "SafeZone-Restore", 2)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
                 task.wait()
                 if hrp.Parent then
-                        _G.NX_TP(CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z), "SafeZone-Restore", 3)
+                        _G.NX_TP(CFrame.new(savedCFrame.Position.X, -6666, savedCFrame.Position.Z), "SafeZone-Restore", 2)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                         task.wait()
                 end
                 if hrp.Parent then
-                        _G.NX_TP(savedCFrame, "SafeZone-Restore", 3)
+                        _G.NX_TP(savedCFrame, "SafeZone-Restore", 2)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -3199,7 +3264,7 @@ function toggleAFK(enabled)
                 disableConflictingFeatures()
                 if hrp then
                         hrp.Anchored = false
-                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneN-Start", 3)
+                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneN-Start", 2)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -3228,12 +3293,12 @@ function toggleAFK(enabled)
                         if isFirstTp then
                                 isFirstTp = false
                                 if afkSavedCFrame then
-                                        _G.NX_TP(CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z), "SafeZoneN-Loop", 3)
+                                        _G.NX_TP(CFrame.new(afkSavedCFrame.Position.X, -6666, afkSavedCFrame.Position.Z), "SafeZoneN-Loop", 2)
                                 else
-                                        _G.NX_TP(CFrame.new(root.Position.X, -6666, root.Position.Z), "SafeZoneN-Loop", 3)
+                                        _G.NX_TP(CFrame.new(root.Position.X, -6666, root.Position.Z), "SafeZoneN-Loop", 2)
                                 end
                         else
-                                _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneN-Loop", 3)
+                                _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneN-Loop", 2)
                                 loopIndex = (loopIndex % #loopPositions) + 1
                         end
                         if not isAnyFlingActive() then
@@ -3248,7 +3313,7 @@ function toggleAFK(enabled)
                                 local newRoot = newChar:WaitForChild("HumanoidRootPart", 5)
                                 if newRoot and afkEnabled then
                                         newRoot.Anchored = false
-                                        _G.NX_TP(CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z), "SafeZoneN-Respawn", 3)
+                                        _G.NX_TP(CFrame.new(newRoot.Position.X, -6666, newRoot.Position.Z), "SafeZoneN-Respawn", 2)
                                         newRoot.AssemblyLinearVelocity = Vector3.zero
                                         newRoot.AssemblyAngularVelocity = Vector3.zero
                                         isFirstTp = true
@@ -3331,12 +3396,12 @@ function toggleSafeZoneHP(enabled)
                                         if isFirstTp then
                                                 isFirstTp = false
                                                 if safeZoneHPSavedCFrame then
-                                                        _G.NX_TP(CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z), "SafeZoneHP-Loop", 3)
+                                                        _G.NX_TP(CFrame.new(safeZoneHPSavedCFrame.Position.X, -6666, safeZoneHPSavedCFrame.Position.Z), "SafeZoneHP-Loop", 2)
                                                 else
-                                                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneHP-Loop", 3)
+                                                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneHP-Loop", 2)
                                                 end
                                         else
-                                                _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneHP-Loop", 3)
+                                                _G.NX_TP(CFrame.new(loopPositions[loopIndex]), "SafeZoneHP-Loop", 2)
                                                 loopIndex = (loopIndex % #loopPositions) + 1
                                         end
                                         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -3349,7 +3414,7 @@ function toggleSafeZoneHP(enabled)
                                         safeZoneHPCharacter = character
                                         safeZoneHPInSafeZone = true
                                         hrp.Anchored = false
-                                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneHP-Start", 3)
+                                        _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "SafeZoneHP-Start", 2)
                                         hrp.AssemblyLinearVelocity = Vector3.zero
                                         hrp.AssemblyAngularVelocity = Vector3.zero
                                         isFirstTp = false
@@ -3505,7 +3570,7 @@ function startGetTrashHoldLoop(runToken)
                         if rootPart and rootPart.Parent and getTrashState.holdCFrame then
                                 rootPart.AssemblyLinearVelocity = Vector3.zero
                                 rootPart.AssemblyAngularVelocity = Vector3.zero
-                                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
+                                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
                         end
                 end
         end)
@@ -3631,7 +3696,7 @@ function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarget)
                 local alpha = traveled / totalDist
                 currentPos = fromPos:Lerp(toPos, alpha)
                 getTrashState.holdCFrame = getTrashTravelCFrame(currentPos, lookTarget or toPos)
-                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
+                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
         end
         return true
 end
@@ -3686,7 +3751,7 @@ function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
                 local alpha = traveled / totalDist
                 local currentPos = p2:Lerp(targetPos, alpha)
                 getTrashState.holdCFrame = startCFrame:Lerp(targetCFrame, alpha)
-                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
+                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
         end
         return true
 end
@@ -3714,7 +3779,7 @@ function liftOutOfTrashRun()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        _G.NX_TP(rootPart.CFrame + Vector3.new(0, 17, 0), "GetTrash", 4)
+        _G.NX_TP(rootPart.CFrame + Vector3.new(0, 17, 0), "GetTrash", 5)
 end
 function teleportBackToSavedTrashPositionInstant()
         local currentCharacter = player.Character
@@ -3724,7 +3789,7 @@ function teleportBackToSavedTrashPositionInstant()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        _G.NX_TP(getTrashState.savedCFrame, "GetTrash", 4)
+        _G.NX_TP(getTrashState.savedCFrame, "GetTrash", 5)
 end
 function stopGetTrashImmediate()
         getTrashState.running = false
@@ -3880,7 +3945,7 @@ runGetTrash = function()
                                         getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position + rootPart.CFrame.LookVector)
                                         rootPart.AssemblyLinearVelocity = Vector3.zero
                                         rootPart.AssemblyAngularVelocity = Vector3.zero
-                                        _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 4)
+                                        _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
                                         clickTrashcan()
                                         clickAttempts += 1
                                         task.wait()
@@ -4184,30 +4249,27 @@ function bindLocalCharacter(newChar)
         hum = newChar and newChar:FindFirstChildOfClass("Humanoid")
         root = newChar and newChar:FindFirstChild("HumanoidRootPart")
         cam = Workspace.CurrentCamera
-        if localCharacterDiedConnection then
-                localCharacterDiedConnection:Disconnect()
-                localCharacterDiedConnection = nil
-        end
-        if hum then
-                localCharacterDiedConnection = hum.Died:Connect(function()
-                        if root and root.Position.Y >= 0 then
-                                lastDeathCFrame = root.CFrame
-                        end
-                        _G.NOTHINGX_PendingFlyRespawn = flying == true
-                        attackTpHolding = false
-                        stopSetBackTravel()
-                        if bv then
-                                bv:Destroy()
-                                bv = nil
-                        end
-                        if bg then
-                                bg:Destroy()
-                                bg = nil
-                        end
-                        velocity = Vector3.zero
-                        currentVel = Vector3.zero
-                end)
-        end
+end
+if not _G._NX_LocalDeadBound then
+        _G._NX_LocalDeadBound = true
+        _G.NX_DEAD(function()
+                if root and root.Position.Y >= 0 then
+                        lastDeathCFrame = root.CFrame
+                end
+                _G.NOTHINGX_PendingFlyRespawn = flying == true
+                attackTpHolding = false
+                stopSetBackTravel()
+                if bv then
+                        bv:Destroy()
+                        bv = nil
+                end
+                if bg then
+                        bg:Destroy()
+                        bg = nil
+                end
+                velocity = Vector3.zero
+                currentVel = Vector3.zero
+        end)
 end
 function isTargetSafe(model)
         return true
@@ -5389,6 +5451,8 @@ function toggleSeriousModeTracker(state)
 end
 CharacterCleanupEnabled = false
 antiZeroEnabled = false
+_nullWanted = false
+_noTpWanted = false
 ModConnections = {}
 _nxDefenseActing = false
 _nxDefenseActingUntil = 0
@@ -5662,6 +5726,9 @@ function toggleAntiZero(state)
         end
         if antiZeroEnabled then
                 local lp = game:GetService("Players").LocalPlayer
+                if lp.Character then
+                        pcall(function() _bindCleanupEvents(lp.Character) end)
+                end
                 task.spawn(function()
                         while antiZeroEnabled do
                                 pcall(function() runCleanupTick(lp.Character) end)
@@ -5826,15 +5893,23 @@ function _noTpStop()
     _noTpLastCF = nil
     if _noTpHeartbeat then pcall(function() _noTpHeartbeat:Disconnect() end); _noTpHeartbeat = nil end
 end
+function _noTpSoftStop()
+    if _noTpHeartbeat then pcall(function() _noTpHeartbeat:Disconnect() end); _noTpHeartbeat = nil end
+    _noTpLastCF = nil
+end
 function _noTpStart()
-    _noTpStop()
+    _noTpSoftStop()
+    if not _noTpWanted then
+        _noTpEnabled = false
+        return
+    end
     _noTpEnabled = true
     local lp = game:GetService("Players").LocalPlayer
     local char = lp.Character
     if not char then return end
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
-    local rootPart = humanoid.RootPart
+    local rootPart = humanoid.RootPart or char:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
     _noTpLastCF = rootPart.CFrame
     local function revertTp()
@@ -5851,7 +5926,8 @@ function _noTpStart()
         _noTpStopRevert = false
     end
     _noTpHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
-        if not _noTpEnabled or not rootPart or not rootPart.Parent then return end
+        if not _noTpWanted or not _noTpEnabled then return end
+        if not rootPart or not rootPart.Parent then return end
         if _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then
             _noTpLastCF = rootPart.CFrame
             return
@@ -5869,20 +5945,44 @@ function _noTpStart()
     local function hookPart(part)
         if not part then return end
         part:GetPropertyChangedSignal("CFrame"):Connect(function()
-            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then return end
+            if not _noTpWanted or not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then return end
             revertTp()
         end)
         part:GetPropertyChangedSignal("Position"):Connect(function()
-            if not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then return end
+            if not _noTpWanted or not _noTpEnabled or _noTpStopRevert or rootPart:GetAttribute("IsAttackTP") or _G.BypassNoTp or active or flying then return end
             revertTp()
         end)
     end
     hookPart(rootPart)
     hookPart(torso)
-    humanoid.Died:Connect(function()
-        _noTpStop()
-    end)
 end
+_G.NX_DEAD(function()
+    _noTpSoftStop()
+    _noTpEnabled = false
+end)
+_G.NX_BACK(function(char)
+    if not _nullWanted and not _noTpWanted then return end
+    task.defer(function()
+        if not char or not char.Parent then return end
+        local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+        local root = hum and (hum.RootPart or char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5))
+        if not root then return end
+        if _noTpWanted or _nullWanted then
+            _noTpWanted = true
+            _noTpStart()
+        end
+        if antiZeroEnabled or CharacterCleanupEnabled then
+            pcall(function() _bindCleanupEvents(char) end)
+        end
+        if antiGrabEnabled or antiGrabZeroEnabled then
+            pcall(function() _setupGrabOnChar(char) end)
+        end
+        if CharacterCleanupEnabled then
+            local lp2 = game:GetService("Players").LocalPlayer
+            _jumpHumanoid = char:FindFirstChildWhichIsA("Humanoid")
+        end
+    end)
+end)
 _antiVoidEnabled = false
 _antiVoidHeartbeat = nil
 _antiVoidLastSafeCF = nil
@@ -5957,20 +6057,36 @@ function toggleAntiVoid(state)
     end
 end
 function toggleNoTp(state)
-    if state then
+    _noTpWanted = state == true
+    if _noTpWanted then
         local lp = game:GetService("Players").LocalPlayer
         if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
         _noTpCharConn = lp.CharacterAdded:Connect(function(char)
-            if not _noTpEnabled and not state then return end
-            repeat game:GetService("RunService").Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid")
-            repeat game:GetService("RunService").Heartbeat:Wait() until char:FindFirstChildOfClass("Humanoid").RootPart
-            if _noTpEnabled or state then _noTpStart() end
+            if not _noTpWanted then return end
+            local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 10)
+            if not hum then return end
+            local root = hum.RootPart or char:FindFirstChild("HumanoidRootPart")
+            if not root then
+                root = char:WaitForChild("HumanoidRootPart", 10)
+            end
+            if _noTpWanted and root then
+                _noTpStart()
+            end
         end)
         _noTpStart()
     else
         _noTpStop()
         if _noTpCharConn then pcall(function() _noTpCharConn:Disconnect() end); _noTpCharConn = nil end
     end
+end
+function NULL(v)
+	_nullWanted = v == true
+	_noTpWanted = _nullWanted
+	toggleCharacterCleanupRuntime(v)
+	toggleAntiZero(v)
+	toggleAntiGrab(v)
+	toggleAntiGrabZero(v)
+	toggleNoTp(v)
 end
 if hookmetamethod then
     local oldNamecall
@@ -6092,33 +6208,6 @@ _autoReturnCharRemovingConn = nil
 _autoReturnLastDeathCF = nil
 function _autoReturnStart()
     local lp = game:GetService("Players").LocalPlayer
-    local function setupChar(char)
-        if _autoReturnDeathConn then pcall(function() _autoReturnDeathConn:Disconnect() end) end
-        local hrp = char:WaitForChild("HumanoidRootPart", 5)
-        local hum = char:WaitForChild("Humanoid", 5)
-        if not hum or not hrp then return end
-        if _autoReturnLastDeathCF then
-            local savedCF = _autoReturnLastDeathCF
-            _autoReturnLastDeathCF = nil
-            task.delay(0.5, function()
-                if hrp and hrp.Parent then
-                    _G.NX_TP(savedCF, "Auto-Return", 4)
-                end
-            end)
-        end
-        _autoReturnDeathConn = hum.Died:Connect(function()
-            if hrp and hrp.Parent then
-                _autoReturnLastDeathCF = hrp.CFrame + Vector3.new(0, 3, 0)
-            end
-        end)
-    end
-    if lp.Character then
-        task.spawn(function() setupChar(lp.Character) end)
-    end
-    if _autoReturnCharConn then pcall(function() _autoReturnCharConn:Disconnect() end) end
-    _autoReturnCharConn = lp.CharacterAdded:Connect(function(char)
-        setupChar(char)
-    end)
     if _autoReturnCharRemovingConn then pcall(function() _autoReturnCharRemovingConn:Disconnect() end) end
     _autoReturnCharRemovingConn = lp.CharacterRemoving:Connect(function(char)
         local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -6127,14 +6216,24 @@ function _autoReturnStart()
         end
     end)
 end
+_G.NX_DEAD(function(char)
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        _autoReturnLastDeathCF = hrp.CFrame + Vector3.new(0, 3, 0)
+    end
+end)
+_G.NX_BACK(function(char)
+    if not _autoReturnLastDeathCF then return end
+    local savedCF = _autoReturnLastDeathCF
+    _autoReturnLastDeathCF = nil
+    local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5))
+    task.delay(0.5, function()
+        if hrp and hrp.Parent then
+            _G.NX_TP(savedCF, "Auto-Return", 5)
+        end
+    end)
+end)
 _autoReturnStart()
-function NULL(v)
-	toggleCharacterCleanupRuntime(v)
-	toggleAntiZero(v)
-	toggleAntiGrab(v)
-	toggleAntiGrabZero(v)
-	toggleNoTp(v)
-end
 toggleAntiVoid(true)
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
@@ -6786,7 +6885,7 @@ task.spawn(function()
                 if hrp and hrp.Parent then
                     _noTpStopRevert = true
                     _noTpLastCF = savedCF
-                    hrp.CFrame = CFrame.new(hrp.Position.X, -6666, hrp.Position.Z)
+                    _G.NX_TP(CFrame.new(hrp.Position.X, -6666, hrp.Position.Z), "Anti-Death", 2)
                     hrp.AssemblyLinearVelocity = Vector3.zero
                     hrp.AssemblyAngularVelocity = Vector3.zero
                 end
@@ -6803,7 +6902,7 @@ task.spawn(function()
         pcall(function()
             if hrp and hrp.Parent then
                 _noTpStopRevert = true
-                hrp.CFrame = savedCF
+                _G.NX_TP(savedCF, "Anti-Death", 2)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 task.delay(0.05, function()
                     _noTpLastCF = savedCF
@@ -7386,7 +7485,7 @@ end
 					end
 					task.wait(waitTime)
 					if _G.NX_TP then
-					    _G.NX_TP(targetCF, "WallCombo", 5)
+					    _G.NX_TP(targetCF, "WallCombo", 3)
 					else
 					    hrp.CFrame = targetCF
 					end
@@ -7535,8 +7634,8 @@ do
         local displacedClient = nil
         local originalParent = nil
         ;(function()
-                local function forceClientDisplace(char, pos, isExtremeFling)
-                        if pos.Y <= CLIENT_MOVE_Y or isExtremeFling then
+                local function forceClientDisplace(char, pos, isExtremeFling, forceBoundary)
+                        if pos.Y <= CLIENT_MOVE_Y or isExtremeFling or forceBoundary then
                                 local charHandler = char:FindFirstChild("CharacterHandler")
                                 local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
                                 if clientModule then
@@ -7544,10 +7643,10 @@ do
                                                 originalParent = clientModule.Parent
                                                 displacedClient = clientModule
                                         end
-        pcall(function()
-                Workspace.FallenPartsDestroyHeight = 0/0
-                Workspace.FallenPartsDestroyHeight = 0/0
-        end)
+                                        pcall(function()
+                                                Workspace.FallenPartsDestroyHeight = 0/0
+                                                Workspace.FallenPartsDestroyHeight = 0/0
+                                        end)
                                         pcall(function()
                                                 for _ = 1, 8 do
                                                         clientModule.Parent = StarterPack
@@ -7559,7 +7658,7 @@ do
                 local function updateMonitoring()
                         local char = LocalPlayer.Character
                         if not char then
-                                                                displacedClient = nil
+                                displacedClient = nil
                                 originalParent = nil
                                 return
                         end
@@ -7585,8 +7684,8 @@ do
                         local isExtremeFling = isNanPos or isNanVel or isHugeVel
                         local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
                         local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
-                        local isMidHitCycle = auraFlingEnabled or flingAllEnabled or bHitEnabled
-                        if ((isFar and not _G.SafeTeleportLock and not (attackTpEnabled and attackTpHolding) and not isMidHitCycle) or (isVoid and not isMidHitCycle) or isNanVel or isHugeVel) and alive then
+                        local forceBoundary = (isFar or isVoid) and alive
+                        if (forceBoundary or isNanVel or isHugeVel) and alive then
                                 for i = 1, #safePositions do
                                         local targetCF = safePositions[i]
                                         if targetCF then
@@ -7594,34 +7693,26 @@ do
                                                         for _ = 1, 5 do
                                                                 hrp.AssemblyLinearVelocity = Vector3.zero
                                                                 hrp.AssemblyAngularVelocity = Vector3.zero
-                                                                hrp.CFrame = targetCF
+                                                                if _G.NX_TP then
+                                                                        _G.NX_TP(targetCF, "Anti-Void-Boundary", 1)
+                                                                else
+                                                                        hrp.CFrame = targetCF
+                                                                end
                                                         end
                                                 end)
                                                 break
                                         end
                                 end
                         end
-                        forceClientDisplace(char, pos, isExtremeFling)
-                        if not isExtremeFling and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
+                        forceClientDisplace(char, pos, isExtremeFling, forceBoundary)
+                        if not isExtremeFling and not forceBoundary and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
                                 pcall(function()
                                         if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
                                                 displacedClient.Parent = originalParent
                                         end
                                 end)
-                                                                displacedClient = nil
+                                displacedClient = nil
                                 originalParent = nil
-                        end
-                        if isVoid and displacedClient and originalParent then
-                                local hasPlace = selectedPlace and selectedPlace ~= "" and selectedPlace ~= "/\\" and resolvePlaceCF(selectedPlace) ~= nil
-                                if not hasPlace then
-                                        pcall(function()
-                                                if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
-                                                        displacedClient.Parent = originalParent
-                                                end
-                                        end)
-                                        displacedClient = nil
-                                        originalParent = nil
-                                end
                         end
                         if not alive and displacedClient then
                                 pcall(function()
@@ -7629,7 +7720,7 @@ do
                                                 displacedClient:Destroy()
                                         end
                                 end)
-                                                                displacedClient = nil
+                                displacedClient = nil
                                 originalParent = nil
                         end
                 end
@@ -7642,7 +7733,9 @@ do
                                 local isNanVel = vel.X ~= vel.X or vel.Y ~= vel.Y or vel.Z ~= vel.Z
                                 local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or bHitEnabled
                                 local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
-                                forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel)
+                                local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
+                                local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
+                                forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel, isFar or isVoid)
                         end
                         hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
                         hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
@@ -9066,7 +9159,7 @@ function teleportToSelectedTarget(modeOverride)
         if not targetCFrame then
                 return
         end
-        applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero)
+        applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero, nil, 4)
         if flying and bv and bg then
                 bv.Position = characterRoot.Position
                 bg.CFrame = getRotationOnlyCFrame(targetCFrame)
@@ -12996,10 +13089,6 @@ player.CharacterRemoving:Connect(function(removingChar)
         hum = nil
         root = nil
         cam = Workspace.CurrentCamera
-        if localCharacterDiedConnection then
-                localCharacterDiedConnection:Disconnect()
-                localCharacterDiedConnection = nil
-        end
 end)
 player.CharacterAdded:Connect(function(newChar)
         if getTrashState.running then
@@ -13042,17 +13131,28 @@ player.CharacterAdded:Connect(function(newChar)
         if syncOrbitKeybindDisplay then syncOrbitKeybindDisplay() end
         updateOrbitToggleButton()
         updateTargetDisplay()
-        if lastDeathCFrame then
-                task.delay(0, function()
-                        local r = newChar:FindFirstChild("HumanoidRootPart")
-                        if r and lastDeathCFrame then
-                                r:SetAttribute("IsAttackTP", true)
-                                r.CFrame = lastDeathCFrame
-                                task.delay(0.1, function() pcall(function() r:SetAttribute("IsAttackTP", false) end) end)
-                        end
-                end)
-        end
 end)
+if not _G._NX_LocalBackBound then
+        _G._NX_LocalBackBound = true
+        _G.NX_BACK(function(newChar)
+                if lastDeathCFrame then
+                        local deathCF = lastDeathCFrame
+                        lastDeathCFrame = nil
+                        task.delay(0, function()
+                                local r = newChar and newChar:FindFirstChild("HumanoidRootPart")
+                                if r and deathCF then
+                                        if _G.NX_TP then
+                                                _G.NX_TP(deathCF, "Death-Return", 5)
+                                        else
+                                                r:SetAttribute("IsAttackTP", true)
+                                                r.CFrame = deathCF
+                                                task.delay(0.1, function() pcall(function() r:SetAttribute("IsAttackTP", false) end) end)
+                                        end
+                                end
+                        end)
+                end
+        end)
+end
 task.spawn(function()
         while true do
                 local dt = nextFrame()
@@ -13317,7 +13417,7 @@ bodyLockEnabled = false
                                         resolvedLinear = targetVelocity or Vector3.zero
                                         resolvedAngular = Vector3.zero
                                 end
-                                applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular)
+                                applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular, 4)
                                 if flying and bv and bg then
                                         bv.Position = characterRoot.Position
                                         bg.CFrame = getRotationOnlyCFrame(targetCFrame)
