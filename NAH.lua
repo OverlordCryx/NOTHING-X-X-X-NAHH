@@ -1851,7 +1851,8 @@ if type(controlSaveData.WalkFlingUseNormal) == "boolean" then
 end
 if controlSaveData.WalkFlingBodyMode ~= nil then
         local v = controlSaveData.WalkFlingBodyMode
-        if v == "both" or v == true or v == false or v == "target" then
+        if v == "both" or v == true or v == false or v == "target"
+                or v == "away" or v == "predict" or v == "velocity" or v == "random" or v == "up" then
                 walkFlingBodyMode = v
         end
 end
@@ -2561,31 +2562,93 @@ function parseWalkFlingDirectionSelection(value)
         end
         walkFlingDirections = parsed
 end
+function resolveWalkFlingLookTarget()
+        local lookModel = getCamLockTarget and getCamLockTarget()
+        if not lookModel then
+                lookModel = getClosestMouseTarget and getClosestMouseTarget()
+        end
+        return lookModel and lookModel:FindFirstChild("HumanoidRootPart") or nil
+end
+function resolveWalkFlingTarget()
+        local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
+        local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
+        if targetRoot then return targetRoot end
+        local closest = getClosestAlivePlayerTarget and getClosestAlivePlayerTarget()
+        if not closest then closest = getClosestAliveTarget and getClosestAliveTarget() end
+        return closest and closest:FindFirstChild("HumanoidRootPart") or nil
+end
 function getWalkFlingDirectionVector(rootPart)
         if not rootPart then
                 return nil
         end
-        local direction = Vector3.zero
-        local lookVector
-        if walkFlingBodyMode == "target" then
-                local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
-                local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
-                if not targetRoot then
-                        local closest = getClosestAlivePlayerTarget and getClosestAlivePlayerTarget()
-                        if not closest then closest = getClosestAliveTarget and getClosestAliveTarget() end
-                        targetRoot = closest and closest:FindFirstChild("HumanoidRootPart")
-                end
+        local mode = walkFlingBodyMode
+        if mode == "target" then
+                local targetRoot = resolveWalkFlingTarget()
                 if targetRoot then
-                        local toTarget = (targetRoot.Position - rootPart.Position)
+                        local toTarget = targetRoot.Position - rootPart.Position
                         if toTarget.Magnitude > 0.01 then
                                 return toTarget.Unit
                         end
                 end
                 return rootPart.CFrame.LookVector
+        elseif mode == "away" then
+                local targetRoot = resolveWalkFlingTarget()
+                if targetRoot then
+                        local away = rootPart.Position - targetRoot.Position
+                        if away.Magnitude > 0.01 then
+                                return away.Unit
+                        end
+                end
+                return -rootPart.CFrame.LookVector
+        elseif mode == "predict" then
+                local targetRoot = resolveWalkFlingTarget()
+                if targetRoot then
+                        local ping = getWalkFlingCachedPing and getWalkFlingCachedPing() or 0.05
+                        local predicted = targetRoot.Position + targetRoot.AssemblyLinearVelocity * (ping + 0.05)
+                        local toTarget = predicted - rootPart.Position
+                        if toTarget.Magnitude > 0.01 then
+                                return toTarget.Unit
+                        end
+                end
+                return rootPart.CFrame.LookVector
+        elseif mode == "velocity" then
+                local targetRoot = resolveWalkFlingTarget()
+                if targetRoot then
+                        local tv = targetRoot.AssemblyLinearVelocity
+                        if tv.Magnitude > 1 then
+                                return tv.Unit
+                        end
+                        local toTarget = targetRoot.Position - rootPart.Position
+                        if toTarget.Magnitude > 0.01 then
+                                return toTarget.Unit
+                        end
+                end
+                return rootPart.CFrame.LookVector
+        elseif mode == "random" then
+                local dir = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5)
+                if dir.Magnitude > 0.01 then
+                        return dir.Unit
+                end
+                return Vector3.yAxis
+        elseif mode == "up" then
+                return Vector3.yAxis
         end
-        if walkFlingBodyMode == "both" then
+        local direction = Vector3.zero
+        local lookVector
+        if mode == false then
+                local lookTargetRoot = resolveWalkFlingLookTarget()
+                if lookTargetRoot then
+                        local toTarget = lookTargetRoot.Position - rootPart.Position
+                        if toTarget.Magnitude > 0.01 then
+                                lookVector = toTarget.Unit
+                        end
+                end
+                if not lookVector then
+                        lookVector = workspace.CurrentCamera.CFrame.LookVector
+                end
+        elseif mode == "both" then
                 lookVector = (rootPart.CFrame.LookVector + workspace.CurrentCamera.CFrame.LookVector) * 0.5
-        elseif walkFlingBodyMode then
+        elseif mode then
                 lookVector = rootPart.CFrame.LookVector
         else
                 lookVector = workspace.CurrentCamera.CFrame.LookVector
@@ -2597,10 +2660,10 @@ function getWalkFlingDirectionVector(rootPart)
                 direction -= lookVector
         end
         if walkFlingDirections.Right then
-                direction += rootPart.CFrame.RightVector
+                direction += (mode == false and workspace.CurrentCamera.CFrame.RightVector or rootPart.CFrame.RightVector)
         end
         if walkFlingDirections.Left then
-                direction -= rootPart.CFrame.RightVector
+                direction -= (mode == false and workspace.CurrentCamera.CFrame.RightVector or rootPart.CFrame.RightVector)
         end
         if walkFlingDirections.Upward then
                 direction += Vector3.yAxis
@@ -2612,14 +2675,6 @@ function getWalkFlingDirectionVector(rootPart)
                 return nil
         end
         return direction.Unit
-end
-function resolveWalkFlingTarget()
-        local targetModel = resolveAttackTpTarget and resolveAttackTpTarget()
-        local targetRoot = targetModel and targetModel:FindFirstChild("HumanoidRootPart")
-        if targetRoot then return targetRoot end
-        local closest = getClosestAlivePlayerTarget and getClosestAlivePlayerTarget()
-        if not closest then closest = getClosestAliveTarget and getClosestAliveTarget() end
-        return closest and closest:FindFirstChild("HumanoidRootPart") or nil
 end
 _walkFlingCachedPing     = 0
 _walkFlingPingLastUpdate = 0
@@ -2686,13 +2741,48 @@ function setWalkFlingEnabled(enabled)
                                 if currentCharacter and rootPart then
                                         if not walkFlingUseNormal then
                                                 local vel = rootPart.Velocity
-                                                if walkFlingBodyMode == "target" then
+                                                local mode = walkFlingBodyMode
+                                                if mode == "target" or mode == "away" or mode == "predict" or mode == "velocity" then
                                                         local targetRoot = resolveWalkFlingTarget()
                                                         if targetRoot then
-                                                                local nextFramePos = targetRoot.Position + (targetRoot.AssemblyLinearVelocity * (1/60))
+                                                                local dir
+                                                                if mode == "away" then
+                                                                        local away = rootPart.Position - targetRoot.Position
+                                                                        if away.Magnitude > 0.01 then dir = away.Unit end
+                                                                elseif mode == "predict" then
+                                                                        local ping = getWalkFlingCachedPing()
+                                                                        local predicted = targetRoot.Position + targetRoot.AssemblyLinearVelocity * (ping + 0.05)
+                                                                        local toTarget = predicted - rootPart.Position
+                                                                        if toTarget.Magnitude > 0.01 then dir = toTarget.Unit end
+                                                                elseif mode == "velocity" then
+                                                                        local tv = targetRoot.AssemblyLinearVelocity
+                                                                        if tv.Magnitude > 1 then
+                                                                                dir = tv.Unit
+                                                                        else
+                                                                                local toTarget = targetRoot.Position - rootPart.Position
+                                                                                if toTarget.Magnitude > 0.01 then dir = toTarget.Unit end
+                                                                        end
+                                                                else
+                                                                        local nextFramePos = targetRoot.Position + (targetRoot.AssemblyLinearVelocity * (1/60))
+                                                                        local toTarget = nextFramePos - rootPart.Position
+                                                                        if toTarget.Magnitude > 0.01 then dir = toTarget.Unit end
+                                                                end
+                                                                if dir then
+                                                                        rootPart.AssemblyLinearVelocity = dir * walkFlingPower
+                                                                end
+                                                        end
+                                                elseif mode == false then
+                                                        local lookTargetRoot = resolveWalkFlingLookTarget()
+                                                        if lookTargetRoot then
+                                                                local nextFramePos = lookTargetRoot.Position + (lookTargetRoot.AssemblyLinearVelocity * (1/60))
                                                                 local toTarget = nextFramePos - rootPart.Position
                                                                 if toTarget.Magnitude > 0.01 then
                                                                         rootPart.AssemblyLinearVelocity = toTarget.Unit * walkFlingPower
+                                                                end
+                                                        else
+                                                                local direction = getWalkFlingDirectionVector(rootPart)
+                                                                if direction then
+                                                                        rootPart.Velocity = direction * walkFlingPower
                                                                 end
                                                         end
                                                 else
@@ -4902,6 +4992,39 @@ function getAttackTpPlacement(characterRoot, targetModel, modeOverride)
                 local followDirection = getHorizontalUnit(targetRoot.CFrame.LookVector) or Vector3.new(0, 0, 1)
                 local dist = isRagdoll and 2.5 or 4.0
                 finalCFrame = CFrame.lookAt(predictedTargetPosition + (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+        elseif mode == "Left" then
+                local right = getHorizontalUnit(targetRoot.CFrame.RightVector) or Vector3.new(1, 0, 0)
+                local dist = isRagdoll and 2.0 or 3.2
+                finalCFrame = CFrame.lookAt(predictedTargetPosition - (right * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+        elseif mode == "Right" then
+                local right = getHorizontalUnit(targetRoot.CFrame.RightVector) or Vector3.new(1, 0, 0)
+                local dist = isRagdoll and 2.0 or 3.2
+                finalCFrame = CFrame.lookAt(predictedTargetPosition + (right * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+        elseif mode == "Head" then
+                finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, (isRagdoll and 2.2 or 2.9) + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+        elseif mode == "Feet" then
+                finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, (isRagdoll and -1.4 or -2.1) + verticalOffset, 0), predictedTargetPosition, worldUpVector)
+        elseif mode == "Predict" then
+                local followDirection = getHorizontalUnit(targetVelocity)
+                        or getHorizontalUnit(targetRoot.CFrame.LookVector)
+                        or getHorizontalUnit(targetRoot.Position - characterRoot.Position)
+                        or Vector3.new(0, 0, -1)
+                local extraPos = predictedTargetPosition + horizontalVelocity * math.max(leadTime * 2.5, 0.08)
+                local dist = isRagdoll and 0.9 or 1.35
+                finalCFrame = CFrame.lookAt(extraPos - (followDirection * dist) + Vector3.new(0, verticalOffset + 0.35, 0), extraPos, worldUpVector)
+        elseif mode == "Look" then
+                local camLook = workspace.CurrentCamera and getHorizontalUnit(workspace.CurrentCamera.CFrame.LookVector)
+                local followDirection = camLook
+                        or getHorizontalUnit(characterRoot.CFrame.LookVector)
+                        or getHorizontalUnit(targetRoot.CFrame.LookVector)
+                        or Vector3.new(0, 0, -1)
+                local dist = isRagdoll and 1.1 or 1.6
+                finalCFrame = CFrame.lookAt(predictedTargetPosition - (followDirection * dist) + Vector3.new(0, verticalOffset, 0), predictedTargetPosition, worldUpVector)
+        elseif mode == "Random" then
+                local angle = math.random() * math.pi * 2
+                local dist = isRagdoll and 1.4 or 2.6
+                local off = Vector3.new(math.cos(angle) * dist, verticalOffset + 0.4, math.sin(angle) * dist)
+                finalCFrame = CFrame.lookAt(predictedTargetPosition + off, predictedTargetPosition, worldUpVector)
         elseif mode == "Middle" then
                 finalCFrame = CFrame.lookAt(predictedTargetPosition + Vector3.new(0, verticalOffset + 0.05, 0), predictedTargetPosition + Vector3.new(0, 1, 0), worldUpVector)
         elseif string.find(tostring(mode), "Custom") then
@@ -10498,7 +10621,7 @@ targetActionControls = _G["3tog_on_one_one_button"]({
         end,
 })
 do
-        local wfHolder = makeControlFrame(76)
+        local wfHolder = makeControlFrame(110)
         wfHolder.Parent = uiX
         local wfTitle = Instance.new("TextLabel")
         wfTitle.BackgroundTransparency = 1
@@ -10514,32 +10637,35 @@ do
         wfTitle.TextWrapped = true
         wfTitle.TextXAlignment = Enum.TextXAlignment.Left
         wfTitle.Parent = wfHolder
-        local wfRow = Instance.new("Frame")
-        wfRow.BackgroundTransparency = 1
-        wfRow.Position = UDim2.new(0, 10, 0, 32)
-        wfRow.Size = UDim2.new(1, -20, 0, 32)
-        wfRow.Parent = wfHolder
-        local wfLayout = Instance.new("UIListLayout")
-        wfLayout.FillDirection = Enum.FillDirection.Horizontal
-        wfLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        wfLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        wfLayout.Padding = UDim.new(0, 6)
-        wfLayout.Parent = wfRow
         local wfAllCtrls = {}
-        local function makeWFTog(text, startEnabled, onSelect)
+        local function makeWFRow(yOff)
+                local row = Instance.new("Frame")
+                row.BackgroundTransparency = 1
+                row.Position = UDim2.new(0, 10, 0, yOff)
+                row.Size = UDim2.new(1, -20, 0, 28)
+                row.Parent = wfHolder
+                local layout = Instance.new("UIListLayout")
+                layout.FillDirection = Enum.FillDirection.Horizontal
+                layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+                layout.VerticalAlignment = Enum.VerticalAlignment.Center
+                layout.Padding = UDim.new(0, 4)
+                layout.Parent = row
+                return row
+        end
+        local function makeWFTog(parent, text, startEnabled, onSelect)
                 local btn = Instance.new("TextButton")
                 btn.BackgroundTransparency = 0
                 btn.BorderSizePixel = 0
-                btn.Size = UDim2.new(1/4, -5, 1, 0)
+                btn.Size = UDim2.new(1/4, -4, 1, 0)
                 btn.AutoButtonColor = false
                 btn.Font = Enum.Font.GothamBold
                 btn.Text = text
-                btn.TextSize = 13
+                btn.TextSize = 11
                 btn.TextScaled = false
                 btn.TextWrapped = true
                 btn.TextStrokeTransparency = 1
                 btn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                btn.Parent = wfRow
+                btn.Parent = parent
                 local corner = Instance.new("UICorner")
                 corner.CornerRadius = UDim.new(0, 6)
                 corner.Parent = btn
@@ -10562,10 +10688,17 @@ do
                 render()
                 return ctrl
         end
-        wfAllCtrls[1] = makeWFTog("Body",     walkFlingBodyMode == true,       function() walkFlingBodyMode = true     end)
-        wfAllCtrls[2] = makeWFTog("Camera",   walkFlingBodyMode == false,      function() walkFlingBodyMode = false    end)
-        wfAllCtrls[3] = makeWFTog("C+B",      walkFlingBodyMode == "both",     function() walkFlingBodyMode = "both"   end)
-        wfAllCtrls[4] = makeWFTog("T-Target", walkFlingBodyMode == "target",   function() walkFlingBodyMode = "target" end)
+        local wfRow1 = makeWFRow(32)
+        local wfRow2 = makeWFRow(64)
+        wfAllCtrls[1] = makeWFTog(wfRow1, "Body",     walkFlingBodyMode == true,       function() walkFlingBodyMode = true     end)
+        wfAllCtrls[2] = makeWFTog(wfRow1, "Camera",   walkFlingBodyMode == false,      function() walkFlingBodyMode = false    end)
+        wfAllCtrls[3] = makeWFTog(wfRow1, "C+B",      walkFlingBodyMode == "both",     function() walkFlingBodyMode = "both"   end)
+        wfAllCtrls[4] = makeWFTog(wfRow1, "T-Target", walkFlingBodyMode == "target",   function() walkFlingBodyMode = "target" end)
+        wfAllCtrls[5] = makeWFTog(wfRow2, "Away",     walkFlingBodyMode == "away",     function() walkFlingBodyMode = "away"   end)
+        wfAllCtrls[6] = makeWFTog(wfRow2, "Predict",  walkFlingBodyMode == "predict",  function() walkFlingBodyMode = "predict" end)
+        wfAllCtrls[7] = makeWFTog(wfRow2, "Velocity", walkFlingBodyMode == "velocity", function() walkFlingBodyMode = "velocity" end)
+        wfAllCtrls[8] = makeWFTog(wfRow2, "Random",   walkFlingBodyMode == "random",   function() walkFlingBodyMode = "random" end)
+        -- Up is available via Direction dropdown; keep mode string for saves/API
 end
 Dropdown({
         namedropdown = "Direction",
@@ -10804,6 +10937,34 @@ task.spawn(function()
                                 local localOff = Vector3.new(sinH * cosV, sinV, cosH * cosV) * dist
                                 local worldOff = targetCF:VectorToWorldSpace(localOff)
                                 ox = worldOff.X; oy = worldOff.Y; oz = worldOff.Z
+                        elseif orbitMode == "Spiral" then
+                                orbitAngleH = orbitAngleH + orbitSpeedH * dt
+                                local spiralT = math.sin(orbitAngleH * 0.35) * 0.5 + 0.5
+                                local r = dist * (0.3 + spiralT * 0.7)
+                                ox = math.cos(orbitAngleH) * r
+                                oy = math.sin(orbitAngleH * 0.5) * (dist * 0.4)
+                                oz = math.sin(orbitAngleH) * r
+                        elseif orbitMode == "Figure8" then
+                                orbitAngleH = orbitAngleH + orbitSpeedH * dt
+                                local t = orbitAngleH
+                                local s = math.sin(t)
+                                local c = math.cos(t)
+                                local denom = math.max(0.15, 1 + s * s)
+                                ox = dist * c / denom
+                                oy = 0
+                                oz = dist * s * c / denom
+                        elseif orbitMode == "Bounce" then
+                                orbitAngleH = orbitAngleH + orbitSpeedH * dt
+                                orbitAngleV = orbitAngleV + orbitSpeedV * dt
+                                ox = math.cos(orbitAngleH) * dist
+                                oy = math.abs(math.sin(orbitAngleV)) * dist
+                                oz = math.sin(orbitAngleH) * dist
+                        elseif orbitMode == "Wave" then
+                                orbitAngleH = orbitAngleH + orbitSpeedH * dt
+                                orbitAngleV = orbitAngleV + orbitSpeedV * dt
+                                ox = math.cos(orbitAngleH) * dist
+                                oy = math.sin(orbitAngleV) * (dist * 0.55)
+                                oz = math.sin(orbitAngleH) * dist
                         else
                                 orbitAngleH = orbitAngleH + orbitSpeedH * dt
                                 ox = math.cos(orbitAngleH) * dist
@@ -10829,7 +10990,7 @@ task.spawn(function()
                         end
                 end)
         end
-        local orbitHub = makeControlFrame(486)
+        local orbitHub = makeControlFrame(518)
         orbitHub.Parent = uiX
         orbitHub.ClipsDescendants = true
         orbitHub.LayoutOrder = 999997
@@ -10919,20 +11080,25 @@ task.spawn(function()
         dirLabel.TextSize = 11
         dirLabel.TextXAlignment = Enum.TextXAlignment.Left
         dirLabel.Parent = orbitHub
-        local dirRow = Instance.new("Frame")
-        dirRow.BackgroundTransparency = 1
-        dirRow.Position = UDim2.new(0, 6, 0, 134)
-        dirRow.Size = UDim2.new(1, -12, 0, 28)
-        dirRow.Parent = orbitHub
-        local dirLayout = Instance.new("UIListLayout")
-        dirLayout.FillDirection = Enum.FillDirection.Horizontal
-        dirLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        dirLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        dirLayout.Padding = UDim.new(0, 4)
-        dirLayout.Parent = dirRow
+        local function makeOrbitModeRow(yOff)
+                local row = Instance.new("Frame")
+                row.BackgroundTransparency = 1
+                row.Position = UDim2.new(0, 6, 0, yOff)
+                row.Size = UDim2.new(1, -12, 0, 28)
+                row.Parent = orbitHub
+                local layout = Instance.new("UIListLayout")
+                layout.FillDirection = Enum.FillDirection.Horizontal
+                layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+                layout.VerticalAlignment = Enum.VerticalAlignment.Center
+                layout.Padding = UDim.new(0, 4)
+                layout.Parent = row
+                return row
+        end
+        local dirRow = makeOrbitModeRow(134)
+        local dirRow2 = makeOrbitModeRow(166)
         local dirBtns = {}
-        local modeList   = {"Horizontal", "Vertical", "Both", "Random"}
-        local modeLabels = {"H",          "V",        "V+H",  "Rnd"}
+        local modeList   = {"Horizontal", "Vertical", "Both", "Random", "Spiral", "Figure8", "Bounce", "Wave"}
+        local modeLabels = {"H",          "V",        "V+H",  "Rnd",    "Spiral", "8",       "Bounce", "Wave"}
         local customPresets = {
                 { Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
                 { Left=0, Right=0, Up=0, Down=0, Front=0, Back=0, Speed=1 },
@@ -11019,8 +11185,9 @@ task.spawn(function()
                         end
                 end
         end
-        for idx = 1, 4 do
+        for idx = 1, #modeList do
                 local m = modeList[idx]
+                local parentRow = idx <= 4 and dirRow or dirRow2
                 local btn = Instance.new("TextButton")
                 btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
                 btn.BackgroundTransparency = 0
@@ -11034,7 +11201,7 @@ task.spawn(function()
                 btn.TextScaled = false
                 btn.TextWrapped = true
                 btn.AutoButtonColor = false
-                btn.Parent = dirRow
+                btn.Parent = parentRow
                 local bc2 = Instance.new("UICorner")
                 bc2.CornerRadius = UDim.new(0, 6)
                 bc2.Parent = btn
@@ -11053,7 +11220,7 @@ task.spawn(function()
         end
         local customPresetLabel = Instance.new("TextLabel")
         customPresetLabel.BackgroundTransparency = 1
-        customPresetLabel.Position = UDim2.new(0, 10, 0, 168)
+        customPresetLabel.Position = UDim2.new(0, 10, 0, 200)
         customPresetLabel.Size = UDim2.new(1, -20, 0, 14)
         customPresetLabel.Font = Enum.Font.GothamBold
         customPresetLabel.Text = "Custom"
@@ -11106,8 +11273,8 @@ task.spawn(function()
                         end)
                 end
         end
-        makePresetRow(184, 1, 8)
-        makePresetRow(211, 9, 16)
+        makePresetRow(216, 1, 8)
+        makePresetRow(243, 9, 16)
         renderAllModeBtns()
         if savedACPNum >= 1 and savedACPNum <= 16 then
                 activeCustomPreset = savedACPNum
@@ -11119,7 +11286,7 @@ task.spawn(function()
         orbitTogBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
         orbitTogBtn.BackgroundTransparency = 0
         orbitTogBtn.BorderSizePixel = 0
-        orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 244)
+        orbitTogBtn.Position = UDim2.new(0.05, 0, 0, 276)
         orbitTogBtn.Size = UDim2.new(0.9, 0, 0, 24)
         orbitTogBtn.Font = Enum.Font.GothamBold
         orbitTogBtn.Text = "Orbit"
@@ -11136,7 +11303,7 @@ task.spawn(function()
         end)
         local customLabel = Instance.new("TextLabel")
         customLabel.BackgroundTransparency = 1
-        customLabel.Position = UDim2.new(0, 10, 0, 274)
+        customLabel.Position = UDim2.new(0, 10, 0, 306)
         customLabel.Size = UDim2.new(1, -20, 0, 14)
         customLabel.Font = Enum.Font.GothamBold
         customLabel.Text = "Custom Offset"
@@ -11214,19 +11381,19 @@ task.spawn(function()
                 if refKey then customBoxRefs[refKey] = box end
                 return box
         end
-        makeCustomSingleBox(296, "Left",  "Left",
+        makeCustomSingleBox(328, "Left",  "Left",
                 function() return orbitCustomLeft  end, function(v) orbitCustomLeft  = v end, false)
-        makeCustomSingleBox(322, "Right", "Right",
+        makeCustomSingleBox(354, "Right", "Right",
                 function() return orbitCustomRight end, function(v) orbitCustomRight = v end, false)
-        makeCustomSingleBox(348, "Up",    "Up",
+        makeCustomSingleBox(380, "Up",    "Up",
                 function() return orbitCustomUp    end, function(v) orbitCustomUp    = v end, false)
-        makeCustomSingleBox(374, "Down",  "Down",
+        makeCustomSingleBox(406, "Down",  "Down",
                 function() return orbitCustomDown  end, function(v) orbitCustomDown  = v end, false)
-        makeCustomSingleBox(400, "Front", "Front",
+        makeCustomSingleBox(432, "Front", "Front",
                 function() return orbitCustomFront end, function(v) orbitCustomFront = v end, false)
-        makeCustomSingleBox(426, "Back",  "Back",
+        makeCustomSingleBox(458, "Back",  "Back",
                 function() return orbitCustomBack  end, function(v) orbitCustomBack  = v end, false)
-        makeCustomSingleBox(452, "Speed", "Speed",
+        makeCustomSingleBox(484, "Speed", "Speed",
                 function() return orbitCustomSpeed end, function(v) orbitCustomSpeed = v end, true)
         renderAllModeBtns()
 end)
@@ -11536,7 +11703,7 @@ customOffsetFrame = makeControlFrame(215)
 customOffsetFrame.Visible = false
 CustomUI = {}
 function getTPModeItems()
-        local items = { "Above", "Under", "Behind", "Middle", "Aggressive" }
+        local items = { "Above", "Under", "Behind", "Front", "Left", "Right", "Head", "Feet", "Middle", "Aggressive", "Predict", "Look", "Random" }
         for i = 1, 25 do
                 table.insert(items, getCustomDisplayName(i))
         end
@@ -11545,7 +11712,7 @@ end
 tpModesDropdown = nil
 do
         function getTPModeCleanItems()
-                local items = { "Above", "Under", "Behind", "Behind Custom", "Middle", "Aggressive", "Auto", "Auto Custom" }
+                local items = { "Above", "Under", "Behind", "Behind Custom", "Front", "Left", "Right", "Head", "Feet", "Middle", "Aggressive", "Auto", "Auto Custom", "Predict", "Look", "Random" }
                 for i = 1, 25 do
                         items[#items + 1] = "Custom " .. i
                 end
