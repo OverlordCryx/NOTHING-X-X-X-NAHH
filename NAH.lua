@@ -1556,6 +1556,9 @@ function resolvePlaceCF(name)
 		elseif name == "Counter Up" then
 			local model = cutscenes:FindFirstChild("Death Cutscene")
 			return model and (model:GetPivot() * CFrame.new(-16, 49, -15))
+		elseif name == "VOID-" then
+			local model = cutscenes:FindFirstChild("Death Cutscene")
+			return model and (model:GetPivot() * CFrame.new(-47, -20, -73))
 		elseif name == "Atomic Base" then
 			local model = cutscenes:FindFirstChild("Atoms")
 			return model and (model:GetPivot() * CFrame.new(0, -187, 0))
@@ -1582,7 +1585,7 @@ placesOrder = {
 	"/\\", "Middle Of Map", "Prison",
 	"Montain 1", "Montain 2", "Montain 2 Left", "Montain 2 Right",
 	"Counter", "Counter Up", "Atomic Base", "Atomic Base Up",
-	"Atomic Slash", "Atomic Slash Up"
+	"Atomic Slash", "Atomic Slash Up", "VOID-"
 }
 placesDropdown = nil
 movementPanel = nil
@@ -1715,7 +1718,7 @@ function applyTeleportRootState(rootPart, cframe, linearVelocity, angularVelocit
         if not rootPart then return end
         rootPart:SetAttribute("IsAttackTP", true)
         if cframe then
-                _G.NX_TP(cframe, "ApplyTeleportRootState", priority or 5)
+                _G.NX_TP(cframe, "ApplyTeleportRootState", priority or 6)
         end
         if linearVelocity then rootPart.AssemblyLinearVelocity = linearVelocity end
         if angularVelocity then rootPart.AssemblyAngularVelocity = angularVelocity end
@@ -2070,7 +2073,7 @@ function syncPlacesKeybindDisplay()
                 lastHasFloorState = hasFloor
                 if game.GameId == 3808081382 then
                         local mapPlaces = { "Middle Of Map", "Prison", "Montain 1 Left", "Montain 1 Right", "Montain 2", "Montain 2 Left", "Montain 2 Right" }
-                        local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up" }
+                        local otherPlaces = { "Counter", "Counter Up", "Atomic Base", "Atomic Base Up", "Atomic Slash", "Atomic Slash Up", "VOID-" }
                         local currentItems = { "/\\" }
                         for _, v in ipairs(mapPlaces) do
                                 if hasFloor or not floorOnlyPlaces[v] then
@@ -3054,9 +3057,9 @@ function clickFlingTargetModel(targetModel)
                 if myRoot and myRoot.Parent then
                         myRoot.AssemblyAngularVelocity = Vector3.zero
                         myRoot.AssemblyLinearVelocity = Vector3.zero
-                        _G.NX_TP(savedCFrame, "ClickFling-Return", 5)
+                        _G.NX_TP(savedCFrame, "ClickFling-Return", 6)
                         task.wait()
-                        _G.NX_TP(savedCFrame, "ClickFling-Return", 5)
+                        _G.NX_TP(savedCFrame, "ClickFling-Return", 6)
                 end
                 clickFlingBusy = false
         end)
@@ -3288,8 +3291,10 @@ function updateMovement()
         if not active then
                 return
         end
-        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
+        local character = player.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not hrp or (humanoid and humanoid.Health <= 0) then
                 return
         end
         local moveVector = Vector3.zero
@@ -3662,7 +3667,7 @@ function startGetTrashHoldLoop(runToken)
                         if rootPart and rootPart.Parent and getTrashState.holdCFrame then
                                 rootPart.AssemblyLinearVelocity = Vector3.zero
                                 rootPart.AssemblyAngularVelocity = Vector3.zero
-                                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
+                                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 6)
                         end
                 end
         end)
@@ -3788,7 +3793,7 @@ function flyAlongPath(rootPart, fromPos, toPos, speed, runToken, lookTarget)
                 local alpha = traveled / totalDist
                 currentPos = fromPos:Lerp(toPos, alpha)
                 getTrashState.holdCFrame = getTrashTravelCFrame(currentPos, lookTarget or toPos)
-                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
+                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 6)
         end
         return true
 end
@@ -3843,7 +3848,7 @@ function moveRootToSavedTrashCFrame(rootPart, targetCFrame, runToken)
                 local alpha = traveled / totalDist
                 local currentPos = p2:Lerp(targetPos, alpha)
                 getTrashState.holdCFrame = startCFrame:Lerp(targetCFrame, alpha)
-                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
+                _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 6)
         end
         return true
 end
@@ -3871,7 +3876,7 @@ function liftOutOfTrashRun()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        _G.NX_TP(rootPart.CFrame + Vector3.new(0, 17, 0), "GetTrash", 5)
+        _G.NX_TP(rootPart.CFrame + Vector3.new(0, 17, 0), "GetTrash", 6)
 end
 function teleportBackToSavedTrashPositionInstant()
         local currentCharacter = player.Character
@@ -3881,7 +3886,7 @@ function teleportBackToSavedTrashPositionInstant()
         end
         rootPart.AssemblyLinearVelocity = Vector3.zero
         rootPart.AssemblyAngularVelocity = Vector3.zero
-        _G.NX_TP(getTrashState.savedCFrame, "GetTrash", 5)
+        _G.NX_TP(getTrashState.savedCFrame, "GetTrash", 6)
 end
 function stopGetTrashImmediate()
         getTrashState.running = false
@@ -4037,7 +4042,7 @@ runGetTrash = function()
                                         getTrashState.holdCFrame = getTrashTravelCFrame(closePosition, targetEntry.part.Position + rootPart.CFrame.LookVector)
                                         rootPart.AssemblyLinearVelocity = Vector3.zero
                                         rootPart.AssemblyAngularVelocity = Vector3.zero
-                                        _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 5)
+                                        _G.NX_TP(getTrashState.holdCFrame, "GetTrash", 6)
                                         clickTrashcan()
                                         clickAttempts += 1
                                         task.wait()
@@ -5988,7 +5993,7 @@ _noTpStopRevert = false
 _noTpLastPriority = 99
 _noTpLastPriorityTick = 0
 _G.NX_TP = function(targetCFrame, sourceName, priority)
-    priority = priority or 5
+    priority = priority or 6
     if priority > _noTpLastPriority and tick() - _noTpLastPriorityTick < 0.1 then
         return false
     end
@@ -6127,15 +6132,17 @@ function isPointSafe(pos)
     return raycastResult ~= nil
 end
 _antiVoidPart = nil
+_ANTI_VOID_TP_Y = -15000
+_ANTI_VOID_CLIENT_Y = -475
 function _antiVoidStart()
     if _antiVoidHeartbeat then pcall(function() _antiVoidHeartbeat:Disconnect() end) end
     _antiVoidEnabled = true
-    _antiVoidHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+    _antiVoidHeartbeat = RealRunService.Heartbeat:Connect(function()
         local lp = game:GetService("Players").LocalPlayer
         local char = lp.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
-        local destroyHeight = workspace.FallenPartsDestroyHeight + 50
+        local y = hrp.Position.Y
         if not _antiVoidPart or not _antiVoidPart.Parent then
             _antiVoidPart = Instance.new("Part")
             _antiVoidPart.Name = "NX_AntiVoid_Boundary"
@@ -6145,17 +6152,19 @@ function _antiVoidStart()
             _antiVoidPart.Transparency = 1
             _antiVoidPart.Parent = workspace
         end
-        _antiVoidPart.Position = Vector3.new(hrp.Position.X, destroyHeight - 2.5, hrp.Position.Z)
-        if isPointSafe(hrp.Position) then
+        -- floor only at TP depth so -475 client-move can keep falling to -15000
+        _antiVoidPart.Position = Vector3.new(hrp.Position.X, _ANTI_VOID_TP_Y - 2.5, hrp.Position.Z)
+        if isPointSafe(hrp.Position) and y > _ANTI_VOID_CLIENT_Y then
             _antiVoidLastSafeCF = hrp.CFrame
         end
-        if hrp.Position.Y < destroyHeight - 5 then
+        -- TP back ONLY at -15000 (not at -475)
+        if y <= _ANTI_VOID_TP_Y then
             if _antiVoidLastSafeCF then
                 _G.NX_TP(_antiVoidLastSafeCF, "Anti-Void", 1)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
             else
-                _G.NX_TP(CFrame.new(hrp.Position.X, destroyHeight + 50, hrp.Position.Z), "Anti-Void", 1)
+                _G.NX_TP(CFrame.new(hrp.Position.X, 50, hrp.Position.Z), "Anti-Void", 1)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
             end
@@ -6354,7 +6363,7 @@ _G.NX_BACK(function(char)
     local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5))
     task.delay(0.5, function()
         if hrp and hrp.Parent then
-            _G.NX_TP(savedCF, "Auto-Return", 5)
+            _G.NX_TP(savedCF, "Auto-Return", 6)
         end
     end)
 end)
@@ -7018,8 +7027,6 @@ task.spawn(function()
             pcall(function()
                 for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
                     if track.Animation and track.Animation.AnimationId == "rbxassetid://11343250001" then
-                        track:AdjustSpeed(0)
-                        track:Stop(0)
                     end
                 end
             end)
@@ -7164,7 +7171,7 @@ task.spawn(function()
                         0,
                         math.rad(root.Orientation.Y),
                         0
-                    ), "Stay", 5)
+                    ), "Stay", 6)
                     if stayGyro then
                         stayGyro.CFrame = root.CFrame
                     end
@@ -7752,33 +7759,34 @@ do
         end)
         local BOUNDARY_X = 200000
         local BOUNDARY_Z = 200000
-        local BOUNDARY_Y_DOWN = -10000
-        local CLIENT_MOVE_Y = -450
+        local BOUNDARY_Y_DOWN = -15000
+        local CLIENT_MOVE_Y = -475
         local safePositions = {}
         local MAX_SAFE_POSITIONS = 10
         local displacedClient = nil
         local originalParent = nil
         ;(function()
-                local function forceClientDisplace(char, pos, isExtremeFling, forceBoundary)
-                        if pos.Y <= CLIENT_MOVE_Y or isExtremeFling or forceBoundary then
-                                local charHandler = char:FindFirstChild("CharacterHandler")
-                                local clientModule = charHandler and charHandler:FindFirstChild("Client") or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
-                                if clientModule then
-                                        if not displacedClient then
-                                                originalParent = clientModule.Parent
-                                                displacedClient = clientModule
-                                        end
-                                        pcall(function()
-                                                Workspace.FallenPartsDestroyHeight = 0/0
-                                                Workspace.FallenPartsDestroyHeight = 0/0
-                                        end)
-                                        pcall(function()
-                                                for _ = 1, 8 do
-                                                        clientModule.Parent = StarterPack
-                                                end
-                                        end)
-                                end
+                local function forceClientDisplace(char, pos, isExtremeFling, forceClient)
+                        if not (pos.Y <= CLIENT_MOVE_Y or isExtremeFling or forceClient) then
+                                return false
                         end
+                        local charHandler = char:FindFirstChild("CharacterHandler")
+                        local clientModule = (charHandler and charHandler:FindFirstChild("Client"))
+                                or (displacedClient and displacedClient.Parent ~= charHandler and displacedClient)
+                        if not clientModule then
+                                return false
+                        end
+                        if not displacedClient then
+                                originalParent = clientModule.Parent
+                                displacedClient = clientModule
+                        end
+                        pcall(function()
+                                Workspace.FallenPartsDestroyHeight = 0/0
+                        end)
+                        if clientModule.Parent ~= StarterPack then
+                                clientModule.Parent = StarterPack
+                        end
+                        return true
                 end
                 local function updateMonitoring()
                         local char = LocalPlayer.Character
@@ -7808,29 +7816,45 @@ do
                         local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
                         local isExtremeFling = isNanPos or isNanVel or isHugeVel
                         local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
-                        local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
-                        local forceBoundary = (isFar or isVoid) and alive
-                        if (forceBoundary or isNanVel or isHugeVel) and alive then
+                        local needClientMove = not isNanPos and pos.Y <= CLIENT_MOVE_Y
+                        local needTpBack = not isNanPos and (pos.Y <= BOUNDARY_Y_DOWN or isFar)
+                        if needClientMove or isExtremeFling or isFar then
+                                forceClientDisplace(char, pos, isExtremeFling, needClientMove or isFar)
+                        end
+                        if (needTpBack) and alive then
                                 for i = 1, #safePositions do
                                         local targetCF = safePositions[i]
                                         if targetCF then
                                                 pcall(function()
-                                                        for _ = 1, 5 do
-                                                                hrp.AssemblyLinearVelocity = Vector3.zero
-                                                                hrp.AssemblyAngularVelocity = Vector3.zero
-                                                                if _G.NX_TP then
-                                                                        _G.NX_TP(targetCF, "Anti-Void-Boundary", 1)
-                                                                else
-                                                                        hrp.CFrame = targetCF
-                                                                end
+                                                        hrp.AssemblyLinearVelocity = Vector3.zero
+                                                        hrp.AssemblyAngularVelocity = Vector3.zero
+                                                        if _G.NX_TP then
+                                                                _G.NX_TP(targetCF, "Anti-Void-Boundary", 1)
+                                                        else
+                                                                hrp.CFrame = targetCF
+                                                        end
+                                                end)
+                                                break
+                                        end
+                                end
+                        elseif (isNanVel or isHugeVel) and alive and not needClientMove then
+                                for i = 1, #safePositions do
+                                        local targetCF = safePositions[i]
+                                        if targetCF then
+                                                pcall(function()
+                                                        hrp.AssemblyLinearVelocity = Vector3.zero
+                                                        hrp.AssemblyAngularVelocity = Vector3.zero
+                                                        if _G.NX_TP then
+                                                                _G.NX_TP(targetCF, "Anti-Void-Boundary", 1)
+                                                        else
+                                                                hrp.CFrame = targetCF
                                                         end
                                                 end)
                                                 break
                                         end
                                 end
                         end
-                        forceClientDisplace(char, pos, isExtremeFling, forceBoundary)
-                        if not isExtremeFling and not forceBoundary and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
+                        if not isExtremeFling and not needClientMove and not isFar and (not isNanPos and pos.Y > CLIENT_MOVE_Y) and displacedClient and originalParent then
                                 pcall(function()
                                         if displacedClient.Parent == StarterPack and originalParent and originalParent.Parent then
                                                 displacedClient.Parent = originalParent
@@ -7859,20 +7883,43 @@ do
                                 local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled or bHitEnabled
                                 local isHugeVel = not isNanVel and not isSelfFlinging and (math.abs(vel.X) > 1e6 or math.abs(vel.Y) > 1e6 or math.abs(vel.Z) > 1e6)
                                 local isFar = (not isNanPos and (math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z)) or isNanPos
-                                local isVoid = not isNanPos and pos.Y <= BOUNDARY_Y_DOWN
-                                forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel, isFar or isVoid)
+                                local needClientMove = not isNanPos and pos.Y <= CLIENT_MOVE_Y
+                                forceClientDisplace(char, pos, isNanPos or isNanVel or isHugeVel, needClientMove or isFar)
                         end
                         hrp:GetPropertyChangedSignal("CFrame"):Connect(fastCheck)
                         hrp:GetPropertyChangedSignal("Position"):Connect(fastCheck)
                 end
                 LocalPlayer.CharacterAdded:Connect(function(char)
-                        local hrp = char:WaitForChild("HumanoidRootPart", 5)
-                        setupHrpListeners(hrp, char)
+                        displacedClient = nil
+                        originalParent = nil
+                        local hrp = char:FindFirstChild("HumanoidRootPart")
+                        if not hrp then
+                                task.spawn(function()
+                                        local t0 = tick()
+                                        while tick() - t0 < 3 do
+                                                hrp = char:FindFirstChild("HumanoidRootPart")
+                                                if hrp then break end
+                                                RealRunService.Heartbeat:Wait()
+                                        end
+                                        setupHrpListeners(hrp, char)
+                                end)
+                        else
+                                setupHrpListeners(hrp, char)
+                        end
                 end)
                 if LocalPlayer.Character then
                         setupHrpListeners(LocalPlayer.Character:FindFirstChild("HumanoidRootPart"), LocalPlayer.Character)
                 end
-                RunService.Heartbeat:Connect(updateMonitoring)
+                RealRunService.Heartbeat:Connect(updateMonitoring)
+                RealRunService.Stepped:Connect(function()
+                        local char = LocalPlayer.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        if not hrp then return end
+                        local pos = hrp.Position
+                        if pos.Y <= CLIENT_MOVE_Y or math.abs(pos.X) >= BOUNDARY_X or math.abs(pos.Z) >= BOUNDARY_Z then
+                                forceClientDisplace(char, pos, false, true)
+                        end
+                end)
         end)()
 end
 function Keybind_add(text)
@@ -9288,7 +9335,7 @@ function teleportToSelectedTarget(modeOverride)
         if not targetCFrame then
                 return
         end
-        applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero, nil, 4)
+        applyTeleportRootState(characterRoot, targetCFrame, targetVelocity or Vector3.zero, nil, 5)
         if flying and bv and bg then
                 bv.Position = characterRoot.Position
                 bg.CFrame = getRotationOnlyCFrame(targetCFrame)
@@ -13246,7 +13293,7 @@ player.CharacterRemoving:Connect(function(removingChar)
                 mainLoopConnection:Disconnect()
                 mainLoopConnection = nil
         end
-        _G.NOTHINGX_PendingFlyRespawn = flying == true
+        _G.NOTHINGX_PendingFlyRespawn = (_G.NOTHINGX_PendingFlyRespawn == true) or (flying == true)
         attackTpHolding = false
         stopSetBackTravel()
         if hum then
@@ -13335,7 +13382,7 @@ if not _G._NX_LocalBackBound then
                                 local r = newChar and newChar:FindFirstChild("HumanoidRootPart")
                                 if r and deathCF then
                                         if _G.NX_TP then
-                                                _G.NX_TP(deathCF, "Death-Return", 5)
+                                                _G.NX_TP(deathCF, "Death-Return", 6)
                                         else
                                                 r:SetAttribute("IsAttackTP", true)
                                                 r.CFrame = deathCF
@@ -13610,7 +13657,7 @@ bodyLockEnabled = false
                                         resolvedLinear = targetVelocity or Vector3.zero
                                         resolvedAngular = Vector3.zero
                                 end
-                                applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular, 4)
+                                applyTeleportRootState(characterRoot, targetCFrame, resolvedLinear, resolvedAngular, 5)
                                 if flying and bv and bg then
                                         bv.Position = characterRoot.Position
                                         bg.CFrame = getRotationOnlyCFrame(targetCFrame)
