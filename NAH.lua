@@ -80,11 +80,18 @@ do
 			_nxFire(_nxBackCbs, char, hum)
 		end
 		_nxDeathConn = hum.Died:Connect(function()
+			if _nxWasDead then return end
 			_nxWasDead = true
 			_nxFire(_nxDeadCbs, char, hum)
 		end)
 	end
 	local _nxLp = game:GetService("Players").LocalPlayer
+	_nxLp.CharacterRemoving:Connect(function(char)
+		if _nxWasDead then return end
+		_nxWasDead = true
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		_nxFire(_nxDeadCbs, char, hum)
+	end)
 	if _nxLp.Character then
 		task.spawn(_nxBindChar, _nxLp.Character)
 	end
@@ -5829,6 +5836,13 @@ function runCleanupTick(char)
 			end
 		end
 		_cleanBadValues(char)
+		for _, v in ipairs(char:GetDescendants()) do
+			if _isBadMover(v) then
+				pcall(function() v:Destroy() end)
+			elseif (_isBadWeld(v, char) or v:IsA("RigidConstraint")) and not _isProtectedWeld(v, char) then
+				pcall(function() v:Destroy() end)
+			end
+		end
 	end
 	if CharacterCleanupEnabled then
 		local myMotor6Ds = characterMotor6DsByChar[char]
@@ -5844,6 +5858,51 @@ function runCleanupTick(char)
 end
 _antiZeroCharAddedConn = nil
 _antiZeroGlobalHeartbeat = nil
+_nullCharAddedConn = nil
+_nullRebindToken = 0
+function _nullRebindChar(char)
+	if not _nullWanted or not char then return end
+	_nullRebindToken += 1
+	local token = _nullRebindToken
+	task.spawn(function()
+		local t0 = tick()
+		local hum, root
+		while tick() - t0 < 5 do
+			if token ~= _nullRebindToken or not _nullWanted or not char.Parent then return end
+			hum = char:FindFirstChildOfClass("Humanoid")
+			root = char:FindFirstChild("HumanoidRootPart") or (hum and hum.RootPart)
+			if hum and root and hum.Health > 0 then break end
+			RealRunService.Heartbeat:Wait()
+		end
+		if token ~= _nullRebindToken or not _nullWanted or not char.Parent or not hum or not root then return end
+		antiZeroEnabled = true
+		CharacterCleanupEnabled = true
+		_cleanupLoopWanted = true
+		_noTpWanted = true
+		if type(ModConnections.SetupCharacterCleanup) ~= "function" then
+			pcall(function() toggleCharacterCleanupRuntime(true) end)
+		elseif not _antiZeroGlobalHeartbeat then
+			-- keep going; heartbeat restarted below
+		end
+		characterMotor6DsByChar[char] = characterMotor6DsByChar[char] or {}
+		pcall(function() _bindCleanupEvents(char) end)
+		if type(ModConnections.SetupCharacterCleanup) == "function" then
+			pcall(function() ModConnections.SetupCharacterCleanup(char) end)
+		end
+		if type(ModConnections.SetupHumanoid) == "function" then
+			pcall(function() ModConnections.SetupHumanoid(char, hum) end)
+		end
+		pcall(function() _setupGrabOnChar(char) end)
+		_jumpHumanoid = hum
+		if not _antiZeroGlobalHeartbeat then
+			toggleAntiZero(true)
+		else
+			antiZeroEnabled = true
+		end
+		_noTpStart()
+		pcall(function() runCleanupTick(char) end)
+	end)
+end
 function toggleAntiZero(state)
         antiZeroEnabled = state == true
         if _antiZeroCharAddedConn then
@@ -5859,16 +5918,16 @@ function toggleAntiZero(state)
                 if lp.Character then
                         pcall(function() _bindCleanupEvents(lp.Character) end)
                 end
-                task.spawn(function()
-                        while antiZeroEnabled do
-                                pcall(function() runCleanupTick(lp.Character) end)
-                                RunService.Heartbeat:Wait()
+                _antiZeroGlobalHeartbeat = RealRunService.Heartbeat:Connect(function()
+                        if not antiZeroEnabled then return end
+                        local char = lp.Character
+                        if char then
+                                pcall(function() runCleanupTick(char) end)
                         end
                 end)
                 _antiZeroCharAddedConn = lp.CharacterAdded:Connect(function(char)
                         if not antiZeroEnabled then return end
-                        task.spawn(function()
-                                task.wait()
+                        task.defer(function()
                                 if antiZeroEnabled and char and char.Parent then
                                         _bindCleanupEvents(char)
                                 end
@@ -6092,24 +6151,17 @@ _G.NX_DEAD(function()
 end)
 _G.NX_BACK(function(char)
     if not _nullWanted and not _noTpWanted then return end
+    if _nullWanted then
+        _nullRebindChar(char)
+        return
+    end
     task.defer(function()
         if not char or not char.Parent then return end
         local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
         local root = hum and (hum.RootPart or char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5))
         if not root then return end
-        if _noTpWanted or _nullWanted then
-            _noTpWanted = true
+        if _noTpWanted then
             _noTpStart()
-        end
-        if antiZeroEnabled or CharacterCleanupEnabled then
-            pcall(function() _bindCleanupEvents(char) end)
-        end
-        if antiGrabEnabled or antiGrabZeroEnabled then
-            pcall(function() _setupGrabOnChar(char) end)
-        end
-        if CharacterCleanupEnabled then
-            local lp2 = game:GetService("Players").LocalPlayer
-            _jumpHumanoid = char:FindFirstChildWhichIsA("Humanoid")
         end
     end)
 end)
@@ -6221,6 +6273,19 @@ function NULL(v)
 	toggleAntiGrab(v)
 	toggleAntiGrabZero(v)
 	toggleNoTp(v)
+	if _nullCharAddedConn then
+		pcall(function() _nullCharAddedConn:Disconnect() end)
+		_nullCharAddedConn = nil
+	end
+	if _nullWanted then
+		local lp = game:GetService("Players").LocalPlayer
+		_nullCharAddedConn = lp.CharacterAdded:Connect(function(char)
+			_nullRebindChar(char)
+		end)
+		if lp.Character then
+			_nullRebindChar(lp.Character)
+		end
+	end
 end
 if hookmetamethod then
     local oldNamecall
@@ -6369,9 +6434,14 @@ _G.NX_BACK(function(char)
 end)
 _autoReturnStart()
 toggleAntiVoid(true)
+_cleanupLoopWanted = false
+_cleanupLoopToken = 0
 function toggleCharacterCleanupRuntime(state)
         CharacterCleanupEnabled = state == true
+        _cleanupLoopWanted = CharacterCleanupEnabled
         if CharacterCleanupEnabled then
+                _cleanupLoopToken += 1
+                local loopToken = _cleanupLoopToken
                 task.spawn(function()
                         local Players = game:GetService("Players")
                         local lp = Players.LocalPlayer
@@ -6389,8 +6459,7 @@ function toggleCharacterCleanupRuntime(state)
                                 pcall(function() ModConnections.bindCleanupCharAdded:Disconnect() end)
                         end
                         ModConnections.bindCleanupCharAdded = lp.CharacterAdded:Connect(onChar)
-                        repeat
-                                CharacterCleanupEnabled = true
+                        while _cleanupLoopWanted and loopToken == _cleanupLoopToken and CharacterCleanupEnabled do
                                 pcall(function()
                                         local isSelfFlinging = walkFlingEnabled or flingEnabled or clickFlingEnabled or auraFlingEnabled or flingAllEnabled
                                         if isSelfFlinging then
@@ -6401,8 +6470,8 @@ function toggleCharacterCleanupRuntime(state)
                                                 runCleanupTick(char)
                                         end
                                 end)
-                                task.wait()
-                        until not CharacterCleanupEnabled
+                                RealRunService.Heartbeat:Wait()
+                        end
                 end)
                 local lp2 = game:GetService("Players").LocalPlayer
                 _jumpHumanoid = lp2.Character and lp2.Character:FindFirstChildWhichIsA("Humanoid")
@@ -6698,7 +6767,7 @@ end)
         end
         local function SetupCharacterCleanup(Char)
                 if ModConnections.descAdded then ModConnections.descAdded:Disconnect(); ModConnections.descAdded = nil end
-                characterMotor6DsByChar[Char] = {}
+                characterMotor6DsByChar[Char] = characterMotor6DsByChar[Char] or {}
                 local myMotor6Ds = characterMotor6DsByChar[Char]
                 for _, v in ipairs(Char:GetDescendants()) do
                         if v:IsA("Motor6D") then
@@ -6793,12 +6862,14 @@ end)
                 end
                 ModConnections.descAdded = Char.DescendantAdded:Connect(handleObj)
         end
+        ModConnections.SetupCharacterCleanup = SetupCharacterCleanup
+        ModConnections.SetupHumanoid = SetupHumanoid
         local function OnCharacterAdded(Char)
-                characterMotor6DsByChar[Char] = {}
+                characterMotor6DsByChar[Char] = characterMotor6DsByChar[Char] or {}
                 local Human = Char:WaitForChild("Humanoid", 5)
                 if Human then SetupHumanoid(Char, Human) end
                 SetupCharacterCleanup(Char)
-                if antiGrabEnabled or antiGrabZeroEnabled then
+                if antiGrabEnabled or antiGrabZeroEnabled or _nullWanted then
                         task.spawn(function()
                                 task.wait()
                                 _setupGrabOnChar(Char)
@@ -6806,6 +6877,9 @@ end)
                 end
                 task.wait()
                 if CharacterCleanupEnabled then usunPusteAccessory(Char) end
+                if _nullWanted then
+                        _nullRebindChar(Char)
+                end
                 speaker.CharacterRemoving:Connect(function(oldChar)
                         characterMotor6DsByChar[oldChar] = nil
                 end)
