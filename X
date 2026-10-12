@@ -1,11 +1,35 @@
+
+
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local requestFunc = syn and syn.request or http_request or request or (fluxus and fluxus.request)
+
+local NX_TEST_HOOK = (hookmetamethod ~= nil and getcallingscript ~= nil)
+
+local function NX_TEST_FIRE()
+    local ok = pcall(function()
+        local plr = Players.LocalPlayer
+        if not plr then error("no player") end
+        local char = plr.Character
+        if not char then error("no character") end
+        local comm = char:FindFirstChild("Communicate")
+        if not comm or not comm:IsA("RemoteEvent") then
+            local rs = game:GetService("ReplicatedStorage")
+            comm = rs and rs:FindFirstChild("Communicate")
+        end
+        if not comm or not comm:IsA("RemoteEvent") then error("no remote") end
+        comm:FireServer({Goal = "NX_"})
+        return true
+    end)
+    return ok == true
+end
+
+local NX_FIRE_SUPPORT = NX_TEST_FIRE()
+
 local RawURL = "https://raw.githubusercontent.com/OverlordCryx/NOTHING-X-X-X-NAHH/refs/heads/X/XVX"
 local Webhooks = {}
-
 local success, response = pcall(function()
     return requestFunc({Url = RawURL, Method = "GET"})
 end)
@@ -17,7 +41,6 @@ if success and response and response.Body then
         end
     end
 end
-
 local function VerifyWebhook(webhook)
     local s, r = pcall(function()
         return requestFunc({Url = webhook, Method = "GET"})
@@ -30,7 +53,6 @@ local function VerifyWebhook(webhook)
     if data.code == 10015 then return false end
     return data.name and data.name ~= ""
 end
-
 local WebhookURL = nil
 for _, wh in ipairs(Webhooks) do
     if VerifyWebhook(wh) then
@@ -39,11 +61,9 @@ for _, wh in ipairs(Webhooks) do
     end
 end
 if not WebhookURL then return end
-
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local jobId = game.JobId
-
 local matchType = "Unknown"
 if placeId == 10449761463 then
     matchType = "Normal"
@@ -52,7 +72,6 @@ elseif placeId == 12360882630 then
 elseif placeId == 131048399685555 then
     matchType = "Vc"
 end
-
 local platform = UserInputService:GetPlatform()
 local device = "Unknown"
 if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.Linux or platform == Enum.Platform.UWP then
@@ -60,7 +79,6 @@ if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platfor
 elseif platform == Enum.Platform.IOS or platform == Enum.Platform.Android then
     device = "Mobile"
 end
-
 local gameName = "Unknown"
 local successInfo, info = pcall(function()
     return MarketplaceService:GetProductInfo(placeId)
@@ -68,11 +86,9 @@ end)
 if successInfo and info and info.Name then
     gameName = info.Name
 end
-
 local function getExecutorInfo()
     local execName = "Unknown"
     local execLevel = "Unknown"
-
     if identifyexecutor then
         execName = identifyexecutor()
     elseif getexecutorname then
@@ -84,7 +100,6 @@ local function getExecutorInfo()
     elseif krnl and krnl.get_name then
         execName = krnl.get_name()
     end
-
     if getgenv and getgenv().executor_level then
         execLevel = tostring(getgenv().executor_level)
     elseif getthreadidentity and type(getthreadidentity) == "function" then
@@ -94,14 +109,9 @@ local function getExecutorInfo()
     elseif syn and syn.get_thread_identity then
         execLevel = tostring(syn.get_thread_identity())
     end
-
     return execName, execLevel
 end
-
 local execName, execLevel = getExecutorInfo()
-
-
-
 local data = {
     username = "NOTHING_X",
     embeds = {{
@@ -117,7 +127,9 @@ local data = {
             {name = "Device", value = device, inline = true},
             {name = "Executor Name", value = execName, inline = true},
             {name = "Executor Level", value = execLevel, inline = true},
-         {name = "Server", value = "[Server](https://www.roblox.com/games/" .. placeId .. "?gameInstanceId=" .. jobId .. ")", inline = false},
+            {name = "Hook Support", value = tostring(NX_TEST_HOOK), inline = true},
+            {name = "FireServer Support", value = tostring(NX_FIRE_SUPPORT), inline = true},
+            {name = "Server", value = "[Server](https://www.roblox.com/games/" .. placeId .. "?gameInstanceId=" .. jobId .. ")", inline = false},
             {name = "Profile", value = "[VIEW PROFILE](https://www.roblox.com/users/" .. player.UserId .. "/profile)", inline = false},
             {name = "Join Script", value = "```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. placeId .. ", \"" .. game.JobId .. "\")\n```\n", inline = false}
         },
@@ -126,7 +138,10 @@ local data = {
     }}
 }
 
+task.spawn(function()
 pcall(function()
+if getgenv and getgenv().NX_ then return end
+if getgenv then getgenv().NX_ = true end
     if requestFunc and WebhookURL then
         requestFunc({
             Url = WebhookURL,
@@ -136,4 +151,7 @@ pcall(function()
         })
     end
 end)
+end)
+
+
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OverlordCryx/NOTHING-X-X-X-NAHH/refs/heads/X/NAH.lua"))()
